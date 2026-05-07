@@ -107,6 +107,13 @@ Schema migration applied: 2026-05-07_rename_deleted_at_to_archived_at.sql. Colum
 
 ## What's Still Broken / Pending
 
+### Infrastructure (resolve at start of next session)
+
+- **GitHub account suspended.** Resolve before any push: appeal the suspension on the nomodachi work account, switch to the second personal account, or pick a different host (GitLab / Bitbucket / etc.).
+- **Local repo not connected to a remote.** Once a remote is sorted: `git remote add origin <url>` then `git push -u origin main` to back up everything.
+- **OneDrive + .git interaction.** The repo lives inside a OneDrive-synced folder, which can corrupt `.git/` over time. Either exclude `Brewing App/.git/` from OneDrive sync (OneDrive Settings → Choose folders), or move the project out of OneDrive entirely.
+- **Verify HTML reference app hosting.** If `nomodachi.github.io/brewlab` is down due to the GitHub suspension, the tablet/mobile views that load from there are broken until re-hosted (Vercel or elsewhere).
+
 ### Pull from CC at start of next session
 - Confirm the deletion overhaul unwind didn't break anything: right-click any recipe → "Delete" appears (no Archive), delete a recipe with data → tax records persist, undo within 8s restores everything.
 - Confirm CC's commits all landed.
