@@ -88,16 +88,28 @@ Drag-and-drop (recipe → folder, folder → folder for subfolder, folder → ro
 
 Recipe rows in sidebar now show three lines: `#X name` / `style · BJCP code` / `v1.x`. Brewery Overview right pane uses the same format wherever brews are referenced.
 
-### Deletion overhaul (mid-way)
+### Recipe deletion
 
-Investigation complete. Findings: tax_records and tax_master are explicitly preserved on recipe-delete (NTA compliance safe). Brew data (brew_day, ferm_log, etc.) is preserved as zombie rows in Supabase. Cross-hydrate undo bug identified (tombstone never cleared on undo). Two-tier model approved: hard-delete only allowed on recipes with no committed data; everything else gets archived (soft-hide, reversible). Phase 2 plan delivered, approved, and CC is now running pre-implementation verifications + building. Schema migration: rename `recipes.deleted_at` → `recipes.archived_at` (also implicitly converts existing tombstones to archived, no separate zombie cleanup needed).
+Investigated the existing delete path (Phase 1, read-only). Findings: tax_records and tax_master were already preserved by intent (NTA compliance safe). All other per-recipe data was soft-tombstoned but left as zombie rows in Supabase. Cross-hydrate undo was broken — undo restored local state but didn't clear the Supabase tombstone, so next hydrate re-prompted.
+
+Built an Archive two-tier model first, then unwound it after deciding the simpler model fit the brewer's workflow better.
+
+**Final model:** single Delete action works on any recipe. Hard-removes recipe + ingredients + all per-recipe blobs (brew_day, ferm_log, ferm_meta, cold_side, water_chem, recipe_profiles, mash) + planner cascade + harvested_yeast linked rows. ALWAYS preserves tax_records and tax_master (NTA compliance). 8-second toast undo with full snapshot-then-restore.
+
+Came along for the ride:
+- Cross-hydrate undo bug fixed (snapshot-restore now writes through to Supabase via lsSet)
+- BrewDayTab / PackagingTab dirtyRef guards (no more empty-blob writes on mount)
+- Tax Master and Yeast Tracker show "(recipe deleted)" inline for dangling refs
+
+Schema migration applied: 2026-05-07_rename_deleted_at_to_archived_at.sql. Column renamed but always NULL going forward — kept for cleanness.
 
 ---
 
 ## What's Still Broken / Pending
 
-### Coming back from CC at start of next session
-- **Deletion overhaul** — schema migration + 9 implementation steps. Apply the migration before testing. Verify: archive UI in sidebar, hard-delete on empty recipes, archive on recipes with data, restore action, cross-hydrate undo fix, Tax Master and Yeast Tracker dangling-ref handling.
+### Pull from CC at start of next session
+- Confirm the deletion overhaul unwind didn't break anything: right-click any recipe → "Delete" appears (no Archive), delete a recipe with data → tax records persist, undo within 8s restores everything.
+- Confirm CC's commits all landed.
 
 ### End-of-port queue (priority-ish order)
 - **15.8L volume offset** in Brew Day calcs (data quality bug — investigate before brewing real batches)

@@ -301,3 +301,13 @@ Long session. Multiple CC rounds across two terminals (one for the sidebar reorg
 ### Carried forward to next session
 - Deletion overhaul completion (schema migration + 9 code steps)
 - Smoke testing all of the above
+
+### Late-session correction: simplified Delete model
+
+Originally built an Archive-based two-tier model (hard delete only on empty drafts; recipes with committed data forced to Archive). After review, simplified to a universal Delete: works on any recipe, hard-removes everything per-recipe, ALWAYS preserves tax_records and tax_master. 8-second toast undo with snapshot-then-restore covering all per-recipe data and planner cascade.
+
+Reasoning: Ben's actual workflow is to keep recipes he brewed (no automated archiving needed) and only delete drafts/experiments. Archive was overengineered.
+
+Kept: schema migration (column renamed, stays NULL), broader snapshot-then-undo pattern, dangling-ref handling in TaxMasterPage and HarvestedYeastView, BrewDayTab/PackagingTab dirtyRef guards.
+
+Removed: archiveRecipe / restoreRecipe actions, hasCommittedData predicate, Archive UI surfaces, Archive-specific badges.
