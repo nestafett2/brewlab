@@ -1,0 +1,63 @@
+-- ============================================================================
+-- BrewLab — Migration: rename `recipes.deleted_at` to `recipes.archived_at`
+-- ============================================================================
+--
+-- Two-tier deletion model. Going forward:
+--
+--   • DELETE  — hard removal. Allowed only on recipes with no committed data
+--               (no tax_records, no tax_master, no ferm_log entries, no
+--               brew_day / cold_side / water_chem / ferm_meta blob with any
+--               own keys, no harvested_yeast linked rows). The store's
+--               hardDeleteRecipe action enforces the predicate client-side
+--               and re-checks server-side before issuing DELETE.
+--
+--   • ARCHIVE — soft hide. Stamps `archived_at = now()` on the recipe row.
+--               All per-recipe data is preserved on Supabase and locally.
+--               Reversible via Restore (which clears `archived_at`).
+--
+-- The previous `deleted_at` column was used as a tombstone marker that hid
+-- recipes from active views but left every per-recipe child row dangling
+-- as zombie data on Supabase. Renaming to `archived_at` reinterprets every
+-- existing tombstone as an archive — exactly the behaviour the new model
+-- wants for the one-time zombie cleanup. No data is lost; previously-
+-- "deleted" recipes simply reappear in the archive view, where the user
+-- can either Restore them or leave them alone.
+--
+-- `ferm_log.deleted_at` is intentionally NOT renamed. Individual ferm log
+-- row deletion is genuinely a delete (one row per reading; users want
+-- erroneous readings gone, not archived). That column keeps its current
+-- semantics and the existing removeFermLogEntry / hydration paths.
+--
+-- ── Optional: tighten FKs in Supabase Table Editor ──────────────────────
+--
+-- The hard-delete path in store/index.ts (sbHardDeleteRecipe helper)
+-- issues explicit DELETE per child table regardless of FK config — defense
+-- in depth, so the code is correct whether or not cascades exist on the
+-- live DB.
+--
+-- That said, if you want native cascade behaviour as a safety net, the
+-- following tables don't have ON DELETE CASCADE in any migration in this
+-- repo (they were created in Table Editor before the React rebuild):
+--
+--   recipe_ingredients, brew_day, ferm_meta, cold_side, water_chem, ferm_log
+--
+-- (recipe_profiles and mash already have ON DELETE CASCADE — see
+-- 2026-05-04_add_recipe_profiles_table.sql and 2026-05-06_add_mash_table.sql.)
+--
+-- To add cascades, in Supabase Table Editor → each table → Foreign Keys →
+-- edit the recipe_id FK → set "On delete" to "Cascade". tax_records and
+-- tax_master must NEVER have cascade — they are NTA compliance artifacts
+-- and the predicate forbids hard-deleting any recipe that has them.
+--
+-- ── Idempotent: safe to re-run. ─────────────────────────────────────────
+--
+-- Apply from the Supabase SQL editor:
+
+ALTER TABLE recipes
+  RENAME COLUMN deleted_at TO archived_at;
+
+-- The companion index stamped on the previous migration also gets renamed
+-- so its name reflects the column it covers. Postgres renames the index
+-- atomically; queries continue to use it.
+ALTER INDEX IF EXISTS recipes_deleted_at_idx
+  RENAME TO recipes_archived_at_idx;
