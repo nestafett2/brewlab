@@ -87,7 +87,7 @@ export default function LibrariesPage() {
     if (!q) return sectionData;
     const fields = LIB_FIELDS[section];
     return sectionData.filter(e =>
-      fields.some(f => String((e as Record<string, unknown>)[f] ?? '').toLowerCase().includes(q)),
+      fields.some(f => String((e as unknown as Record<string, unknown>)[f] ?? '').toLowerCase().includes(q)),
     );
   }, [sectionData, search, section]);
 
@@ -469,7 +469,7 @@ function LibraryTable({
                 {idx + 1}
               </td>
               {fields.map(f => {
-                const raw = (entry as Record<string, unknown>)[f];
+                const raw = (entry as unknown as Record<string, unknown>)[f];
                 let v: string;
                 if (raw == null || raw === '') v = '—';
                 else if (typeof raw === 'boolean') v = raw ? '✓' : '—';

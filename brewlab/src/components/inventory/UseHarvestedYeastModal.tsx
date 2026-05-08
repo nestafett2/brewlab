@@ -5,11 +5,16 @@
  *   • Walk entries in insertion order.
  *   • Deduct from each entry's `got - used` until the requested
  *     amount is satisfied or the strain runs out.
- *   • Append the beer name to each consumed entry's `beer` field
- *     (comma-separated).
+ *   • Append the tax batch # to each consumed entry's `beer` field
+ *     (comma-separated). The "Used In" column reads this field —
+ *     value name kept for storage compatibility with HTML/Supabase.
  *
- * If stock can't cover the request, the modal still consumes what's
- * available and warns the user.
+ * Soft validation: if amount > current stock, warn but don't block —
+ * brewers may legitimately log retroactively.
+ *
+ * Active-recipe context: the "Used In Tax Batch #" field auto-fills
+ * from the selected recipe's taxBatch. When no recipe is loaded the
+ * field is blank.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -25,10 +30,20 @@ interface Props {
 export default function UseHarvestedYeastModal({ strain, onClose }: Props) {
   const harvestedYeast    = useStore(s => s.harvestedYeast);
   const setHarvestedYeast = useStore(s => s.setHarvestedYeast);
+  const selectedRecipeId  = useStore(s => s.selectedRecipeId);
+  const recipes           = useStore(s => s.recipes);
+  // Active recipe → silently pre-fills both the visible tax batch input
+  // AND the hidden beer name. Only the tax batch is editable; the beer
+  // name follows the recipe (no extra field added to the form).
+  const activeRecipe = useMemo(
+    () => selectedRecipeId ? recipes.find(r => r.id === selectedRecipeId) : undefined,
+    [recipes, selectedRecipeId],
+  );
+  const activeTaxBatch = activeRecipe?.taxBatch ?? '';
+  const activeBeerName = (activeRecipe?.beerName?.trim() || activeRecipe?.name?.trim()) ?? '';
 
   const [amount, setAmount]     = useState('');
-  const [beer, setBeer]         = useState('');
-  const [brewNum, setBrewNum]   = useState('');
+  const [taxBatch, setTaxBatch] = useState(activeTaxBatch);
   const [date, setDate]         = useState(dateToStr(todayDate()));
 
   useEffect(() => {
@@ -45,6 +60,8 @@ export default function UseHarvestedYeastModal({ strain, onClose }: Props) {
     );
   }, [harvestedYeast, strain]);
 
+  const currentGen = harvestedYeast[strain]?.generation || 1;
+
   const save = () => {
     const amt = parseFloat(amount);
     if (!isFinite(amt) || amt <= 0) {
@@ -59,20 +76,31 @@ export default function UseHarvestedYeastModal({ strain, onClose }: Props) {
     const sd = next[strain];
     if (!sd) return;
     const entries = sd.entries.slice();
-    let remaining = Math.min(amt, balance > 0 ? balance : amt);
-    const tag = brewNum.trim() || beer.trim();
+    let remaining = amt;
+    const taxTag  = taxBatch.trim();
+    const beerTag = activeBeerName;
+    // Append parallel comma-separated values so HarvestedYeastView can
+    // zip them back into "TAX — Beer" pairs in the Used In column. The
+    // strings stay index-aligned even when one side is empty (we still
+    // append an empty token), so legacy entries that previously stored
+    // a tax batch in `beer` continue to render as a single value while
+    // post-fix rows render as the composite.
+    const appendTok = (existing: string | undefined, tok: string): string =>
+      existing ? `${existing}, ${tok}` : tok;
     for (let i = 0; i < entries.length && remaining > 0; i++) {
       const avail = (Number(entries[i].got) || 0) - (Number(entries[i].used) || 0);
       if (avail <= 0) continue;
       const deduct = Math.min(avail, remaining);
       const usedNow = (Number(entries[i].used) || 0) + deduct;
-      const beerJoined = entries[i].beer
-        ? `${entries[i].beer}, ${tag}`
-        : tag;
-      entries[i] = { ...entries[i], used: usedNow, beer: beerJoined };
+      entries[i] = {
+        ...entries[i],
+        used: usedNow,
+        beer:     appendTok(entries[i].beer,     beerTag),
+        taxBatch: appendTok(entries[i].taxBatch, taxTag),
+      };
       remaining -= deduct;
     }
-    // Append a usage row pinned to today's date so the table shows the
+    // Append a usage row pinned to the entered date so the table shows the
     // pulled amount as a discrete event (HTML doesn't do this — it just
     // mutates the harvest entries' used/beer fields). Adding the row
     // mirrors how the regular ledger flow works and makes the table
@@ -82,7 +110,9 @@ export default function UseHarvestedYeastModal({ strain, onClose }: Props) {
       date,
       got: 0,
       used: amt,
-      beer: tag,
+      beer: beerTag,
+      taxBatch: taxTag,
+      recipeId: selectedRecipeId ?? undefined,
       harvestDate: date,
       generation: sd.generation,
       type: 'usage',
@@ -95,12 +125,14 @@ export default function UseHarvestedYeastModal({ strain, onClose }: Props) {
   return (
     <div style={overlayStyle} onMouseDown={onClose}>
       <div style={modalStyle} onMouseDown={e => e.stopPropagation()}>
-        <div style={titleStyle}>− LOG USE — {strain.toUpperCase()}</div>
+        <div style={titleStyle}>− LOG USE</div>
 
         <div style={balanceStyle}>
-          Available: <span style={{ color: balance > 0 ? 'var(--amber)' : 'var(--red)' }}>
+          Current:&nbsp;
+          <span style={{ color: balance > 0 ? 'var(--amber)' : 'var(--red)' }}>
             {balance.toFixed(1)} L
           </span>
+          &nbsp;of&nbsp;<b>{strain}</b>&nbsp;Gen {currentGen}
         </div>
 
         <Row label="AMOUNT (L)">
@@ -114,25 +146,17 @@ export default function UseHarvestedYeastModal({ strain, onClose }: Props) {
         <Row label="DATE">
           <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inputStyle} />
         </Row>
-        <Row label="BEER">
+        <Row label="USED IN TAX BATCH #">
           <input
-            type="text" value={beer}
-            onChange={e => setBeer(e.target.value)}
-            placeholder="e.g. Solar Storm"
-            style={inputStyle}
-          />
-        </Row>
-        <Row label="BREW #">
-          <input
-            type="text" value={brewNum}
-            onChange={e => setBrewNum(e.target.value)}
-            placeholder="optional"
+            type="text" value={taxBatch}
+            onChange={e => setTaxBatch(e.target.value)}
+            placeholder="e.g. 384"
             style={inputStyle}
           />
         </Row>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-          <button className="btn primary" style={{ flex: 1 }} onClick={save}>LOG USE</button>
+          <button className="btn primary" style={{ flex: 1 }} onClick={save}>CONFIRM</button>
           <button className="btn" onClick={onClose}>CANCEL</button>
         </div>
       </div>
@@ -146,7 +170,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <label style={{
         fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: 1,
         color: 'var(--text-muted)', textTransform: 'uppercase',
-        width: 110, flexShrink: 0,
+        width: 140, flexShrink: 0,
       }}>{label}</label>
       {children}
     </div>

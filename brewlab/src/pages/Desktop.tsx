@@ -1,6 +1,5 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useStore, type RecipeDeleteSnapshot } from '../store';
-import { calcEffectiveTrubLossL } from '../lib/calculations';
 import RecipeTab from '../components/recipe/RecipeTab';
 import BrewDayTab from '../components/recipe/BrewDayTab';
 import FermTab from '../components/recipe/FermTab';
@@ -23,9 +22,12 @@ import NewRecipeModal from '../components/recipe/NewRecipeModal';
 import SaveTemplateModal from '../components/recipe/SaveTemplateModal';
 import TariffReductionPage from '../components/tariff/TariffReductionPage';
 import BreweryOverviewPanel from '../components/recipe/BreweryOverviewPanel';
+import RecipeExplorerPanel from '../components/recipe/RecipeExplorerPanel';
 import RecipePreview from '../components/recipe/RecipePreview';
 import FolderPreview from '../components/recipe/FolderPreview';
 import FolderTree from '../components/recipe/FolderTree';
+import BeerGlassIcon from '../components/recipe/BeerGlassIcon';
+import { ebcToHex } from '../lib/ebcColor';
 import UndoButton from '../components/shared/UndoButton';
 import type { Folder } from '../types';
 
@@ -36,7 +38,7 @@ export default function Desktop() {
   const {
     activeTab, tabVisibility, setActiveTab,
     recipes, selectedRecipeId, selectRecipe, updateRecipe,
-    setTabVisibility, setRecipeClassification, setSettingsSection,
+    setTabVisibility, setSettingsSection,
     setLibrariesSection,
   } = useStore();
   void selectedRecipeId; // referenced indirectly via activeTab; keep destructure stable
@@ -58,23 +60,30 @@ export default function Desktop() {
   const setRecipes      = useStore(s => s.setRecipes);
   const setFolders      = useStore(s => s.setFolders);
   const pushToast       = useStore(s => s.pushToast);
-  // Pulled separately so the meta-bar can compute effective trub loss
-  // (= base + whirlpool/boil hop absorption) without going through a tab
-  // component. Mirrors the BrewDayTab / WaterTab pattern.
-  const ingredientsByRecipe = useStore(s => s.ingredientsByRecipe);
-  const hopLib              = useStore(s => s.hopLib);
-  const equipProfiles       = useStore(s => s.equipProfiles);
+  // (effectiveTrubLossL + its store subscriptions moved into RecipeTab
+  // when the equipment-derived pill strip moved out of the meta bar.)
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Track which recipes have open tabs (like the HTML app's recipe-tabs-container)
   const [openRecipeTabs, setOpenRecipeTabs] = useState<string[]>([]);
-  // Left-sidebar organization mode. 'overview' is no longer a value
-  // here — the Overview button now clears the preview rather than
-  // switching a sidebar layout (see button wiring + right-pane swap
-  // below). 'byStyle' rendering isn't ported yet; the button just
-  // toggles state until that lands.
-  const [recipeListView, setRecipeListView] = useState<'folders' | 'byStyle'>('folders');
+  // Sidebar tab toggle — drives which right-pane mode the Recipes page
+  // shows. Two values:
+  //   'overview' — preview takes precedence; otherwise BreweryOverviewPanel.
+  //   'explorer' — RecipeExplorerPanel always; preview state still updates
+  //                on sidebar single-click but isn't visually rendered
+  //                until the user switches back to Overview.
+  // Persisted via localStorage so the choice survives reloads.
+  const [sidebarTab, setSidebarTab] = useState<'overview' | 'explorer'>(() => {
+    try {
+      const raw = localStorage.getItem('bl_sidebar_tab');
+      if (raw === 'explorer' || raw === 'overview') return raw;
+    } catch { /* ignore */ }
+    return 'overview';
+  });
+  useEffect(() => {
+    try { localStorage.setItem('bl_sidebar_tab', sidebarTab); } catch { /* ignore */ }
+  }, [sidebarTab]);
   // Right-pane preview selection — recipe or folder, or null. When
   // null, the right pane shows the BreweryOverviewPanel as the default
   // dashboard (no empty-state placeholder). Independent of
@@ -122,6 +131,9 @@ export default function Desktop() {
   const [recipeCtxMenu, setRecipeCtxMenu] = useState<{ x: number; y: number; recipeId: string } | null>(null);
   const [folderCtxMenu, setFolderCtxMenu] = useState<{ x: number; y: number; folderId: string } | null>(null);
   const [bulkCtxMenu, setBulkCtxMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
+  // Blank-area right-click — sidebar tree + Recipe Explorer's By Folder
+  // view both fire this. Single-item menu: "+ New Folder".
+  const [blankCtxMenu, setBlankCtxMenu] = useState<{ x: number; y: number } | null>(null);
 
   // Open a recipe: add tab if not already open, switch to it
   const openRecipe = (recipeId: string) => {
@@ -178,11 +190,21 @@ export default function Desktop() {
     setBulkCtxMenu({ x: e.pageX, y: e.pageY, ids });
   };
 
+  // Right-click on blank space in either the sidebar tree or the
+  // explorer's By Folder view — single-item "+ New Folder" menu.
+  const handleBlankContext = (e: React.MouseEvent) => {
+    setRecipeCtxMenu(null); setFolderCtxMenu(null); setBulkCtxMenu(null);
+    setBlankCtxMenu({ x: e.pageX, y: e.pageY });
+  };
+
   // Close on outside-mousedown / Escape, matching the ingredient-row
   // pattern in RecipeTab.tsx. One effect covers all three menus.
   useEffect(() => {
-    if (!recipeCtxMenu && !folderCtxMenu && !bulkCtxMenu) return;
-    const close = () => { setRecipeCtxMenu(null); setFolderCtxMenu(null); setBulkCtxMenu(null); };
+    if (!recipeCtxMenu && !folderCtxMenu && !bulkCtxMenu && !blankCtxMenu) return;
+    const close = () => {
+      setRecipeCtxMenu(null); setFolderCtxMenu(null);
+      setBulkCtxMenu(null);   setBlankCtxMenu(null);
+    };
     const onKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape') close(); };
     // Defer the mousedown listener so the right-click that opened the
     // menu doesn't immediately close it.
@@ -193,7 +215,7 @@ export default function Desktop() {
       document.removeEventListener('mousedown', close);
       document.removeEventListener('keydown', onKey);
     };
-  }, [recipeCtxMenu, folderCtxMenu, bulkCtxMenu]);
+  }, [recipeCtxMenu, folderCtxMenu, bulkCtxMenu, blankCtxMenu]);
 
   /** Lowest free `f<n>` id — picks the smallest integer not already in
    *  use by an existing folder. Avoids collisions with synced folders
@@ -422,25 +444,6 @@ export default function Desktop() {
   const activeRecipeId = isRecipeOpen ? activeTab.slice(7) : null;
   const selectedRecipeForMeta = activeRecipeId ? recipes.find(r => r.id === activeRecipeId) : null;
 
-  // Effective trub loss for the meta-bar pills. Single source of truth in
-  // lib/calculations → calcEffectiveTrubLossL. Returns base trub loss (40 L
-  // default or active equipment-profile value) plus hot-side hop absorption.
-  // Equipment selection comes from recipeProfilesByRecipe[recipeId].equip —
-  // matches BrewDayTab.activeEquip's fallback chain (selection → first
-  // profile → null) so the meta-bar's "Expected loss" / "Batch into WP"
-  // pills track the same profile Brew Day is using.
-  const recipeProfilesByRecipe = useStore(s => s.recipeProfilesByRecipe);
-  const effectiveTrubLossL = useMemo(() => {
-    if (!activeRecipeId) return 0;
-    const ings = ingredientsByRecipe[activeRecipeId] ?? [];
-    const equipId = recipeProfilesByRecipe[activeRecipeId]?.equip;
-    const activeEquip =
-      (equipId ? equipProfiles.find(p => p.id === equipId) : null)
-      ?? equipProfiles[0]
-      ?? null;
-    return calcEffectiveTrubLossL(ings, hopLib, activeEquip);
-  }, [activeRecipeId, ingredientsByRecipe, hopLib, equipProfiles, recipeProfilesByRecipe]);
-
   // Derived: current sub-tab for the active recipe (default 'ingredients').
   const recipeSubTab: RecipeSubTab = activeRecipeId
     ? (subTabByRecipe[activeRecipeId] ?? 'ingredients')
@@ -461,7 +464,6 @@ export default function Desktop() {
             <div className="menu-dd-item" onClick={closeMenus}>Import Recipe (BeerXML)</div>
             <div className="menu-dd-sep" />
             <div className="menu-dd-item" onClick={closeMenus}>Save Recipe</div>
-            <div className="menu-dd-item" onClick={closeMenus}>Scale Recipe...</div>
             <div className="menu-dd-sep" />
             <div className="menu-dd-item" onClick={closeMenus}>Export Recipe (BeerXML)</div>
             <div className="menu-dd-item" onClick={closeMenus}>Export Selected...</div>
@@ -663,32 +665,6 @@ export default function Desktop() {
         <UndoButton />
       </nav>
 
-      {/* ═══ Sub-tabs — shown only when a recipe tab is active ═══ */}
-      {isRecipeOpen && (
-        <div className="tabbar" style={{ background: 'var(--bg)', borderTop: '1px solid var(--border)', padding: '0 16px', justifyContent: 'center' }}>
-          {([
-            ['ingredients', 'Ingredients'],
-            ['brewday',     'Brew Day'],
-            ['ferm',        'Fermentation'],
-            ['cold',        'Packaging'],
-            ['tax',         'Tax'],
-            ['taxsummary',  'Tax Summary'],
-            ['analysis',    'Analysis'],
-            ['water',       'Water'],
-            ['history',     'Brew History'],
-            ['checklist',   'Checklist'],
-          ] as [RecipeSubTab, string][]).map(([key, label]) => (
-            <div
-              key={key}
-              className={`sub-tab${recipeSubTab === key ? ' active' : ''}`}
-              onClick={() => setRecipeSubTab(key)}
-            >
-              {label}
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* ═══ Recipe Meta Bar — shown only when a recipe tab is active ═══ */}
       {isRecipeOpen && selectedRecipeForMeta && (
         <div className="recipe-meta-bar">
@@ -711,36 +687,28 @@ export default function Desktop() {
               />
             </div>
           </div>
-          <div style={{ width: 1, height: 28, background: 'var(--border)', flexShrink: 0, margin: '0 4px' }} />
-          {/* Tax Batch # — left side, right after the recipe-name block.
-              Editable text input; brewery-wide unique constraint enforced
-              on the Supabase side (see recipeToRow tax_batch comment). */}
-          <div className="meta-pill" style={{ minWidth: 64, flexShrink: 0 }}>
-            <div className="meta-pill-label">Tax Batch #</div>
-            <input
-              className="meta-pill-input"
-              type="text"
-              value={selectedRecipeForMeta.taxBatch || ''}
-              onChange={e => updateRecipe(selectedRecipeForMeta.id, { taxBatch: e.target.value })}
-              style={{ width: 48 }}
-              placeholder="—"
-              title="Brewery-wide manual NTA tax serial (e.g. 384). Brewery-wide unique."
-            />
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', background: 'var(--panel2)', padding: '4px 10px', borderRadius: 6, fontWeight: 500, whiteSpace: 'nowrap', flexShrink: 0 }}>
-            {/* Classification flows through the canonical setRecipeClassification
-                action so it stays in sync with the Tax tab and tax record fields
-                (HTML syncClassification, line 12120). */}
-            <select
-              value={selectedRecipeForMeta.classification || 'Beer'}
-              onChange={e => setRecipeClassification(selectedRecipeForMeta.id, e.target.value as 'Beer' | 'Happoshu')}
-              style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: 12, fontWeight: 500, outline: 'none', cursor: 'pointer', padding: 0 }}
-            >
-              <option>Beer</option>
-              <option>Happoshu</option>
-            </select>
-          </div>
+          {/* Classification + Equipment moved to ActionStack's Setup
+              section (Ingredients sub-tab only). The Tax tab and NTA
+              Submitter still surface their own classification pickers,
+              all routed through the canonical setRecipeClassification
+              action — so cross-tab consistency is preserved. */}
           <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', alignItems: 'center' }}>
+            {/* Tax Batch # — first in the right-aligned group, before
+                Brew Date. Editable text input; brewery-wide unique
+                constraint enforced on the Supabase side (see recipeToRow
+                tax_batch comment). */}
+            <div className="meta-pill" style={{ minWidth: 64, flexShrink: 0 }}>
+              <div className="meta-pill-label">Tax Batch #</div>
+              <input
+                className="meta-pill-input"
+                type="text"
+                value={selectedRecipeForMeta.taxBatch || ''}
+                onChange={e => updateRecipe(selectedRecipeForMeta.id, { taxBatch: e.target.value })}
+                style={{ width: 48 }}
+                placeholder="—"
+                title="Brewery-wide manual NTA tax serial (e.g. 384). Brewery-wide unique."
+              />
+            </div>
             <div className="meta-pill" style={{ minWidth: 80 }}>
               <div className="meta-pill-label">Brew Date</div>
               <input
@@ -766,102 +734,68 @@ export default function Desktop() {
                 {selectedRecipeForMeta.brewNumber != null ? `#${selectedRecipeForMeta.brewNumber}` : '—'}
               </div>
             </div>
-            <button className="btn primary" style={{ flexShrink: 0, marginLeft: 8 }}>Save</button>
+            {/* Beer-glass icon — flat fill from current EBC. Empty/zero
+                EBC falls back to the lightest ramp endpoint per ebcToHex.
+                Size bump (~50 px) — meta-bar focal element. */}
+            <BeerGlassIcon
+              size={50}
+              fill={ebcToHex(selectedRecipeForMeta.ebc)}
+              title={`Color: ${selectedRecipeForMeta.ebc > 0 ? selectedRecipeForMeta.ebc.toFixed(1) + ' EBC' : '—'}`}
+            />
           </div>
         </div>
       )}
 
-      {/* ═══ Profiles / Setup Row — Ingredients sub-tab only ═══
-           Hosts the Equipment selector + the recipe-design pills (Batch into
-           FV/WP, Expected Loss, Boil, BH Eff, WP Temp). Recipe-design
-           parameters; separate from the identity/version meta-bar above.
-           Water and Pitch/O₂ pickers are NOT in this row — they live
-           solely on the Water tab and Brew Day tab respectively, where
-           they're contextual. The ProfileSelect helper now supports
-           kind='equip' only (the others are owned by their tabs).
-
-           Layout: Equipment is absolutely-positioned at the row's left
-           edge (flush against the window border) so it stays anchored
-           independently of the pill group. The pill group lives in a
-           constrained wrapper (sidebar offset 188px + maxWidth 1000px +
-           16px inner padding) that matches the ingredient-cards container
-           in RecipeTab.tsx:259–260, so the pills' centre aligns with the
-           card centre at any viewport width. The wrapper is the row's
-           sole layout child — Equipment overlays it via absolute
-           positioning and does not affect pill centring. */}
-      {isRecipeOpen && activeRecipeId && selectedRecipeForMeta && recipeSubTab === 'ingredients' && (
-        <div style={{ position: 'relative', minHeight: 56, background: 'var(--panel2)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-          {/* Equipment — absolute, anchored to the row's far-left edge. */}
-          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, display: 'flex', alignItems: 'center', zIndex: 1 }}>
-            <ProfileSelect kind="equip" label="Equipment" recipeId={activeRecipeId} />
-          </div>
-          {/* Centred wrapper matching the ingredient-cards container bounds. */}
-          <div style={{ paddingLeft: 188 }}>
-            <div style={{ maxWidth: 1000, margin: '0 auto', padding: '0 16px', minHeight: 56, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div className="meta-pill">
-            <div className="meta-pill-label">Batch into FV</div>
-            <div className="meta-pill-val">
-              <input className="meta-pill-input" type="text" value={selectedRecipeForMeta.batchL || ''} onChange={e => updateRecipe(selectedRecipeForMeta.id, { batchL: parseFloat(e.target.value) || 0 })} style={{ width: 44 }} />
-              <span className="meta-pill-unit">L</span>
+      {/* ═══ Sub-tabs — shown only when a recipe tab is active ═══
+           Order: meta bar (above) → sub-tabs (here) → equipment-derived
+           pill strip (below, Ingredients only) → main content. Recipe
+           identity sits at the top of the recipe page so the sub-tab
+           nav reads as a section divider rather than chrome above the
+           recipe being edited. */}
+      {isRecipeOpen && (
+        <div className="tabbar" style={{ background: 'var(--bg)', borderTop: '1px solid var(--border)', padding: '0 16px', justifyContent: 'center' }}>
+          {([
+            ['ingredients', 'Ingredients'],
+            ['brewday',     'Brew Day'],
+            ['ferm',        'Fermentation'],
+            ['cold',        'Packaging'],
+            ['tax',         'Tax'],
+            ['taxsummary',  'Tax Summary'],
+            ['analysis',    'Analysis'],
+            ['water',       'Water'],
+            ['history',     'Brew History'],
+            ['checklist',   'Checklist'],
+          ] as [RecipeSubTab, string][]).map(([key, label]) => (
+            <div
+              key={key}
+              className={`sub-tab${recipeSubTab === key ? ' active' : ''}`}
+              onClick={() => setRecipeSubTab(key)}
+            >
+              {label}
             </div>
-          </div>
-          {/* Batch into WP = into-FV target + effective trub loss (base trub
-              + hot-side hop absorption). Recomputes whenever ingredients or
-              batchL change. Read-only — derived from recipe + ingredients. */}
-          <div className="meta-pill" title="Total volume needed in the kettle for whirlpool. Equals Batch into FV + expected losses (base trub + whirlpool/boil hop absorption).">
-            <div className="meta-pill-label">Batch into WP</div>
-            <div className="meta-pill-val">
-              <span className="meta-pill-input" style={{ width: 44, display: 'inline-block', textAlign: 'left' }}>
-                {selectedRecipeForMeta.batchL > 0 ? ((selectedRecipeForMeta.batchL || 0) + effectiveTrubLossL).toFixed(1) : '—'}
-              </span>
-              <span className="meta-pill-unit">L</span>
-            </div>
-          </div>
-          <div className="meta-pill" title="Effective trub loss = equipment-profile base trub loss + hot-side hop absorption (whirlpool at 6 L/kg, boil/flameout/first-wort at pellet 1.0 L/kg or whole 3.0 L/kg).">
-            <div className="meta-pill-label">Expected loss</div>
-            <div className="meta-pill-val">
-              <span className="meta-pill-input" style={{ width: 44, display: 'inline-block', textAlign: 'left' }}>
-                {effectiveTrubLossL > 0 ? effectiveTrubLossL.toFixed(1) : '—'}
-              </span>
-              <span className="meta-pill-unit">L</span>
-            </div>
-          </div>
-          <div className="meta-pill">
-            <div className="meta-pill-label">Boil</div>
-            <div className="meta-pill-val">
-              <input className="meta-pill-input" type="text" value={selectedRecipeForMeta.boilTime ?? 45} onChange={e => updateRecipe(selectedRecipeForMeta.id, { boilTime: parseFloat(e.target.value) || 0 })} style={{ width: 32 }} />
-              <span className="meta-pill-unit">min</span>
-            </div>
-          </div>
-          <div className="meta-pill">
-            <div className="meta-pill-label">BH Eff</div>
-            <div className="meta-pill-val">
-              <input className="meta-pill-input" type="text" value={selectedRecipeForMeta.bhEff ?? 67.60} onChange={e => updateRecipe(selectedRecipeForMeta.id, { bhEff: parseFloat(e.target.value) || 0 })} style={{ width: 44 }} />
-              <span className="meta-pill-unit">%</span>
-            </div>
-          </div>
-          <div className="meta-pill">
-            <div className="meta-pill-label">WP Temp</div>
-            <div className="meta-pill-val">
-              <input className="meta-pill-input" type="text" value={selectedRecipeForMeta.whirlpoolTemp ?? 85} onChange={e => updateRecipe(selectedRecipeForMeta.id, { whirlpoolTemp: parseFloat(e.target.value) || 0 })} style={{ width: 32 }} />
-              <span className="meta-pill-unit">°C</span>
-            </div>
-          </div>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
       )}
+
+      {/* Equipment-derived pills (Batch into FV/WP, Expected Loss, Boil,
+          BH Eff, WP Temp) moved into RecipeTab's left column, sandwiched
+          between the ingredient cards and the bottom 3-panel grid. They
+          read as a compact info strip next to the editing surface rather
+          than chrome above it. */}
 
       {/* ═══ Main Content Area ═══ */}
       <div className="global-layout">
         <div className="main-content">
 
-          {/* page-recipes: recipe browser (left 220px) + preview (right) */}
-          {activeTab === 'recipes' && (
-            <div className="page page-row">
-              {/* Left: folder tree + recipe list */}
+          {/* Recipe-browser sidebar — shared between the recipes-browser
+              page (activeTab === 'recipes') and the recipe Ingredients
+              sub-tab. The latter wraps RecipeTab with this same sidebar
+              on the left so the user can navigate to other recipes
+              without leaving the editor. Other recipe sub-tabs (brewday,
+              ferm, tax, etc.) keep their full-width layout — out of
+              scope for the layout redesign. */}
+          {(() => {
+            const renderRecipeBrowserSidebar = () => (
               <div style={{ width: 220, background: 'var(--panel)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
                 <div style={{ background: 'var(--panel2)', borderBottom: '1px solid var(--border)', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontFamily: 'var(--display)', fontSize: 16, letterSpacing: 2, color: 'var(--amber)' }}>RECIPES</span>
@@ -871,28 +805,17 @@ export default function Desktop() {
                   </div>
                 </div>
                 <div className="rb-toolbar" style={{ padding: '6px 8px' }}>
-                  {/* Overview: clears the preview so the right pane returns
-                      to the BreweryOverviewPanel dashboard. Active when
-                      no preview is selected (the dashboard is showing). */}
                   <button
-                    className={`rb-view-btn ${preview === null ? 'active' : ''}`}
-                    onClick={() => setPreview(null)}
+                    className={`rb-view-btn ${sidebarTab === 'overview' ? 'active' : ''}`}
+                    onClick={() => { setSidebarTab('overview'); setPreview(null); }}
                   >
                     Overview
                   </button>
-                  {/* Folders / By Style: left-sidebar organization only —
-                      they don't touch the right pane or the preview. */}
                   <button
-                    className={`rb-view-btn ${recipeListView === 'folders' ? 'active' : ''}`}
-                    onClick={() => setRecipeListView('folders')}
+                    className={`rb-view-btn ${sidebarTab === 'explorer' ? 'active' : ''}`}
+                    onClick={() => setSidebarTab('explorer')}
                   >
-                    Folders
-                  </button>
-                  <button
-                    className={`rb-view-btn ${recipeListView === 'byStyle' ? 'active' : ''}`}
-                    onClick={() => setRecipeListView('byStyle')}
-                  >
-                    By Style
+                    Recipe Explorer
                   </button>
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -900,49 +823,79 @@ export default function Desktop() {
                     folders={folders}
                     recipes={recipes}
                     preview={preview}
-                    setPreview={setPreview}
+                    setPreview={(sel) => {
+                      if (sel && sidebarTab === 'explorer') setSidebarTab('overview');
+                      setPreview(sel);
+                    }}
                     setFolders={setFolders}
                     setRecipes={setRecipes}
                     openRecipe={(id) => { setPreview(null); openRecipe(id); }}
                     onRecipeContext={handleRecipeContext}
                     onFolderContext={handleFolderContext}
                     onBulkContext={handleBulkContext}
+                    onBlankContext={handleBlankContext}
                   />
                 </div>
                 <div className="rb-new-folder-btn" onClick={handleNewFolder} role="button">＋ New Folder</div>
               </div>
-              {/* Right pane swap — preview takes precedence; no preview
-                  falls back to the BreweryOverviewPanel as the default
-                  dashboard. The Overview sub-tab button is just a
-                  shortcut that clears the preview. */}
-              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg)' }}>
-                {(() => {
-                  const r = preview?.kind === 'recipe' ? recipes.find(x => x.id === preview.id) : null;
-                  const f = preview?.kind === 'folder' ? folders.find(x => x.id === preview.id) : null;
-                  if (r) return <RecipePreview recipe={r} onOpen={() => { setPreview(null); openRecipe(r.id); }} />;
-                  if (f) return (
-                    <FolderPreview
-                      folder={f}
-                      onSelectFolder={folderId => setPreview({ kind: 'folder', id: folderId })}
-                      onPreviewRecipe={recipeId => setPreview({ kind: 'recipe', id: recipeId })}
-                      onOpenRecipe={recipeId => { setPreview(null); openRecipe(recipeId); }}
-                      onNewSubfolder={handleNewSubfolder}
-                      onNewRecipe={handleNewRecipeInFolder}
-                    />
-                  );
-                  // Default dashboard — no preview selected, or the
-                  // previewed item was deleted (cleared by the stale-
-                  // preview useEffect above).
-                  return <BreweryOverviewPanel onOpenRecipe={openRecipe} />;
-                })()}
-              </div>
-            </div>
-          )}
+            );
 
-          {/* page-recipe: sidebar (188px) + content — shown when any recipe tab is active */}
-          {isRecipeOpen && activeRecipeId && recipeSubTab === 'ingredients' && (
-            <RecipeTab recipeId={activeRecipeId} />
-          )}
+            return (
+              <>
+                {/* page-recipes: recipe browser (left 220px) + preview (right) */}
+                {activeTab === 'recipes' && (
+                  <div className="page page-row">
+                    {renderRecipeBrowserSidebar()}
+                    {/* Right pane swap. Explorer tab → RecipeExplorerPanel
+                        unconditionally (preview state is preserved but not
+                        rendered until the user switches back). Overview tab
+                        → preview takes precedence; falls back to the
+                        BreweryOverviewPanel dashboard. */}
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg)' }}>
+                      {sidebarTab === 'explorer' ? (
+                        <RecipeExplorerPanel
+                          recipes={recipes}
+                          folders={folders}
+                          setFolders={setFolders}
+                          openRecipe={openRecipe}
+                          onBlankContext={handleBlankContext}
+                        />
+                      ) : (() => {
+                        const r = preview?.kind === 'recipe' ? recipes.find(x => x.id === preview.id) : null;
+                        const f = preview?.kind === 'folder' ? folders.find(x => x.id === preview.id) : null;
+                        if (r) return <RecipePreview recipe={r} onOpen={() => { setPreview(null); openRecipe(r.id); }} />;
+                        if (f) return (
+                          <FolderPreview
+                            folder={f}
+                            onSelectFolder={folderId => setPreview({ kind: 'folder', id: folderId })}
+                            onPreviewRecipe={recipeId => setPreview({ kind: 'recipe', id: recipeId })}
+                            onOpenRecipe={recipeId => { setPreview(null); openRecipe(recipeId); }}
+                            onNewSubfolder={handleNewSubfolder}
+                            onNewRecipe={handleNewRecipeInFolder}
+                          />
+                        );
+                        return <BreweryOverviewPanel onOpenRecipe={openRecipe} />;
+                      })()}
+                    </div>
+                  </div>
+                )}
+
+                {/* page-recipe / Ingredients sub-tab: same sidebar on the
+                    left, RecipeTab on the right. RecipeTab handles its
+                    own action stack + bottom-row panels internally. */}
+                {isRecipeOpen && activeRecipeId && recipeSubTab === 'ingredients' && (
+                  <div className="page page-row">
+                    {renderRecipeBrowserSidebar()}
+                    <RecipeTab recipeId={activeRecipeId} />
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
+          {/* Ingredients sub-tab is rendered inside the wrapper above
+              (alongside the recipe-browser sidebar). The remaining sub-
+              tabs render full-width with no sidebar. */}
           {isRecipeOpen && activeRecipeId && recipeSubTab === 'brewday' && (
             <BrewDayTab recipeId={activeRecipeId} />
           )}
@@ -1073,6 +1026,21 @@ export default function Desktop() {
           </div>
         </div>
       )}
+
+      {/* Blank-area right-click — fired by FolderTree's wrapper or by
+          the explorer's By Folder list. Single-item menu wired to the
+          same handleNewFolder action the top "📁 Folder" button uses. */}
+      {blankCtxMenu && (
+        <div
+          className="ctx-menu open"
+          style={{ left: blankCtxMenu.x, top: blankCtxMenu.y }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <div className="ctx-item" onClick={() => { setBlankCtxMenu(null); handleNewFolder(); }}>
+            ＋ New Folder
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1103,40 +1071,5 @@ export default function Desktop() {
 // (RecipesEmptyState removed — the right pane now defaults to
 //  BreweryOverviewPanel when nothing is previewed.)
 
-function ProfileSelect({
-  kind, label, recipeId,
-}: {
-  kind: 'equip';
-  label: string;
-  recipeId: string;
-}) {
-  const equipProfiles = useStore(s => s.equipProfiles);
-  const selections    = useStore(s => s.recipeProfilesByRecipe[recipeId]);
-  const getRecipeProfiles    = useStore(s => s.getRecipeProfiles);
-  const setRecipeProfileKind = useStore(s => s.setRecipeProfileKind);
-
-  // Lazy-prime the cache on first render for this recipe (matches the
-  // ingredients/tax-record pattern). Subsequent renders read from `selections`.
-  useEffect(() => {
-    if (selections === undefined) getRecipeProfiles(recipeId);
-  }, [selections, recipeId, getRecipeProfiles]);
-
-  const list = equipProfiles;
-  const current = (selections ?? {})[kind] ?? '';
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>{label}</span>
-      <select
-        value={current}
-        onChange={e => setRecipeProfileKind(recipeId, kind, e.target.value)}
-        style={{ background: 'var(--panel)', border: '1px solid var(--border2)', color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: 11, padding: '3px 7px', outline: 'none', borderRadius: 3, maxWidth: 160 }}
-      >
-        <option value="">— none —</option>
-        {list.map(p => (
-          <option key={p.id} value={p.id}>{p.name}</option>
-        ))}
-      </select>
-    </div>
-  );
-}
+// ProfileSelect was inlined into components/recipe/ActionStack.tsx
+// (Setup section). Removed here — no other call sites.

@@ -17,7 +17,37 @@ import { useMemo, useState } from 'react';
 import { useStore } from '../../store';
 import HarvestYeastModal from './HarvestYeastModal';
 import UseHarvestedYeastModal from './UseHarvestedYeastModal';
-import type { HarvestedYeastEntry } from '../../types';
+
+/**
+ * Render a "TAX — Beer" composite when both fields are set; fall back
+ * to whichever single value exists. Both inputs may be comma-separated
+ * lists (a harvest entry that's been pulled into multiple brews
+ * accumulates parallel comma-joined lists for `beer` and `taxBatch`);
+ * we zip the two lists by index so each pair renders as "TAX — Beer".
+ *
+ * Legacy entries lack the secondary field — `formatPair('','Hazy IPA')`
+ * → `'Hazy IPA'`, `formatPair('ABC-23','')` → `'ABC-23'`. The single
+ * value renders as-is, no separator.
+ */
+function formatPair(taxStr: string | undefined, beerStr: string | undefined): string {
+  const tax  = (taxStr  ?? '').trim();
+  const beer = (beerStr ?? '').trim();
+  if (!tax && !beer) return '—';
+  if (!tax)  return beer;
+  if (!beer) return tax;
+  const taxParts  = tax.split(',').map(s => s.trim());
+  const beerParts = beer.split(',').map(s => s.trim());
+  const n = Math.max(taxParts.length, beerParts.length);
+  const pairs: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = taxParts[i]  ?? '';
+    const b = beerParts[i] ?? '';
+    if (t && b) pairs.push(`${t} — ${b}`);
+    else if (t) pairs.push(t);
+    else if (b) pairs.push(b);
+  }
+  return pairs.join(', ');
+}
 
 export default function HarvestedYeastView() {
   const harvestedYeast    = useStore(s => s.harvestedYeast);
@@ -119,7 +149,7 @@ export default function HarvestedYeastView() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr>
-                      {['Date', 'Got (L)', 'Used (L)', 'Beer', 'Have (L)', 'Harvest Date', 'Harvested From', 'Gen', ''].map(h => (
+                      {['Date', 'Got (L)', 'Used (L)', 'Used In', 'Have (L)', 'Harvest Date', 'From Tax Batch #', 'Gen', ''].map(h => (
                         <th key={h} style={thStyle}>{h}</th>
                       ))}
                     </tr>
@@ -138,14 +168,15 @@ export default function HarvestedYeastView() {
                           style={tdStyle}
                           title={isRecipeDeleted(e.recipeId) ? 'Source recipe was deleted' : undefined}
                         >
-                          {(e.beer || '—') + (isRecipeDeleted(e.recipeId) ? ' (recipe deleted)' : '')}
+                          {formatPair(e.taxBatch, e.beer)}
+                          {isRecipeDeleted(e.recipeId) ? ' (recipe deleted)' : ''}
                         </td>
                         <td style={{
                           ...tdStyle, textAlign: 'right',
                           color: running > 0 ? 'var(--amber)' : 'var(--text)',
                         }}>{running.toFixed(1)}</td>
                         <td style={{ ...tdStyle, color: 'var(--text-muted)' }}>{e.harvestDate || '—'}</td>
-                        <td style={tdStyle}>{(e as HarvestedYeastEntry & { harvestedFrom?: string }).harvestedFrom || '—'}</td>
+                        <td style={tdStyle}>{formatPair(e.harvestedFromTaxBatch, e.harvestedFrom)}</td>
                         <td style={tdStyle}>{e.generation || '—'}</td>
                         <td style={{ ...tdStyle, padding: '4px 6px' }}>
                           <button

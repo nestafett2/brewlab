@@ -134,6 +134,7 @@ function placeholderStyle(): UnifiedStyle {
   return {
     key: '', name: '', cat: '', guide: '', source: 'bjcp',
     og: null, fg: null, ibu: null, srm: null, abv: null,
+    carb: null,
   };
 }
 

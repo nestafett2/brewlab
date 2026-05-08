@@ -40,7 +40,7 @@ function entryToForm(entry: LibEntry | null, defs: FieldDef[]): FormState {
   const out: FormState = {};
   for (const d of defs) {
     const k = d.key;
-    const v = entry ? (entry as Record<string, unknown>)[k] : undefined;
+    const v = entry ? (entry as unknown as Record<string, unknown>)[k] : undefined;
     if (d.type === 'checkbox') {
       // HTML default: undefined → use d.default; explicit false → false; else truthy.
       if (v === undefined) out[k] = d.default ?? false;

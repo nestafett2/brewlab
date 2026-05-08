@@ -10,6 +10,7 @@ import type {
   WaterIon, WaterMineral, WaterProfile,
   FermMeta,
 } from '../types';
+import { asNum } from './utils';
 
 // === Constants ===
 const METRIC_CONSTANT = 384; // 46 PPG_max * 2.2046 lb/kg / 0.264172 gal/L
@@ -32,15 +33,14 @@ export function calcOG(
     if (g.type !== 'grain') continue;
     const kg = g.unit === 'g' ? g.amt * 0.001 : g.amt;
     const lib = maltLib.find(m => m.id === g.libId || m.name === g.name);
-    let yieldFrac = (lib?.yield_pct ?? 75) / 100;
+    let yieldFrac = asNum(lib?.yield_pct, 75) / 100;
 
-    // Yield corrections
-    if (lib?.moisture && lib.moisture > 0) {
-      yieldFrac *= (1 - lib.moisture / 100);
-    }
-    if (lib?.dbfg && lib.dbfg > 0) {
-      yieldFrac *= (1 - lib.dbfg / 100);
-    }
+    // Yield corrections — asNum handles the LibNum loose union so
+    // imported BeerXML/BSMX strings parse correctly here.
+    const moisture = asNum(lib?.moisture);
+    if (moisture > 0) yieldFrac *= (1 - moisture / 100);
+    const dbfg = asNum(lib?.dbfg);
+    if (dbfg > 0) yieldFrac *= (1 - dbfg / 100);
 
     totalPoints += kg * yieldFrac * effFrac * METRIC_CONSTANT;
   }
@@ -256,7 +256,12 @@ export function calcEBC(grains: Ingredient[], maltLib: MaltLib[], batchL: number
     const kg = g.unit === 'g' ? g.amt * 0.001 : g.amt;
     const lbs = kg * 2.20462;
     const lib = maltLib.find(m => m.id === g.libId || m.name === g.name);
-    const ebc = lib?.ebc ?? parseFloat(g.extra || '0');
+    // Prefer library EBC when set; fall back to per-ingredient extra.
+    // asNum funnels both branches through the same parser so imported
+    // string-typed library values arithmetic-compare correctly.
+    const ebc = lib?.ebc != null && lib.ebc !== ''
+      ? asNum(lib.ebc)
+      : parseFloat(g.extra || '0');
     const srm = ebc / 1.97;
     mcu += (lbs * srm) / batchGal;
   }
@@ -268,8 +273,16 @@ export function calcEBC(grains: Ingredient[], maltLib: MaltLib[], batchL: number
 // === FV Volume from Dipstick ===
 
 export function fvVolume(mm: number, calib: TankCalibration): number {
-  if (mm <= calib.threshold) return calib.coneVol;
-  return calib.coneVol + (mm - calib.threshold) * calib.lPerMm;
+  // TankCalibration fields are user-config and optional — they may be
+  // empty/undefined if the brewer hasn't filled them in yet. Coerce
+  // through asNum so missing values become 0 rather than NaN-propagating
+  // through downstream display logic. Call sites already treat 0 as
+  // "no calibration / no reading" (see BrewDayTab fvVolL guards).
+  const threshold = asNum(calib.threshold);
+  const coneVol   = asNum(calib.coneVol);
+  const lPerMm    = asNum(calib.lPerMm);
+  if (mm <= threshold) return coneVol;
+  return coneVol + (mm - threshold) * lPerMm;
 }
 
 // === Brewhouse Efficiency Check ===
@@ -797,10 +810,10 @@ export function grainDiPh(grain: Ingredient, maltLib: MaltLib[]): number {
   }
   const name = (grain.name || '').toLowerCase();
   if (/acid|sauer/.test(name)) return 4.30;
-  const ebcRaw = (lib?.ebc != null && lib.ebc > 0)
-    ? lib.ebc
-    : parseFloat(grain.extra || '0');
-  const ebc = isFinite(ebcRaw) ? ebcRaw : 0;
+  // EBC source priority: library value (parsed via asNum so legacy
+  // string values work), then the per-ingredient extra fallback.
+  const libEbc = asNum(lib?.ebc);
+  const ebc = libEbc > 0 ? libEbc : (parseFloat(grain.extra || '0') || 0);
   let di: number;
   if (ebc < 6)        di = 5.75 - 0.005  * ebc;
   else if (ebc <= 150) di = 5.65 - 0.0035 * ebc;

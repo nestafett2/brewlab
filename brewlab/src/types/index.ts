@@ -825,6 +825,48 @@ export interface CustomStyle {
   ibu_max: number | null;
   ebc_min: number | null;
   ebc_max: number | null;
+  // ── Descriptive fields (added 2026-05-07) ────────────────────────────
+  // All optional. Naming is camelCase to match the user-facing spec —
+  // existing snake_case range fields stay snake_case for back-compat.
+  // For BJCP entries (a hardcoded const, not editable in place), the
+  // same field set lives on `StyleOverlay` and is merged at read time
+  // by getUnifiedStyle.
+  /** Vols CO2 range — same shape as existing ABV/IBU/EBC pair. */
+  carbonationMin?: number | null;
+  carbonationMax?: number | null;
+  /** Multi-line free text. Saved as a single string with `\n` separators
+   *  rather than an array so nothing fancy is needed for round-tripping. */
+  notes?: string;
+  description?: string;
+  /** Aroma / appearance / flavor / mouthfeel narrative. */
+  profile?: string;
+  ingredients?: string;
+  /** Comma-separated commercial examples. */
+  examples?: string;
+  /** Single URL — stored as-is, no validation. */
+  webLink?: string;
+}
+
+/**
+ * Per-style descriptive overlay. Persisted as `bl_style_overlays`,
+ * a Record keyed by styleKey ('21A' for BJCP, 'custom_<ts>' for custom).
+ *
+ * The same field set could also live on CustomStyle directly — and it
+ * does, for custom entries — but BJCP entries are a read-only const
+ * (lib/styles.ts:BJCP_2021). Overlay records sit alongside the const
+ * and the read layer (getUnifiedStyle) merges them in. Custom entries
+ * write descriptive fields to their own CustomStyle record, NOT to the
+ * overlay, so a single source-of-truth applies per style.
+ */
+export interface StyleOverlay {
+  carbonationMin?: number | null;
+  carbonationMax?: number | null;
+  notes?: string;
+  description?: string;
+  profile?: string;
+  ingredients?: string;
+  examples?: string;
+  webLink?: string;
 }
 
 /** Style guide selector — drives which BJCP year (or external guide) the
@@ -917,8 +959,20 @@ export interface LedgerEntry {
   got?: number;
   /** Amount used (kg) — set for OUT entries; absent on IN. */
   used?: number;
-  /** Free-form notes column (HTML "BEER / SUPPLIER / NOTE"). */
+  /** Beer name (`recipe.beerName || recipe.name`) on OUT entries.
+   *  HTML 15754 originally stamped `brew.name` here and the planner's
+   *  inventory grid recorded-check matched it via brew-name substring.
+   *  React keeps writing the brew/beer name for legacy compatibility,
+   *  but cross-references should prefer `taxBatch` when both are set
+   *  (see RecordUsageModal.confirm + isBrewFullyRecorded). */
   beer?: string;
+  /** NTA tax batch # of the brew that consumed this stock — silently
+   *  derived from `brew.recipeId → recipe.taxBatch` at record time, so
+   *  no new typing is required. Empty string when the brew has no
+   *  linked recipe or the recipe's taxBatch is blank. Newer than `beer`
+   *  — legacy rows omit this field. The forecast / order-XLSX /
+   *  fully-recorded checks all prefer this for exact matching. */
+  taxBatch?: string;
   /** Supplier name on IN entries. */
   supplier?: string;
   /** Explicit received date (IN entries). */
@@ -999,8 +1053,30 @@ export interface HarvestedYeastEntry {
   got?: number;
   /** Amount used (litres). */
   used?: number;
-  /** Source brew name (for harvests) or destination brew name (for uses). */
+  /** Beer name — for harvests this is the source brew's beer name (the
+   *  recipe the yeast came out of); for usages it's the destination
+   *  brew's beer name (where the yeast was pitched). On a row that's
+   *  been used multiple times, joined with ", ".
+   *  HTML history note: through the previous React pass `beer` briefly
+   *  held the tax batch number; new writes go back to beer name and
+   *  the tax batch lives on the sibling `taxBatch` field below. Old
+   *  rows that pre-date that pass render gracefully — see
+   *  HarvestedYeastView.formatBrewLabel. */
   beer?: string;
+  /** NTA tax batch # of the destination brew (for usage rows). On
+   *  multi-use rows joined with ", " — kept index-aligned with `beer`
+   *  so the view can zip them into "TAX — Beer" pairs. */
+  taxBatch?: string;
+  /** Source brew's beer name (for harvest rows). HTML and the early
+   *  React port both stored the tax batch here — legacy rows therefore
+   *  hold a tax-batch string under this key. New writes after this
+   *  pass put the beer name here and the tax batch on the
+   *  `harvestedFromTaxBatch` sibling. The view formatter falls back to
+   *  rendering whichever single value exists for legacy rows. */
+  harvestedFrom?: string;
+  /** NTA tax batch # of the source brew (for harvest rows). New field —
+   *  pairs with `harvestedFrom`. Legacy harvest rows omit this. */
+  harvestedFromTaxBatch?: string;
   /** Source brew number for harvests. */
   brewNum?: string;
   /** Source brew identifier (HTML stores the recipe_id here). */

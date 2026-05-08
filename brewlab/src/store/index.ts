@@ -28,7 +28,7 @@ import {
 import type {
   Recipe, Ingredient, FermLogEntry, FermMeta, BrewDayData, ColdSideData,
   WaterChemData,
-  MaltLib, HopLib, YeastLib, MiscLib, TankCalibration, CustomStyle, EquipmentProfile,
+  MaltLib, HopLib, YeastLib, MiscLib, TankCalibration, CustomStyle, StyleOverlay, EquipmentProfile,
   WaterProfile, MashProfile, PitchProfile, BreweryNote, Folder,
   BrewSettings, TabVisibility, PlannerBrew, YearlyData, HarvestedYeast,
   LedgerData, OrderEntry,
@@ -159,6 +159,13 @@ export interface BrewLabState {
   miscLib: MiscLib[];
   tankCalib: Record<string, TankCalibration>;
   customStyles: Record<string, CustomStyle>;
+  /** Per-style descriptive overlay — keyed by styleKey ('21A' for BJCP,
+   *  'custom_<ts>' for custom). Holds the descriptive fields (notes,
+   *  description, profile, etc.) for BJCP styles since the BJCP_2021
+   *  const isn't writable. Custom styles persist their descriptive
+   *  fields directly on CustomStyle and ignore this dict. See type doc
+   *  on StyleOverlay for the full rationale. */
+  styleOverlays: Record<string, StyleOverlay>;
   equipProfiles: EquipmentProfile[];
   waterProfiles: WaterProfile[];
   mashProfiles: MashProfile[];
@@ -384,6 +391,7 @@ export interface BrewLabState {
   setTankCalib: (calib: Record<string, TankCalibration>) => void;
   setEquipProfiles: (profiles: EquipmentProfile[]) => void;
   setCustomStyles: (styles: Record<string, CustomStyle>) => void;
+  setStyleOverlays: (overlays: Record<string, StyleOverlay>) => void;
   setWaterProfiles: (profiles: WaterProfile[]) => void;
   setMashProfiles: (profiles: MashProfile[]) => void;
   setPitchProfiles: (profiles: PitchProfile[]) => void;
@@ -526,6 +534,7 @@ export const useStore = create<BrewLabState>((set, get) => ({
   miscLib: lsGet<MiscLib[]>('bl_lib_misc', []),
   tankCalib: lsGet<Record<string, TankCalibration>>('bl_tank_calib', {}),
   customStyles: lsGet<Record<string, CustomStyle>>('bl_custom_styles', {}),
+  styleOverlays: lsGet<Record<string, StyleOverlay>>('bl_style_overlays', {}),
   equipProfiles: lsGet<EquipmentProfile[]>('bl_equip_profiles', []),
   waterProfiles: lsGet<WaterProfile[]>('bl_water_profiles', []),
   mashProfiles: lsGet<MashProfile[]>('bl_mash_profiles', []),
@@ -1146,6 +1155,7 @@ export const useStore = create<BrewLabState>((set, get) => ({
   setFolders: (folders) => { lsSet('bl_folder_list', folders); set({ folders }); },
   setTankCalib: (calib) => { lsSet('bl_tank_calib', calib); set({ tankCalib: calib }); },
   setCustomStyles: (styles) => { lsSet('bl_custom_styles', styles); set({ customStyles: styles }); },
+  setStyleOverlays: (overlays) => { lsSet('bl_style_overlays', overlays); set({ styleOverlays: overlays }); },
   setEquipProfiles: (profiles) => { lsSet('bl_equip_profiles', profiles); set({ equipProfiles: profiles }); },
   setWaterProfiles: (profiles) => { lsSet('bl_water_profiles', profiles); set({ waterProfiles: profiles }); },
   setMashProfiles: (profiles) => { lsSet('bl_mash_profiles', profiles); set({ mashProfiles: profiles }); },
@@ -1634,6 +1644,7 @@ export const useStore = create<BrewLabState>((set, get) => ({
         miscLib: lsGet<MiscLib[]>('bl_lib_misc', []),
         tankCalib: lsGet<Record<string, TankCalibration>>('bl_tank_calib', {}),
         customStyles: lsGet<Record<string, CustomStyle>>('bl_custom_styles', {}),
+        styleOverlays: lsGet<Record<string, StyleOverlay>>('bl_style_overlays', {}),
         folders: lsGet<Folder[]>('bl_folder_list', []),
         equipProfiles: lsGet<EquipmentProfile[]>('bl_equip_profiles', []),
         waterProfiles: lsGet<WaterProfile[]>('bl_water_profiles', []),

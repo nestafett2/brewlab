@@ -211,6 +211,27 @@ export async function sbDispatch(key: string, value: unknown): Promise<void> {
         for (const [strain, strainData] of Object.entries(yeastData)) {
           const entries = strainData?.entries ?? [];
           for (const e of entries) {
+            // Two of the table's free-text columns are row-type
+            // dependent. The split mirrors the in-memory entry shape:
+            //   beer_name  ─ usage:   destination brew's beer name (e.beer)
+            //              ─ harvest: source brew's beer name      (e.harvestedFrom)
+            //   tax_batch  ─ usage:   destination brew's tax batch (e.taxBatch)
+            //              ─ harvest: source brew's tax batch      (e.harvestedFromTaxBatch)
+            //
+            // The `tax_batch` column was added by
+            // migrations/2026-05-07_add_tax_batch_to_harvested_yeast.sql;
+            // before that migration the same data was overloaded into
+            // the legacy `brew_num` column (which was previously the
+            // dead-on-write e.brewNum field). New writes leave brew_num
+            // NULL — see the migration header comment for the
+            // long-form story.
+            const isUsage = (e.type as string) === 'usage';
+            const beerCol = isUsage
+              ? ((e.beer as string) || null)
+              : ((e.harvestedFrom as string) || null);
+            const taxCol  = isUsage
+              ? ((e.taxBatch as string) || null)
+              : ((e.harvestedFromTaxBatch as string) || null);
             rows.push({
               id:         String(e.id ?? crypto.randomUUID()),
               strain,
@@ -218,8 +239,8 @@ export async function sbDispatch(key: string, value: unknown): Promise<void> {
               entry_date: (e.date as string) || (e.harvestDate as string) || null,
               amount_l:   parseFloat(String(e.got ?? e.used ?? '')) || null,
               recipe_id:  (e.recipeId as string) || null,
-              beer_name:  (e.beer as string) || null,
-              brew_num:   (e.brewNum as string) || null,
+              beer_name:  beerCol,
+              tax_batch:  taxCol,
               generation: parseInt(String(e.generation ?? ''), 10) || null,
               container:  (e.container as string) || null,
               note:       (e.note as string) || null,
@@ -575,15 +596,33 @@ export async function sbFetchHydration(local: LocalContext): Promise<HydrationPl
           const g = typeof r.generation === 'number' && r.generation > 0 ? r.generation : 1;
           yeastData[strain] = { generation: g, entries: [] };
         }
+        // Mirror the dispatch path: harvest rows pull
+        //   beer_name → harvestedFrom, tax_batch → harvestedFromTaxBatch
+        // and usage rows pull
+        //   beer_name → beer,           tax_batch → taxBatch.
+        // Legacy rows where tax_batch IS NULL hydrate gracefully —
+        // both `harvestedFromTaxBatch` and `taxBatch` are optional and
+        // HarvestedYeastView's formatPair helper falls back to
+        // single-value rendering when one side is missing.
+        //
+        // The deprecated `brew_num` column is intentionally NOT read.
+        // Any value sitting there is the dead-on-write `e.brewNum`
+        // field — semantically NOT a tax batch, so reading it as one
+        // would surface bogus values in the inventory display.
+        const isUsage = r.entry_type === 'usage';
         yeastData[strain].entries.push({
           id:          r.id,
           type:        r.entry_type,
           date:        r.entry_date,
           harvestDate: r.entry_date,
           got:         r.entry_type === 'harvest' ? r.amount_l : 0,
-          used:        r.entry_type === 'usage'   ? r.amount_l : 0,
-          beer:        r.beer_name,
-          brewNum:     r.brew_num,
+          used:        isUsage                    ? r.amount_l : 0,
+          // Usage row → e.beer / e.taxBatch carry the destination brew.
+          beer:                  isUsage ? (r.beer_name ?? undefined) : undefined,
+          taxBatch:              isUsage ? (r.tax_batch ?? undefined) : undefined,
+          // Harvest row → e.harvestedFrom / e.harvestedFromTaxBatch.
+          harvestedFrom:         isUsage ? undefined : (r.beer_name ?? undefined),
+          harvestedFromTaxBatch: isUsage ? undefined : (r.tax_batch ?? undefined),
           generation:  r.generation,
           container:   r.container,
           note:        r.note,
@@ -924,20 +963,49 @@ function ingToRow(recipeId: string, ing: Ingredient, idx: number) {
   // `migrations/2026-05-04_add_malted_column.sql` and re-add the field
   // to the row payload below.
   // ────────────────────────────────────────────────────────────────────
+
+  // ────────────────────────────────────────────────────────────────────
+  // `yeast_source` / `yeast_gen` round-trip the harvested-yeast link
+  // for yeast ingredients. AddIngredientModal stamps these on the
+  // ingredient as ad-hoc fields (not in the typed Ingredient schema —
+  // see brewlab/src/components/recipe/AddIngredientModal.tsx:503–506).
+  //
+  // FermTab's "Log Harvest to Inventory" pre-fill reads them to suggest
+  // the new harvest's generation = parent + 1. Without these columns
+  // the parent gen is lost on cross-device hydrate and the modal falls
+  // back to fresh / Gen 2.
+  //
+  // Requires migrations/2026-05-07_add_yeast_source_gen_to_recipe_ingredients.sql.
+  // If the migration hasn't been applied, the insert will fail with
+  // PGRST204 — same failure mode the `malted` block describes above.
+  // The fallback is identical: edit a recipe to refresh local state,
+  // FermTab works against the in-memory ingredient regardless.
+  // ────────────────────────────────────────────────────────────────────
+  type YeastIng = Ingredient & { yeastSource?: string; yeastGen?: string | number };
+  const isYeast = ing.type === 'yeast';
+  const yIng = isYeast ? (ing as YeastIng) : null;
+  const yeastSource = yIng?.yeastSource ?? null;
+  const yeastGenRaw = yIng?.yeastGen;
+  const yeastGen = yeastGenRaw == null || yeastGenRaw === ''
+    ? null
+    : (parseInt(String(yeastGenRaw), 10) || null);
+
   return {
-    id:         `${recipeId}_${rawId}`,
-    recipe_id:  recipeId,
-    type:       ing.type || 'misc',
-    name:       ing.name || '',
-    amount:     parseFloat(String(ing.amt))     || null,
-    unit:       ing.unit || null,
-    use:        ing.use  || null,
-    time:       parseInt(String(ing.time), 10)  || null,
-    extra:      parseFloat(String(ing.extra))   || null,
-    ibu:        parseFloat(String(ing.ibu))     || null,
-    pct:        parseFloat(String(ing.pct))     || null,
-    cost:       parseFloat(String(ing.cost))    || null,
-    sort_order: idx,
+    id:           `${recipeId}_${rawId}`,
+    recipe_id:    recipeId,
+    type:         ing.type || 'misc',
+    name:         ing.name || '',
+    amount:       parseFloat(String(ing.amt))     || null,
+    unit:         ing.unit || null,
+    use:          ing.use  || null,
+    time:         parseInt(String(ing.time), 10)  || null,
+    extra:        parseFloat(String(ing.extra))   || null,
+    ibu:          parseFloat(String(ing.ibu))     || null,
+    pct:          parseFloat(String(ing.pct))     || null,
+    cost:         parseFloat(String(ing.cost))    || null,
+    sort_order:   idx,
+    yeast_source: yeastSource,
+    yeast_gen:    yeastGen,
   };
 }
 
@@ -948,6 +1016,17 @@ function rowToIng(row: Record<string, unknown>): Ingredient {
   const malted = maltedCol === undefined || maltedCol === null
     ? undefined
     : Boolean(maltedCol);
+
+  // yeast_source / yeast_gen are ad-hoc fields on Ingredient (not in the
+  // typed schema). Spread them onto the returned object so FermTab's
+  // parent-gen lookup can read them after a cross-device hydrate. Empty
+  // / null values are dropped so the in-memory object stays clean.
+  const yeastSource = row.yeast_source as string | null | undefined;
+  const yeastGen    = row.yeast_gen    as number | null | undefined;
+  const extras: Record<string, unknown> = {};
+  if (yeastSource) extras.yeastSource = yeastSource;
+  if (yeastGen != null) extras.yeastGen = yeastGen;
+
   return {
     id: row.id as string,
     type: row.type as Ingredient['type'],
@@ -964,6 +1043,7 @@ function rowToIng(row: Record<string, unknown>): Ingredient {
     cost: (row.cost as number) ?? 0,
     sortOrder: (row.sort_order as number) ?? 0,
     ...(malted === undefined ? {} : { malted }),
+    ...extras,
   };
 }
 
@@ -1165,7 +1245,7 @@ const SETTINGS_KEYS = new Set([
   'bl_tank_calib', 'bl_folder_list', 'bl_planner_brews', 'bl_yearly', 'bl_brewery_notes',
   'bl_inv_stock', 'bl_ledger', 'bl_orders',
   'bl_equip_profiles', 'bl_water_profiles', 'bl_mash_profiles',
-  'bl_pitch_profiles', 'bl_custom_styles', 'bl_suppliers', 'bl_tab_visibility',
+  'bl_pitch_profiles', 'bl_custom_styles', 'bl_style_overlays', 'bl_suppliers', 'bl_tab_visibility',
   'bl_nta_register', 'bl_nta_basis_default', 'bl_nta_basis_current',
   'bl_templates', 'bl_equipment',
 ]);

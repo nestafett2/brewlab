@@ -4,6 +4,26 @@
 
 import type { Recipe } from '../types';
 
+/**
+ * Coerce a `LibNum`-style value (number | string | null | undefined) to a
+ * concrete number. Library types in this app accept loose unions so legacy
+ * localStorage blobs and BeerXML/BSMX-imported strings round-trip without
+ * data loss; arithmetic call sites should funnel through this helper to
+ * avoid silent string-vs-number comparisons.
+ *
+ * Returns `fallback` (default 0) when the value is null/undefined/empty
+ * string or parses to NaN. Numeric values pass through unchanged.
+ */
+export function asNum(
+  v: number | string | null | undefined,
+  fallback = 0,
+): number {
+  if (typeof v === 'number') return isFinite(v) ? v : fallback;
+  if (v == null || v === '') return fallback;
+  const n = parseFloat(String(v));
+  return isFinite(n) ? n : fallback;
+}
+
 /** Detect device type from viewport width */
 export type DeviceType = 'desktop' | 'tablet' | 'mobile';
 

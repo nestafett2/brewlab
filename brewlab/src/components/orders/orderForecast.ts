@@ -11,12 +11,34 @@
  */
 
 import type {
-  PlannerBrew, OrderEntry, LedgerData,
+  PlannerBrew, OrderEntry, LedgerData, LedgerEntry,
   Ingredient, MaltLib, HopLib, YeastLib, MiscLib,
 } from '../../types';
 import { ingNamesMatch } from '../../lib/ingredient-matcher';
 import { sectionToIngType } from '../../lib/units';
 import { getLedgerBalance } from '../../lib/ledger';
+
+/**
+ * Has this brew already been recorded against this ledger key?
+ *
+ * Prefers exact taxBatch match (newer entries written by RecordUsageModal
+ * stamp `taxBatch` from the brew's recipe). Falls back to brew-name
+ * substring for legacy entries that pre-date the taxBatch column. The
+ * brew-name fallback uses the first 3 words of the brew name lowercased,
+ * matching HTML brewlab-desktop.html:15686 / 15779.
+ */
+export function ledgerHasBrew(
+  entries: LedgerEntry[],
+  brewName: string,
+  brewTaxBatch: string,
+): boolean {
+  const tag = brewName.toLowerCase().split(' ').slice(0, 3).join(' ');
+  return entries.some(e => {
+    if (e.used == null) return false;
+    if (brewTaxBatch && e.taxBatch && e.taxBatch === brewTaxBatch) return true;
+    return (e.beer ?? '').toLowerCase().includes(tag);
+  });
+}
 
 export type LibSection = 'malts' | 'hops' | 'yeast' | 'misc';
 export type LibBySection = {
@@ -130,6 +152,7 @@ export function buildForecastRows(
   inventoryStock: Record<string, number>,
   ledgerData: LedgerData,
   getIngredients: (recipeId: string) => Ingredient[],
+  getTaxBatch: (recipeId: string) => string = () => '',
 ): ForecastRow[] {
   const ingType = sectionToIngType(sec);
   const entries = libBySection[sec];
@@ -150,9 +173,10 @@ export function buildForecastRows(
           matched.reduce((s, i) => s + (parseFloat(String(i.amt ?? 0)) || 0), 0) * 1000,
         ) / 1000;
         if (!recipeAmt) return { amt: 0, incoming: 0, recorded: false };
-        const brewTag = col.brew.name.toLowerCase().split(' ').slice(0, 3).join(' ');
-        const alreadyRecorded = (ledgerData[ledgerKey] ?? []).some(
-          e => e.used != null && (e.beer ?? '').toLowerCase().includes(brewTag),
+        const alreadyRecorded = ledgerHasBrew(
+          ledgerData[ledgerKey] ?? [],
+          col.brew.name,
+          getTaxBatch(recipeId),
         );
         return { amt: recipeAmt, incoming: 0, recorded: alreadyRecorded };
       } else {

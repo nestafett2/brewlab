@@ -40,6 +40,7 @@ export default function OrderPlannerPage() {
   const inventoryStock  = useStore(s => s.inventoryStock);
   const ledgerData      = useStore(s => s.ledgerData);
   const ingredientsByRecipe = useStore(s => s.ingredientsByRecipe);
+  const recipes   = useStore(s => s.recipes);
   const maltLib   = useStore(s => s.maltLib);
   const hopLib    = useStore(s => s.hopLib);
   const yeastLib  = useStore(s => s.yeastLib);
@@ -58,6 +59,16 @@ export default function OrderPlannerPage() {
   const libImportRef = useRef<HTMLInputElement>(null);
 
   const exportXlsx = () => {
+    const recipeById = new Map(recipes.map(r => [r.id, r]));
+    const labelOf = (b: typeof plannerBrews[number]): string => {
+      const r = b.recipeId ? recipeById.get(b.recipeId) : undefined;
+      const tax  = r?.taxBatch?.trim() ?? '';
+      const beer = (r?.beerName?.trim() || r?.name?.trim()) ?? '';
+      if (tax && beer) return `${tax} — ${beer}`;
+      if (tax)         return tax;
+      if (beer)        return beer;
+      return b.name;
+    };
     exportOrderPlannerXlsx({
       section,
       plannerBrews,
@@ -65,6 +76,8 @@ export default function OrderPlannerPage() {
       inventoryStock,
       ledgerData,
       getIngredients: recipeId => ingredientsByRecipe[recipeId] ?? [],
+      resolveBrewLabel: labelOf,
+      getTaxBatch: recipeId => recipeById.get(recipeId)?.taxBatch ?? '',
       breweryName: settings.breweryName,
     });
   };

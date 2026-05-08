@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../store';
 import { getUnifiedStyle } from '../../lib/styles';
 import { sgToPlato } from '../../lib/calculations';
-import type { Recipe } from '../../types';
+import type { CustomStyle, Recipe, StyleOverlay } from '../../types';
 import StylePickerDropdown from './StylePickerDropdown';
 
 interface Stats {
@@ -40,6 +40,9 @@ interface BarParams {
 export default function StyleGuideModal({ recipe, stats, onClose }: Props) {
   const updateRecipe = useStore(s => s.updateRecipe);
   const customStyles = useStore(s => s.customStyles);
+  const setCustomStyles = useStore(s => s.setCustomStyles);
+  const styleOverlays = useStore(s => s.styleOverlays);
+  const setStyleOverlays = useStore(s => s.setStyleOverlays);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
@@ -67,9 +70,43 @@ export default function StyleGuideModal({ recipe, stats, onClose }: Props) {
 
   // Unified lookup — works for BJCP and custom styles alike. Custom OG/FG
   // ranges are pre-converted from °P to SG inside getUnifiedStyle so the
-  // sgToPlato calls below work for both sources.
-  const style = getUnifiedStyle(recipe.styleKey, customStyles);
+  // sgToPlato calls below work for both sources. Pass styleOverlays so
+  // BJCP descriptive fields surface alongside numeric ranges.
+  const style = getUnifiedStyle(recipe.styleKey, customStyles, styleOverlays);
   const styleLabel = style ? `${style.name} (${recipe.styleKey})` : '— select style —';
+
+  // Descriptive-field write target. BJCP styles persist through the
+  // overlay dict; custom styles persist directly on their CustomStyle
+  // record (descriptive fields sit alongside the numeric ranges).
+  const updateDescriptive = (patch: Partial<StyleOverlay>) => {
+    if (!style || !recipe.styleKey) return;
+    if (style.source === 'bjcp') {
+      const cur = styleOverlays[recipe.styleKey] ?? {};
+      // Drop empty strings so the overlay record stays minimal.
+      const merged: StyleOverlay = { ...cur, ...patch };
+      for (const k of Object.keys(merged) as (keyof StyleOverlay)[]) {
+        const v = merged[k];
+        if (v === '' || v === null || v === undefined) delete merged[k];
+      }
+      const next = { ...styleOverlays };
+      if (Object.keys(merged).length === 0) delete next[recipe.styleKey];
+      else next[recipe.styleKey] = merged;
+      setStyleOverlays(next);
+    } else {
+      const cur = customStyles[recipe.styleKey];
+      if (!cur) return;
+      const merged: CustomStyle = { ...cur, ...patch };
+      // Same empty-string normalization on the descriptive subset only —
+      // numeric ranges keep their explicit nulls.
+      const descKeys: (keyof StyleOverlay)[] = [
+        'notes', 'description', 'profile', 'ingredients', 'examples', 'webLink',
+      ];
+      for (const k of descKeys) {
+        if (merged[k] === '' || merged[k] === null) delete merged[k];
+      }
+      setCustomStyles({ ...customStyles, [recipe.styleKey]: merged });
+    }
+  };
 
   // Build the four bar parameter rows (mirrors HTML renderStyleModalBars params)
   const params: BarParams[] = [
@@ -109,14 +146,14 @@ export default function StyleGuideModal({ recipe, stats, onClose }: Props) {
 
   return (
     <div className="modal-overlay open" onClick={onClose}>
-      <div className="modal" style={{ width: 620, maxWidth: '95vw' }} onClick={e => e.stopPropagation()}>
+      <div className="modal" style={{ width: 620, maxWidth: '95vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div className="modal-title">STYLE GUIDE COMPARISON</div>
           <button className="btn" onClick={onClose} style={{ padding: '2px 8px' }}>✕</button>
         </div>
 
-        <div style={{ padding: '18px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ padding: '18px 24px', display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto' }}>
           {/* Style selector — dropdown is in-flow, so opening it pushes the
               range bars below down rather than overlapping them. */}
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -153,11 +190,180 @@ export default function StyleGuideModal({ recipe, stats, onClose }: Props) {
               <RangeBarRow key={p.label} params={p} hasStyle={!!style} />
             ))}
           </div>
+
+          {/* Descriptive fields — editable for any style (BJCP or custom).
+              Carbonation renders as a labeled range string when set; the
+              text fields render only when non-empty AND grow into edit
+              fields on click. We show a single "Edit fields" button to
+              toggle the whole descriptive section into edit mode rather
+              than per-field toggles, which would clutter the modal. */}
+          {style && (
+            <DescriptiveSection style={style} onChange={updateDescriptive} />
+          )}
         </div>
       </div>
     </div>
   );
 }
+
+// ── Descriptive fields — view + inline edit ─────────────────────────────
+//
+// View mode: labeled blocks for any non-empty fields, skipping empties
+// entirely. Edit mode: every field rendered as an input/textarea, even
+// the empty ones, so the user can fill them in. Toggle controlled by a
+// local "Edit / Done" button. All fields optional — saving writes back
+// via `onChange` and lets the parent route to overlay vs CustomStyle.
+
+interface DescriptiveProps {
+  style: ReturnType<typeof getUnifiedStyle> & object;
+  onChange: (patch: Partial<StyleOverlay>) => void;
+}
+
+function DescriptiveSection({ style, onChange }: DescriptiveProps) {
+  const [editing, setEditing] = useState(false);
+  const hasAny =
+    !!style.notes || !!style.description || !!style.profile ||
+    !!style.ingredients || !!style.examples || !!style.webLink ||
+    style.carb != null;
+
+  return (
+    <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}>
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: 1, color: 'var(--text-muted)' }}>
+          STYLE NOTES
+        </div>
+        <button className="btn sm" onClick={() => setEditing(e => !e)}>
+          {editing ? 'Done' : 'Edit'}
+        </button>
+      </div>
+
+      {editing ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <RangeRow
+            label="Carbonation (vols)"
+            min={style.carb?.[0] ?? null}
+            max={style.carb?.[1] ?? null}
+            onChange={(min, max) =>
+              onChange({ carbonationMin: min, carbonationMax: max })}
+          />
+          <Textarea label="Notes"       value={style.notes       ?? ''} onChange={v => onChange({ notes: v })} rows={2} />
+          <Textarea label="Description" value={style.description ?? ''} onChange={v => onChange({ description: v })} rows={3} />
+          <Textarea label="Profile"     value={style.profile     ?? ''} onChange={v => onChange({ profile: v })} rows={3} placeholder="Aroma · Appearance · Flavor · Mouthfeel" />
+          <Textarea label="Ingredients" value={style.ingredients ?? ''} onChange={v => onChange({ ingredients: v })} rows={2} />
+          <Textarea label="Examples"    value={style.examples    ?? ''} onChange={v => onChange({ examples: v })} rows={2} placeholder="Comma-separated commercial examples" />
+          <UrlField label="Web Link"    value={style.webLink     ?? ''} onChange={v => onChange({ webLink: v })} />
+        </div>
+      ) : !hasAny ? (
+        <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+          No notes for this style yet — click Edit to add carbonation, description, profile, etc.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {style.carb && (
+            <ViewRow label="Carbonation">{style.carb[0].toFixed(1)} – {style.carb[1].toFixed(1)} vols</ViewRow>
+          )}
+          {style.notes       && <ViewRow label="Notes" multiline>{style.notes}</ViewRow>}
+          {style.description && <ViewRow label="Description" multiline>{style.description}</ViewRow>}
+          {style.profile     && <ViewRow label="Profile" multiline>{style.profile}</ViewRow>}
+          {style.ingredients && <ViewRow label="Ingredients" multiline>{style.ingredients}</ViewRow>}
+          {style.examples    && <ViewRow label="Examples" multiline>{style.examples}</ViewRow>}
+          {style.webLink     && (
+            <ViewRow label="Web Link">
+              <a href={style.webLink} target="_blank" rel="noopener noreferrer"
+                 style={{ color: 'var(--amber)', textDecoration: 'underline' }}>
+                {style.webLink}
+              </a>
+            </ViewRow>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ViewRow({ label, children, multiline }: { label: string; children: React.ReactNode; multiline?: boolean }) {
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: multiline ? 'flex-start' : 'baseline' }}>
+      <div style={descLabelStyle}>{label}</div>
+      <div style={{ flex: 1, fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text)', whiteSpace: multiline ? 'pre-wrap' as const : 'normal' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Textarea({ label, value, onChange, rows = 2, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void; rows?: number; placeholder?: string;
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      <div style={descLabelStyle}>{label}</div>
+      <textarea
+        rows={rows}
+        placeholder={placeholder}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{ ...descInputStyle, flex: 1, resize: 'vertical', minHeight: rows * 18 }}
+      />
+    </div>
+  );
+}
+
+function UrlField({ label, value, onChange }: {
+  label: string; value: string; onChange: (v: string) => void;
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
+      <div style={descLabelStyle}>{label}</div>
+      <input
+        type="url"
+        placeholder="https://…"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{ ...descInputStyle, flex: 1 }}
+      />
+    </div>
+  );
+}
+
+function RangeRow({ label, min, max, onChange }: {
+  label: string;
+  min: number | null;
+  max: number | null;
+  onChange: (min: number | null, max: number | null) => void;
+}) {
+  const num = (s: string): number | null => s.trim() === '' ? null : parseFloat(s);
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}>
+      <div style={descLabelStyle}>{label}</div>
+      <input
+        type="number" step={0.1} placeholder="min"
+        value={min ?? ''}
+        onChange={e => onChange(num(e.target.value), max)}
+        style={{ ...descInputStyle, width: 80 }}
+      />
+      <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--mono)', fontSize: 10 }}>–</span>
+      <input
+        type="number" step={0.1} placeholder="max"
+        value={max ?? ''}
+        onChange={e => onChange(min, num(e.target.value))}
+        style={{ ...descInputStyle, width: 80 }}
+      />
+    </div>
+  );
+}
+
+const descLabelStyle: React.CSSProperties = {
+  fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: 1,
+  color: 'var(--text-muted)', textTransform: 'uppercase' as const,
+  width: 92, flexShrink: 0, paddingTop: 4,
+};
+
+const descInputStyle: React.CSSProperties = {
+  background: 'var(--panel2)', border: '1px solid var(--border2)',
+  color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: 11,
+  padding: '4px 8px', outline: 'none',
+};
 
 // ── Single bar row (mirrors HTML renderStyleModalBars per-row template) ────
 function RangeBarRow({ params: p, hasStyle }: { params: BarParams; hasStyle: boolean }) {

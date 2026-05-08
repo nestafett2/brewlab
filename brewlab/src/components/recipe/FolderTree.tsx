@@ -120,11 +120,15 @@ interface Props {
    *  shows the bulk menu. Single-row right-click goes through
    *  onRecipeContext after clearing selection. */
   onBulkContext: (e: React.MouseEvent, ids: string[]) => void;
+  /** Right-click on the tree wrapper but not on any folder/recipe row —
+   *  Desktop shows the "+ New Folder" blank-area menu. Optional; when
+   *  omitted the wrapper falls back to the browser's default menu. */
+  onBlankContext?: (e: React.MouseEvent) => void;
 }
 
 export default function FolderTree({
   folders, recipes, preview, setPreview, setFolders, setRecipes,
-  openRecipe, onRecipeContext, onFolderContext, onBulkContext,
+  openRecipe, onRecipeContext, onFolderContext, onBulkContext, onBlankContext,
 }: Props) {
   // ── Multi-select state (PART 4) ─────────────────────────────────────
   // selectedIds is the set of recipe ids that are checked. anchorId is
@@ -259,7 +263,10 @@ export default function FolderTree({
   // Right-click semantics (Pattern A — file-explorer):
   //   • Selected & multi  → bulk menu, selection unchanged
   //   • Otherwise         → replace selection with {id}, single menu
+  // stopPropagation so the wrapper's blank-area context menu doesn't
+  // also fire on row right-clicks.
   const handleRecipeContextMenu = (recipeId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     if (selectedIds.has(recipeId) && selectedIds.size > 1) {
       onBulkContext(e, [...selectedIds]);
       return;
@@ -267,6 +274,13 @@ export default function FolderTree({
     setSelectedIds(new Set([recipeId]));
     setAnchorId(recipeId);
     onRecipeContext(e, recipeId);
+  };
+
+  // Folder row right-click — same stopPropagation rationale as recipe
+  // rows above. The forwarded handler still gets called.
+  const handleFolderContextMenu = (folderId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    onFolderContext(e, folderId);
   };
 
   // Wrapper-level click — clear selection on empty-space click.
@@ -584,7 +598,7 @@ export default function FolderTree({
           style={{ paddingLeft: 8 + indent }}
           draggable
           onClick={e => { e.stopPropagation(); handleFolderClick(folder.id); }}
-          onContextMenu={e => onFolderContext(e, folder.id)}
+          onContextMenu={e => handleFolderContextMenu(folder.id, e)}
           onDragStart={e => handleFolderDragStart(folder.id, e)}
           onDragEnd={handleFolderDragEnd}
           onDragOver={e => handleFolderDragOver(folder.id, e)}
@@ -631,6 +645,13 @@ export default function FolderTree({
     <div
       className={`rb-tree-root${rootIsDropTarget ? ' drop-root' : ''}`}
       onClick={handleWrapperClick}
+      onContextMenu={e => {
+        // Row-level handlers stopPropagation, so this only fires on
+        // truly empty space. preventDefault so the OS menu doesn't appear.
+        if (!onBlankContext) return;
+        e.preventDefault();
+        onBlankContext(e);
+      }}
       onDragOver={handleRootDragOver}
       onDrop={handleDrop}
     >

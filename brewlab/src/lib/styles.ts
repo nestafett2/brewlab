@@ -1,6 +1,6 @@
 /** BJCP 2021 Style Guide data — extracted from brewlab-desktop.html */
 
-import type { CustomStyle } from '../types';
+import type { CustomStyle, StyleOverlay } from '../types';
 import { platoToSg } from './calculations';
 
 export interface StyleDef {
@@ -35,6 +35,20 @@ export interface UnifiedStyle {
   ibu: [number, number] | null;
   srm: [number, number] | null;
   abv: [number, number] | null;
+  /** Carbonation in vols CO2. New field 2026-05-07; not in BJCP_2021
+   *  source data — populated either by overlay (BJCP) or directly on
+   *  CustomStyle (custom). Null when neither side has values. */
+  carb: [number, number] | null;
+  /** Descriptive fields. For BJCP styles these come from a sibling
+   *  StyleOverlay record keyed on the same styleKey; for custom they
+   *  come straight off the CustomStyle. Empty strings dropped to
+   *  undefined so consumers can `if (style.notes)` cleanly. */
+  notes?: string;
+  description?: string;
+  profile?: string;
+  ingredients?: string;
+  examples?: string;
+  webLink?: string;
 }
 
 export const BJCP_2021: Record<string, StyleDef> = {
@@ -150,10 +164,22 @@ export function styleMarkerPos(value: number, range: [number, number]): number {
 
 // ─── Unified Style helpers ────────────────────────────────────────────
 
-function bjcpToUnified(key: string, s: StyleDef): UnifiedStyle {
+/** Strip empty strings → undefined so consumers can use truthy checks. */
+function emptyToUndef(v: string | undefined): string | undefined {
+  return v && v.trim() ? v : undefined;
+}
+
+function bjcpToUnified(key: string, s: StyleDef, overlay?: StyleOverlay): UnifiedStyle {
   return {
     key, name: s.name, cat: s.cat, guide: 'BJCP 2021', source: 'bjcp',
     og: s.og, fg: s.fg, ibu: s.ibu, srm: s.srm, abv: s.abv,
+    carb: pairOrNull(overlay?.carbonationMin, overlay?.carbonationMax),
+    notes:        emptyToUndef(overlay?.notes),
+    description:  emptyToUndef(overlay?.description),
+    profile:      emptyToUndef(overlay?.profile),
+    ingredients:  emptyToUndef(overlay?.ingredients),
+    examples:     emptyToUndef(overlay?.examples),
+    webLink:      emptyToUndef(overlay?.webLink),
   };
 }
 
@@ -185,26 +211,40 @@ function customToUnified(key: string, s: CustomStyle): UnifiedStyle {
     ibu: pairOrNull(s.ibu_min, s.ibu_max),
     srm: ebc ? [ebc[0] / 1.97, ebc[1] / 1.97] : null,
     abv: pairOrNull(s.abv_min, s.abv_max),
+    carb: pairOrNull(s.carbonationMin, s.carbonationMax),
+    notes:        emptyToUndef(s.notes),
+    description:  emptyToUndef(s.description),
+    profile:      emptyToUndef(s.profile),
+    ingredients:  emptyToUndef(s.ingredients),
+    examples:     emptyToUndef(s.examples),
+    webLink:      emptyToUndef(s.webLink),
   };
 }
 
-/** All styles, unified — BJCP first (in BJCP key order), then custom. */
+/** All styles, unified — BJCP first (in BJCP key order), then custom.
+ *  `styleOverlays` is optional; when omitted, BJCP styles render with
+ *  empty descriptive fields. Picker / sidebar callers don't need
+ *  overlays today (they only display name/cat/ranges) so they can
+ *  pass the dict or skip it. The Style Guide modal does pass it. */
 export function getAllUnifiedStyles(
   customStyles: Record<string, CustomStyle>,
+  styleOverlays: Record<string, StyleOverlay> = {},
 ): UnifiedStyle[] {
-  const bjcp = Object.entries(BJCP_2021).map(([k, s]) => bjcpToUnified(k, s));
+  const bjcp = Object.entries(BJCP_2021).map(([k, s]) => bjcpToUnified(k, s, styleOverlays[k]));
   const custom = Object.entries(customStyles).map(([k, s]) => customToUnified(k, s));
   return [...bjcp, ...custom];
 }
 
 /** Single-style lookup. Recipe.styleKey may point at either source —
- *  this returns the right one or null. */
+ *  this returns the right one or null. `styleOverlays` is optional for
+ *  the same reason as getAllUnifiedStyles. */
 export function getUnifiedStyle(
   key: string | undefined | null,
   customStyles: Record<string, CustomStyle>,
+  styleOverlays: Record<string, StyleOverlay> = {},
 ): UnifiedStyle | null {
   if (!key) return null;
-  if (BJCP_2021[key]) return bjcpToUnified(key, BJCP_2021[key]);
+  if (BJCP_2021[key]) return bjcpToUnified(key, BJCP_2021[key], styleOverlays[key]);
   if (customStyles[key]) return customToUnified(key, customStyles[key]);
   return null;
 }

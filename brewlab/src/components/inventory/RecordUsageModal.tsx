@@ -22,7 +22,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store';
-import { fmtIngAmt, sectionToIngType, toKgForLedger } from '../../lib/units';
+import { fmtIngAmt, toKgForLedger } from '../../lib/units';
 import { ingNamesMatch } from '../../lib/ingredient-matcher';
 import { dateToStr, todayDate, strToDate } from '../../lib/dates';
 import type { LedgerData, LedgerEntry, PlannerBrew } from '../../types';
@@ -60,6 +60,7 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
   const loadIngredients     = useStore(s => s.loadIngredients);
   const ledgerData          = useStore(s => s.ledgerData);
   const setLedgerData       = useStore(s => s.setLedgerData);
+  const recipes             = useStore(s => s.recipes);
   const maltLib  = useStore(s => s.maltLib);
   const hopLib   = useStore(s => s.hopLib);
   const yeastLib = useStore(s => s.yeastLib);
@@ -69,6 +70,16 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
     () => plannerBrews.find(b => b.id === brewId) ?? null,
     [plannerBrews, brewId],
   );
+
+  // Tax batch # of the brew's linked recipe — written onto each ledger
+  // OUT entry alongside `beer` so future "is this brew already
+  // recorded?" checks (forecast / order-XLSX / fully-recorded) can do
+  // an exact compare instead of brew-name substring. Empty string when
+  // the brew has no linked recipe or the recipe's taxBatch is blank.
+  const brewTaxBatch = useMemo(() => {
+    if (!brew?.recipeId) return '';
+    return recipes.find(r => r.id === brew.recipeId)?.taxBatch ?? '';
+  }, [brew, recipes]);
 
   // Lazy-load ingredients for the brew's recipe if cache is empty.
   const recipeId = brew?.recipeId ?? '';
@@ -93,7 +104,9 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
 
     for (const sec of SECTIONS) {
       const ingType = ING_TYPES[sec];
-      let secIngs = ings.filter(i => i.type === ingType && i.type !== 'water');
+      // ingType is constrained to 'grain'|'hop'|'yeast'|'misc' so the
+      // type === ingType equality already narrows out water rows.
+      let secIngs = ings.filter(i => i.type === ingType);
       if (sec === 'misc') secIngs = secIngs.filter(i => !EXCLUDE_MISC.test(i.name));
       if (!secIngs.length) continue;
       for (const ing of secIngs) {
@@ -101,8 +114,11 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
         const ledgerKey = libEntry
           ? `${sec}_${libEntry.id}`
           : `nolib_${sec}_${encodeURIComponent(ing.name)}`;
-        const alreadyLogged = (ledgerData[ledgerKey] ?? []).some(e =>
-          e.used != null && (e.beer ?? '').toLowerCase().includes(brewTag));
+        const alreadyLogged = (ledgerData[ledgerKey] ?? []).some(e => {
+          if (e.used == null) return false;
+          if (brewTaxBatch && e.taxBatch && e.taxBatch === brewTaxBatch) return true;
+          return (e.beer ?? '').toLowerCase().includes(brewTag);
+        });
         out.push({
           uid: `r-${uidCount++}`,
           section: sec,
@@ -116,7 +132,7 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
     }
     return out;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [brew, ings, ledgerData, maltLib, hopLib, yeastLib, miscLib]);
+  }, [brew, brewTaxBatch, ings, ledgerData, maltLib, hopLib, yeastLib, miscLib]);
 
   // Per-row checked + amount state.
   const initialChecked = useMemo<Record<string, boolean>>(() => {
@@ -173,6 +189,11 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
         used: qtyKg,
         usedDate: dateStr,
         beer: brew.name,
+        // Empty string preserved (rather than dropped) so consumers can
+        // tell "deliberately blank because the recipe has no taxBatch"
+        // apart from "legacy entry pre-dating the field" — useful for
+        // the forecast's matching fallback (see isBrewFullyRecorded).
+        taxBatch: brewTaxBatch,
       };
       next[r.ledgerKey] = [...(next[r.ledgerKey] ?? []), entry];
       recorded++;
@@ -182,7 +203,7 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
       // Re-check whether the brew is now fully recorded — if every
       // recipe ingredient has a matching ledger row (per ingNamesMatch +
       // brew-name-prefix match), set brew.fullyRecorded.
-      const fullyRecorded = isBrewFullyRecorded(brew, ings, libBySection, next);
+      const fullyRecorded = isBrewFullyRecorded(brew, ings, libBySection, next, brewTaxBatch);
       if (fullyRecorded && !brew.fullyRecorded) {
         setPlannerBrews(plannerBrews.map(b =>
           b.id === brew.id ? { ...b, fullyRecorded: true } : b));
@@ -323,6 +344,7 @@ function isBrewFullyRecorded(
   ings: { type: string; name: string; libId?: string }[],
   libBySection: Record<Section, LibEntry[]>,
   ledgerData: LedgerData,
+  taxBatch: string,
 ): boolean {
   const sectionMap: Record<string, Section> = { grain: 'malts', hop: 'hops', yeast: 'yeast', misc: 'misc' };
   const tag = brew.name.toLowerCase().split(' ').slice(0, 2).join(' ');
@@ -332,8 +354,14 @@ function isBrewFullyRecorded(
     const lib = libBySection[sec].find(le => ingNamesMatch(le.name, ing.name, ing.libId, le.id));
     if (!lib) return true; // un-matchable rows skipped (HTML 15776)
     const key = `${sec}_${lib.id}`;
-    return (ledgerData[key] ?? []).some(e =>
-      e.used != null && (e.beer ?? '').toLowerCase().includes(tag));
+    // Prefer taxBatch-exact match when both the recipe and the entry
+    // have one; fall back to brew-name substring for legacy entries
+    // that pre-date the taxBatch column.
+    return (ledgerData[key] ?? []).some(e => {
+      if (e.used == null) return false;
+      if (taxBatch && e.taxBatch && e.taxBatch === taxBatch) return true;
+      return (e.beer ?? '').toLowerCase().includes(tag);
+    });
   });
 }
 

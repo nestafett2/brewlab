@@ -25,6 +25,7 @@ import FermChart from './FermChart';
 import FermEntryModal from './FermEntryModal';
 import DryHopModal from './DryHopModal';
 import ChecklistStrip from './ChecklistStrip';
+import HarvestYeastModal from '../inventory/HarvestYeastModal';
 
 interface Props { recipeId: string }
 
@@ -46,6 +47,7 @@ export default function FermTab({ recipeId }: Props) {
   const [meta, setMetaLocal]       = useState<FermMeta>(() => getFermMeta(recipeId));
   const [entryModalOpen, setEntryModalOpen] = useState(false);
   const [dhModalSlot, setDhModalSlot]       = useState<1 | 2 | 3 | null>(null);
+  const [harvestModalOpen, setHarvestModalOpen] = useState(false);
   // Note: re-hydration on recipeId change is handled by the parent passing a
   // key={recipeId} so the component remounts and the lazy useState initialisers
   // re-run. Keeps this body free of setState-in-effect.
@@ -187,6 +189,27 @@ export default function FermTab({ recipeId }: Props) {
     acidPct:       dhAcidPct,
     dhTempC:       dhTempInput,
   }), [ingredients, meta, dhPredVolumeL, targetFinalPh, currentPhInput, dhAcidType, dhAcidPct, dhTempInput]);
+
+  // ── Yeast harvest pre-fill ────────────────────────────────────────────
+  // Parent generation for the new harvest:
+  //   • If the recipe was pitched on harvested yeast, the linked entry's
+  //     gen (stored as ad-hoc `yeastGen` on the ingredient by
+  //     AddIngredientModal — not in the typed schema, never written to
+  //     Supabase, so falls back to fresh on cross-device hydrates).
+  //   • Otherwise fresh = Gen 1.
+  // New harvest gen = parent + 1.
+  type YeastIng = (typeof ingredients)[number] & {
+    yeastSource?: string;
+    yeastGen?: string | number;
+  };
+  const yeastIng = ingredients.find(i => i.type === 'yeast') as YeastIng | undefined;
+  const parentGen = (() => {
+    if (yeastIng?.yeastSource === 'harvested') {
+      const g = parseInt(String(yeastIng.yeastGen ?? ''), 10);
+      if (isFinite(g) && g > 0) return g;
+    }
+    return 1;
+  })();
 
   if (!recipe) return null;
 
@@ -390,9 +413,12 @@ export default function FermTab({ recipeId }: Props) {
             <div style={{ marginTop: 6 }}>
               <button
                 className="btn sm"
-                disabled
-                title="Harvested-yeast UI not ported yet"
-                style={{ width: '100%', opacity: 0.5, cursor: 'not-allowed' }}
+                disabled={!yeastIng?.name}
+                title={yeastIng?.name
+                  ? `Log harvest of ${yeastIng.name} (Gen ${parentGen + 1}) to inventory`
+                  : 'Add a yeast ingredient first'}
+                style={{ width: '100%', ...(!yeastIng?.name ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+                onClick={() => setHarvestModalOpen(true)}
               >
                 🧫 Log Harvest to Inventory
               </button>
@@ -452,6 +478,17 @@ export default function FermTab({ recipeId }: Props) {
           onSave={handleDhSave}
           onDelete={() => handleDhDelete(dhModalSlot)}
           onClose={() => setDhModalSlot(null)}
+        />
+      )}
+      {harvestModalOpen && yeastIng?.name && (
+        <HarvestYeastModal
+          initialStrain={yeastIng.name}
+          initialAmount={meta['harvest-amt'] ?? ''}
+          initialContainer={meta['harvest-cont'] ?? ''}
+          initialFromBatch={recipe.taxBatch ?? ''}
+          initialBeerName={(recipe.beerName?.trim() || recipe.name?.trim()) ?? ''}
+          initialGeneration={parentGen + 1}
+          onClose={() => setHarvestModalOpen(false)}
         />
       )}
     </>

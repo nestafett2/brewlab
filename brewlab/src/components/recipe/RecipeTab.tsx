@@ -1,9 +1,15 @@
 import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useStore } from '../../store';
-import { calcOG, calcFG, calcABV, calcTotalIBU, calcEBC, calcGrainPct, calcClassification, sgToPlato } from '../../lib/calculations';
+import {
+  calcOG, calcFG, calcABV, calcTotalIBU, calcEBC, calcGrainPct,
+  calcClassification, sgToPlato, platoToSg,
+  calcBrewDayTargets, calcActualEfficiency, calcEffectiveTrubLossL,
+} from '../../lib/calculations';
+import { asNum } from '../../lib/utils';
 import type { Ingredient, IngredientType } from '../../types';
 import IngredientCard from './IngredientCard';
-import StatsSidebar from './StatsSidebar';
+import ActionStack from './ActionStack';
+import StyleSummaryPanel from './StyleSummaryPanel';
 import AddIngredientModal from './AddIngredientModal';
 import EditIngredientModal from './EditIngredientModal';
 import GrainPctModal from './GrainPctModal';
@@ -27,7 +33,13 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
   const miscLib = useStore(s => s.miscLib);
   const settings = useStore(s => s.settings);
   const hydrated = useStore(s => s.hydrated);
-  // Wiring for the sidebar's "Add to Planner" button — mirrors HTML
+  // Active equipment + mash profile feed calcBrewDayTargets so the
+  // Totals panel's "Est Pre-Boil Gravity" matches what BrewDayTab shows.
+  // Same selection chain BrewDayTab uses (recipeProfiles → first → null).
+  const equipProfiles  = useStore(s => s.equipProfiles);
+  const mashProfiles   = useStore(s => s.mashProfiles);
+  const recipeProfiles = useStore(s => s.recipeProfilesByRecipe[recipeId]);
+  // Wiring for the action stack's "Add to Planner" button — mirrors HTML
   // addCurrentRecipeToPlanner (brewlab-desktop.html:13522).
   const setActiveTab          = useStore(s => s.setActiveTab);
   const setTabVisibility      = useStore(s => s.setTabVisibility);
@@ -83,7 +95,7 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
       atten = parseFloat(yeastIng.extra || '0');
       if (!atten) {
         const libY = yeastLib.find(y => y.id === yeastIng.libId || y.name === yeastIng.name);
-        atten = libY?.atten ?? 75;
+        atten = asNum(libY?.atten, 75);
       }
     }
     if (!atten) atten = 75;
@@ -117,6 +129,73 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
     return { ogSg, ogPlato, fgSg, fgPlato, abv, ibu, ibuSg, ebc, grainPcts, perHop, totalGrainKg, totalHopG, totalCost };
   }, [recipe, ingredients, grains, hops, maltLib, hopLib, yeastLib, miscLib, settings]);
 
+  // Active equip + mash profile for the pre-boil gravity calc (Totals panel).
+  // Selection chain matches BrewDayTab: explicit per-recipe → first profile → null.
+  const activeEquip = useMemo(() => {
+    const equipId = recipeProfiles?.equip;
+    const byId = equipId ? equipProfiles.find(p => p.id === equipId) : null;
+    return byId ?? equipProfiles[0] ?? null;
+  }, [equipProfiles, recipeProfiles?.equip]);
+  const activeMash = useMemo(() => {
+    const mashId = recipeProfiles?.mash;
+    const byId = mashId ? mashProfiles.find(p => p.id === mashId) : null;
+    return byId ?? null;
+  }, [mashProfiles, recipeProfiles?.mash]);
+
+  // Effective trub loss = base trub (40 L default or active equipment-
+  // profile value) + hot-side hop absorption. Drives the "Batch into WP"
+  // and "Expected loss" pills in the strip below the cards. Single source
+  // of truth in lib/calculations → calcEffectiveTrubLossL; same selection
+  // chain BrewDayTab uses (recipeProfiles → first → null).
+  const effectiveTrubLossL = useMemo(
+    () => calcEffectiveTrubLossL(ingredients, hopLib, activeEquip),
+    [ingredients, hopLib, activeEquip],
+  );
+
+  // Est Pre-Boil Gravity for the Totals panel. Same call BrewDayTab makes —
+  // pure function, no side effects, recomputes on ingredient/profile change.
+  const estPreBoilP = useMemo(() => {
+    if (!recipe) return null;
+    const t = calcBrewDayTargets({
+      recipe, ingredients, maltLib, hopLib, yeastLib,
+      equip: activeEquip, mashProfile: activeMash,
+      grainAbsorbLkg: settings.grainAbsorb,
+      grainTempC: settings.defaultGrainTemp,
+      coolingShrinkagePct: settings.coolingShrinkage,
+    });
+    return t.preBoilGravityP;
+  }, [recipe, ingredients, maltLib, hopLib, yeastLib, activeEquip, activeMash,
+      settings.grainAbsorb, settings.defaultGrainTemp, settings.coolingShrinkage]);
+
+  // Brew-day blob — Measured panel inputs (measOg, postboilL). Read directly
+  // from localStorage (same pattern as FermTab.tsx and AnalysisTab.tsx).
+  // Re-reads when ingredients change so a Brew-Day save round-trip refreshes
+  // the values, without subscribing to a per-recipe blob slice that doesn't
+  // exist in the store.
+  const bdBlob = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(`bl_bd_${recipeId}`);
+      if (!raw) return null;
+      return JSON.parse(raw) as { measOg?: string; postboilL?: string };
+    } catch { return null; }
+  }, [recipeId, ingredients]);
+  const measOgPlato = useMemo(() => {
+    const v = parseFloat(String(bdBlob?.measOg ?? ''));
+    return isFinite(v) && v > 0 ? v : null;
+  }, [bdBlob]);
+  const postboilL = useMemo(() => {
+    const v = parseFloat(String(bdBlob?.postboilL ?? ''));
+    return isFinite(v) && v > 0 ? v : null;
+  }, [bdBlob]);
+  // Measured efficiency — same call AnalysisTab uses. Null when measured OG
+  // missing or batchL is zero; rendered as em-dash.
+  const measEffPct = useMemo(() => {
+    if (measOgPlato == null || !recipe || recipe.batchL <= 0) return null;
+    const sg = platoToSg(measOgPlato);
+    const eff = calcActualEfficiency(ingredients, sg, recipe.batchL);
+    return isFinite(eff) && eff > 0 ? eff : null;
+  }, [measOgPlato, ingredients, recipe]);
+
   // Write calculated stats back to recipe object so they reach Supabase
   // (matches HTML app's dirty-check at end of updateTotals)
   useEffect(() => {
@@ -141,7 +220,7 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
     }
   }, [ingredients, miscLib, recipe, recipeId, updateRecipe]);
 
-  // === Sidebar action handlers (match HTML app behavior exactly) ===
+  // === Action handlers (match prior sidebar behavior exactly) ===
 
   // Click row toggles selection (HTML: selectRow)
   const handleSelect = useCallback((id: string) => {
@@ -153,7 +232,7 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
     setEditIngId(id);
   }, []);
 
-  // Delete by id (HTML: deleteSelected). Used by sidebar Delete and the
+  // Delete by id (HTML: deleteSelected). Used by EDIT-group Delete and the
   // ingredient row right-click menu. Snapshots the full ingredients
   // array so undo restores the row at its original index without
   // disturbing siblings.
@@ -171,7 +250,7 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
   }, [recipeId, removeIngredient, setIngredients, pushToast, ingredientsByRecipe]);
 
   // Duplicate by id (HTML: duplicateSelected — copy, insert after, select copy).
-  // Used by sidebar Duplicate and the ingredient row right-click menu.
+  // Used by EDIT-group Duplicate and the ingredient row right-click menu.
   const duplicateById = useCallback((id: string) => {
     const orig = ingredients.find(i => i.id === id);
     if (!orig) return;
@@ -185,11 +264,13 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
   }, [ingredients, recipeId, setIngredients]);
 
   const handleDelete = useCallback(() => {
-    if (selectedId) deleteById(selectedId);
+    if (!selectedId) { alert('Select an ingredient first.'); return; }
+    deleteById(selectedId);
   }, [selectedId, deleteById]);
 
   const handleDuplicate = useCallback(() => {
-    if (selectedId) duplicateById(selectedId);
+    if (!selectedId) { alert('Select an ingredient first.'); return; }
+    duplicateById(selectedId);
   }, [selectedId, duplicateById]);
 
   // Right-click on an ingredient row — mirrors HTML showCtx (line 19199):
@@ -235,8 +316,7 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
     setSubstituteMode(false);
   }, [substituteMode, selectedId, ingredients, recipeId, setIngredients]);
 
-  // "Add to Planner" — used by both the sidebar Actions button and the
-  // bottom-bar button. Mirrors HTML addCurrentRecipeToPlanner
+  // "Add to Planner" — Tools group. Mirrors HTML addCurrentRecipeToPlanner
   // (brewlab-desktop.html:13522): make planner tab visible, switch to it,
   // then PlannerPage's effect picks up pendingPlannerAdd and opens
   // AddBrewModal pre-filled with this recipe + today's date.
@@ -261,7 +341,7 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
     addIngredient(recipeId, {
       id: `${recipeId}_${idx}`, type: 'misc', name: carr.name, amt, unit: 'g',
       use: carr.use || 'Boil', time: 15, extra: '', ibu: null, pct: null,
-      libId: carr.id, cost: 0, sortOrder: idx,
+      libId: String(carr.id), cost: 0, sortOrder: idx,
     });
     // Classification will auto-sync via the useEffect above
   }, [recipe, miscLib, ingredients, recipeId, addIngredient]);
@@ -269,41 +349,121 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
   if (!recipe || !stats) return null;
 
   return (
-    <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-      <StatsSidebar
-        stats={stats}
-        recipe={recipe}
+    <div style={pageStyle}>
+      {/* LEFT COLUMN — pill strip on top, ingredient cards in the middle,
+          bottom 3-panel grid below. All three share the column, aligned
+          to the recipe explorer on the far left. */}
+      <div style={leftColStyle}>
+        {/* EQUIPMENT-DERIVED PILL STRIP — top of the left column, just
+            below the sub-tab nav. Compact info strip for values derived
+            from the recipe + active Equipment profile; spans only the
+            left column's width (not under ActionStack). The Equipment
+            selector itself lives in ActionStack > Setup. */}
+        <div style={pillStripStyle}>
+          <div style={pillStripInnerStyle}>
+            <div className="meta-pill">
+              <div className="meta-pill-label">Batch into FV</div>
+              <div className="meta-pill-val">
+                <input className="meta-pill-input" type="text" value={recipe.batchL || ''} onChange={e => updateRecipe(recipeId, { batchL: parseFloat(e.target.value) || 0 })} style={{ width: 44 }} />
+                <span className="meta-pill-unit">L</span>
+              </div>
+            </div>
+            {/* Batch into WP = into-FV target + effective trub loss (base
+                trub + hot-side hop absorption). Read-only — recomputes
+                whenever ingredients or batchL change. */}
+            <div className="meta-pill" title="Total volume needed in the kettle for whirlpool. Equals Batch into FV + expected losses (base trub + whirlpool/boil hop absorption).">
+              <div className="meta-pill-label">Batch into WP</div>
+              <div className="meta-pill-val">
+                <span className="meta-pill-input" style={{ width: 44, display: 'inline-block', textAlign: 'left' }}>
+                  {recipe.batchL > 0 ? ((recipe.batchL || 0) + effectiveTrubLossL).toFixed(1) : '—'}
+                </span>
+                <span className="meta-pill-unit">L</span>
+              </div>
+            </div>
+            <div className="meta-pill" title="Effective trub loss = equipment-profile base trub loss + hot-side hop absorption (whirlpool at 6 L/kg, boil/flameout/first-wort at pellet 1.0 L/kg or whole 3.0 L/kg).">
+              <div className="meta-pill-label">Expected loss</div>
+              <div className="meta-pill-val">
+                <span className="meta-pill-input" style={{ width: 44, display: 'inline-block', textAlign: 'left' }}>
+                  {effectiveTrubLossL > 0 ? effectiveTrubLossL.toFixed(1) : '—'}
+                </span>
+                <span className="meta-pill-unit">L</span>
+              </div>
+            </div>
+            <div className="meta-pill">
+              <div className="meta-pill-label">Boil</div>
+              <div className="meta-pill-val">
+                <input className="meta-pill-input" type="text" value={recipe.boilTime ?? 45} onChange={e => updateRecipe(recipeId, { boilTime: parseFloat(e.target.value) || 0 })} style={{ width: 32 }} />
+                <span className="meta-pill-unit">min</span>
+              </div>
+            </div>
+            <div className="meta-pill">
+              <div className="meta-pill-label">BH Eff</div>
+              <div className="meta-pill-val">
+                <input className="meta-pill-input" type="text" value={recipe.bhEff ?? 67.60} onChange={e => updateRecipe(recipeId, { bhEff: parseFloat(e.target.value) || 0 })} style={{ width: 44 }} />
+                <span className="meta-pill-unit">%</span>
+              </div>
+            </div>
+            <div className="meta-pill">
+              <div className="meta-pill-label">WP Temp</div>
+              <div className="meta-pill-val">
+                <input className="meta-pill-input" type="text" value={recipe.whirlpoolTemp ?? 85} onChange={e => updateRecipe(recipeId, { whirlpoolTemp: parseFloat(e.target.value) || 0 })} style={{ width: 32 }} />
+                <span className="meta-pill-unit">°C</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="content" style={contentStyle}>
+          <div className="table-wrap" style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
+            <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 1000 }}>
+              <IngredientCard recipeId={recipeId} type="grain" label="GRAINS & FERMENTABLES" dotColor="#c8a060" items={grains} grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} />
+              <IngredientCard recipeId={recipeId} type="hop"   label="HOPS"                  dotColor="#5ab568" items={hops}   grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} onOpenSplit={id => setDhSplitIngId(id)} />
+              <IngredientCard recipeId={recipeId} type="yeast" label="YEAST"                 dotColor="#c060c0" items={yeast}  grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} />
+              <IngredientCard recipeId={recipeId} type="misc"  label="MISC"                  dotColor="#808080" items={misc}   grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} />
+            </div>
+          </div>
+        </div>
+
+        {/* BOTTOM 3-COLUMN PANEL ROW — sits inside the left column so it
+            spans only the cards' horizontal area (not the full window
+            width). ActionStack runs full-height to the right of both. */}
+        <div style={bottomRowStyle}>
+          <StyleSummaryPanel recipe={recipe} stats={stats} />
+          <TotalsPanel
+            totalGrainKg={stats.totalGrainKg}
+            totalHopG={stats.totalHopG}
+            ibuSg={stats.ibuSg}
+            preBoilGravityP={estPreBoilP}
+            fgPlato={stats.fgPlato}
+          />
+          <MeasuredPanel
+            measOgPlato={measOgPlato}
+            postboilL={postboilL}
+            measEffPct={measEffPct}
+            totalCost={stats.totalCost}
+          />
+        </div>
+      </div>
+
+      {/* RIGHT COLUMN — ActionStack runs full RecipeTab height. */}
+      <ActionStack
+        recipeId={recipeId}
         selectedId={selectedId}
         onAddIngredient={t => { setSubstituteMode(false); setAddType(t); }}
         onQuickAddCarrageenan={quickAddCarrageenan}
         onSubstitute={handleSubstitute}
+        onDuplicate={handleDuplicate}
+        onDelete={handleDelete}
+        onMashProfile={() => setMashProfileModal(true)}
+        // Scale placeholder — File menu's "Scale Recipe..." entry was
+        // unwired (closeMenus only). Relocated here under TOOLS; modal
+        // not yet ported. Stub alert so the click is acknowledged
+        // rather than silently dead.
+        onScale={() => alert('Scale Recipe not yet ported.')}
         onGrainPct={() => { if (grains.length === 0) { alert('No grains in recipe.'); return; } setGrainPctModal(true); }}
         onHopIbu={() => { const bh = hops.filter(h => (h.use || '').toLowerCase() !== 'dry hop'); if (bh.length === 0) { alert('No bittering hops in recipe.'); return; } setHopIbuModal(true); }}
-        onMashProfile={() => setMashProfileModal(true)}
         onAddToPlanner={handleAddToPlanner}
       />
-
-      <div className="content">
-        <div className="table-wrap" style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
-          <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 1000 }}>
-            <IngredientCard recipeId={recipeId} type="grain" label="GRAINS & FERMENTABLES" dotColor="#c8a060" items={grains} grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} />
-            <IngredientCard recipeId={recipeId} type="hop" label="HOPS" dotColor="#5ab568" items={hops} grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} onOpenSplit={id => setDhSplitIngId(id)} />
-            <IngredientCard recipeId={recipeId} type="yeast" label="YEAST" dotColor="#c060c0" items={yeast} grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} />
-            <IngredientCard recipeId={recipeId} type="misc" label="MISC" dotColor="#808080" items={misc} grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} />
-          </div>
-        </div>
-
-        <div className="bottom-bar">
-          <div className="totals-row">
-            <div className="total-item"><label>Grains</label><span className="tv amber">{stats.totalGrainKg.toFixed(2)} kg</span></div>
-            <div className="total-item"><label>Hops</label><span className="tv">{stats.totalHopG.toFixed(0)} g</span></div>
-            <div className="total-item"><label>Total Cost</label><span className="tv amber">&yen;{Math.round(stats.totalCost).toLocaleString()}</span></div>
-          </div>
-          <button className="btn sm" onClick={handleAddToPlanner} title="Schedule this recipe in the planner">📅 Add to Planner</button>
-          <button className="btn sm danger" onClick={handleDelete}>✕ Delete</button>
-          <button className="btn sm" onClick={handleDuplicate}>⧉ Dup</button>
-        </div>
-      </div>
 
       {addType && (
         <AddIngredientModal
@@ -366,8 +526,7 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
         </div>
       )}
 
-      {/* Dry-hop split modal — recipe-time per-slot grams design.
-          Reactively reads ing.dhSplit; updates persist via updateIngredient. */}
+      {/* Dry-hop split modal */}
       {dhSplitIngId && (() => {
         const splitIng = ingredients.find(i => i.id === dhSplitIngId);
         if (!splitIng) return null;
@@ -401,10 +560,7 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
         />
       )}
 
-      {/* Mash Profile modal — opened from sidebar 🌡 button. Per-recipe
-          blob persisted to bl_mash_<recipeId>; live calc reuses
-          calcBrewDayTargets so mash/sparge/strike track the recipe's
-          ingredients + active equipment profile in lockstep. */}
+      {/* Mash Profile modal */}
       {mashProfileModal && (
         <MashProfileModal
           recipeId={recipeId}
@@ -416,3 +572,174 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
     </div>
   );
 }
+
+// ── Bottom-row panels ──────────────────────────────────────────────────
+//
+// Inline because both are small + tightly coupled to the calc shape.
+// StyleSummaryPanel is its own file because it carries internal state
+// (dropdown open, modal open) and reaches into the store.
+
+function TotalsPanel({
+  totalGrainKg, totalHopG, ibuSg, preBoilGravityP, fgPlato,
+}: {
+  totalGrainKg: number;
+  totalHopG: number;
+  ibuSg: number;
+  preBoilGravityP: number | null;
+  fgPlato: number;
+}) {
+  const grainStr   = totalGrainKg > 0 ? `${totalGrainKg.toFixed(2)} kg` : '—';
+  const hopStr     = totalHopG    > 0 ? `${totalHopG.toFixed(0)} g`    : '—';
+  const ibuSgStr   = ibuSg > 0 ? ibuSg.toFixed(2) : '—';
+  const preBoilStr = preBoilGravityP != null && preBoilGravityP > 0
+    ? `${preBoilGravityP.toFixed(1)}°P` : '—';
+  const fgStr      = fgPlato > 0 ? `${fgPlato.toFixed(1)}°P` : '—';
+  return (
+    <div style={panelStyle}>
+      <div style={panelHeaderStyle}>Totals</div>
+      <div style={panelBodyStyle}>
+        <PanelRow label="Total Grains"           value={grainStr} />
+        <PanelRow label="Total Hops"             value={hopStr} />
+        <PanelRow label="IBU/SG ratio"           value={ibuSgStr} />
+        <PanelRow label="Est Pre-Boil Gravity"   value={preBoilStr} />
+        <PanelRow label="Est Final Gravity"      value={fgStr} />
+      </div>
+    </div>
+  );
+}
+
+function MeasuredPanel({
+  measOgPlato, postboilL, measEffPct, totalCost,
+}: {
+  measOgPlato: number | null;
+  postboilL: number | null;
+  measEffPct: number | null;
+  totalCost: number;
+}) {
+  const ogStr   = measOgPlato != null ? `${measOgPlato.toFixed(1)}°P`   : '—';
+  const volStr  = postboilL   != null ? `${postboilL.toFixed(1)} L`     : '—';
+  const effStr  = measEffPct  != null ? `${measEffPct.toFixed(1)}%`     : '—';
+  const costStr = totalCost   >  0    ? `¥${Math.round(totalCost).toLocaleString()}` : '¥0';
+  return (
+    <div style={panelStyle}>
+      <div style={panelHeaderStyle}>Measured</div>
+      <div style={panelBodyStyle}>
+        <PanelRow label="Measured OG"          value={ogStr} />
+        <PanelRow label="Postboil Vol"         value={volStr} />
+        <PanelRow label="Measured Efficiency"  value={effStr} />
+        <PanelRow label="Total Cost"           value={costStr} amber />
+      </div>
+    </div>
+  );
+}
+
+function PanelRow({ label, value, amber }: { label: string; value: string; amber?: boolean }) {
+  return (
+    <div style={rowStyle}>
+      <span style={rowLabelStyle}>{label}</span>
+      <span style={{ ...rowValueStyle, ...(amber ? { color: 'var(--amber)' } : {}) }}>{value}</span>
+    </div>
+  );
+}
+
+// ── Layout styles ──────────────────────────────────────────────────────
+
+// Outer is a flex ROW so ActionStack can run full-height to the right
+// of the entire left column (cards + bottom panels stacked).
+const pageStyle: React.CSSProperties = {
+  flex: 1, display: 'flex', overflow: 'hidden',
+};
+
+// Left column owns the cards-area + bottom-panel grid stacked vertically.
+// minWidth: 0 lets it shrink past the cards-container's natural width
+// when the window is narrow (otherwise the flex child refuses to shrink
+// and the right ActionStack column gets pushed off-screen).
+const leftColStyle: React.CSSProperties = {
+  flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+};
+
+// Cards area scrolls; bottom panels (siblings inside leftColStyle) stay
+// pinned at the bottom because they have flexShrink: 0 via bottomRowStyle.
+const contentStyle: React.CSSProperties = {
+  flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto',
+};
+
+// Compact pill strip between the cards (above) and bottom panels (below).
+// Tighter vertical padding than the legacy meta-bar Row 2 — reads as an
+// info strip, not chrome. Background blends with the panel-2 surface
+// used elsewhere in the app for derivative-value strips.
+const pillStripStyle: React.CSSProperties = {
+  background: 'var(--panel2)',
+  borderTop: '1px solid var(--border)',
+  borderBottom: '1px solid var(--border)',
+  flexShrink: 0,
+};
+
+const pillStripInnerStyle: React.CSSProperties = {
+  maxWidth: 1000,
+  margin: '0 auto',
+  padding: '4px 16px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 14,
+};
+
+const bottomRowStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: 10,
+  padding: '10px 12px 12px',
+  borderTop: '1px solid var(--border)',
+  background: 'var(--bg)',
+  flexShrink: 0,
+};
+
+// ── Panel styles ───────────────────────────────────────────────────────
+
+const panelStyle: React.CSSProperties = {
+  background: 'var(--panel)',
+  border: '1px solid var(--border)',
+  borderRadius: 8,
+  display: 'flex',
+  flexDirection: 'column',
+  minWidth: 0,
+};
+
+const panelHeaderStyle: React.CSSProperties = {
+  padding: '8px 12px',
+  borderBottom: '1px solid var(--border)',
+  fontFamily: 'var(--display)',
+  fontSize: 11,
+  letterSpacing: 2,
+  color: 'var(--amber)',
+  textTransform: 'uppercase' as const,
+};
+
+const panelBodyStyle: React.CSSProperties = {
+  padding: '8px 12px',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+};
+
+const rowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'baseline',
+  justifyContent: 'space-between',
+  gap: 10,
+};
+
+const rowLabelStyle: React.CSSProperties = {
+  fontFamily: 'var(--mono)',
+  fontSize: 10,
+  color: 'var(--text-muted)',
+  letterSpacing: 0.5,
+};
+
+const rowValueStyle: React.CSSProperties = {
+  fontFamily: 'var(--mono)',
+  fontSize: 12,
+  color: 'var(--text)',
+  fontVariantNumeric: 'tabular-nums',
+};

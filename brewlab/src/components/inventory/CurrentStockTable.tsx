@@ -95,11 +95,11 @@ export default function CurrentStockTable({ section, inStockOnly, onEditEntry, o
         av = getLedgerBalance(inventoryStock, ledgerData, `${section}_${a.id}`);
         bv = getLedgerBalance(inventoryStock, ledgerData, `${section}_${b.id}`);
       } else if (NUMERIC_COLS.has(k)) {
-        av = parseFloat(String((a as Record<string, unknown>)[k] ?? '')) || 0;
-        bv = parseFloat(String((b as Record<string, unknown>)[k] ?? '')) || 0;
+        av = parseFloat(String((a as unknown as Record<string, unknown>)[k] ?? '')) || 0;
+        bv = parseFloat(String((b as unknown as Record<string, unknown>)[k] ?? '')) || 0;
       } else {
-        av = String((a as Record<string, unknown>)[k] ?? '').toLowerCase();
-        bv = String((b as Record<string, unknown>)[k] ?? '').toLowerCase();
+        av = String((a as unknown as Record<string, unknown>)[k] ?? '').toLowerCase();
+        bv = String((b as unknown as Record<string, unknown>)[k] ?? '').toLowerCase();
       }
       if (av < bv) return -sort.dir;
       if (av > bv) return sort.dir;
@@ -270,7 +270,7 @@ export default function CurrentStockTable({ section, inStockOnly, onEditEntry, o
                       </td>
                     );
                   }
-                  let v = (entry as Record<string, unknown>)[key];
+                  let v = (entry as unknown as Record<string, unknown>)[key];
                   let display = v == null || v === '' ? '—' : String(v);
                   if ((key === 'aa' || key === 'beta') && display !== '—') {
                     const n = parseFloat(display);

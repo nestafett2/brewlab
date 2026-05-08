@@ -1,3 +1,152 @@
+# SESSION_LOG entry — 2026-05-07 (afternoon)
+
+Recipe page layout redesign + 13-error TS cleanup that turned out to be 40 once cache-visibility was resolved. Many CC rounds, all desktop React; Tablet and Mobile pages untouched.
+
+---
+
+## Recipe page layout redesign
+
+Two-column RecipeTab: left = ingredient cards + bottom 3-panel grid (Style / Totals / Measured); right = full-height ActionStack at 188 px. Meta bar collapsed to a single row — name + Tax Batch # + Brew Date + Version + Brew # + beer glass icon (size 50, EBC-derived flat fill via new `lib/ebcColor.ts`). Sub-tab nav now sits below the meta bar. Equipment-derived values pill row (Batch into FV/WP, Expected Loss, Boil, BH Eff, WP Temp) lives at the top of the left column, gated to `recipeSubTab === 'ingredients'`, constrained to left-column width.
+
+ActionStack groups, top to bottom:
+- **SETUP** — Classification dropdown, Equipment dropdown (truncates with ellipsis at 188 px), Mash Profile button.
+- **ADD** — Fermentable / Hops / Misc / Yeast / Water Adj / + Carrageenan.
+- **EDIT** — Substitute / Duplicate / Delete (selection-gated, dimmed when no row selected).
+- **TOOLS** — Scale / Grain % / Hop IBUs / Add to Planner. Scale relocated from the File menu (was a no-op `closeMenus` placeholder; now stub-alerted until a Scale modal is built).
+
+Bottom 3-panel grid:
+- **Style** — picker + 5-zone red/yellow/green/yellow/red range bars (hard-stop CSS gradient, no anti-aliased transitions). Marker is a black SVG triangle. Layout per row: value (left) / bar (middle) / range text (right). Green block = `[min, max]`, yellow = ±37.5 % buffer, red beyond.
+- **Totals** — Total Grains / Total Hops / IBU/SG ratio / Est Pre-Boil Gravity / Est Final Gravity.
+- **Measured** — Measured OG / Postboil Vol (renamed from "Measured Batch Size" — sources `bd.postboilL`) / Measured Efficiency / Total Cost. Reads `bl_bd_<recipeId>` from localStorage same way AnalysisTab and FermTab do.
+
+New files: `ActionStack.tsx`, `StyleSummaryPanel.tsx`, `BeerGlassIcon.tsx`, `lib/ebcColor.ts`. `StatsSidebar.tsx` deleted. Iterative session — many CC rounds tightening based on visual feedback (column reorder, pill-row position, Tax Batch # placement, divider cleanup, etc.).
+
+---
+
+## 13 TS errors cleanup
+
+Real count was **40** once cache-visibility was resolved. The "cache hides errors" theory in standing notes was wrong — actual cause was bypassing `tsc -b` by running `npx vite build` directly. The references-root `tsconfig.json` (`files: []`, `references` only) means plain `tsc --noEmit` checks zero files. `npm run build` was always doing the right thing (`tsc -b && vite build`); session-long verification just used the wrong invocation.
+
+**Going forward**: use `tsc -b` or `npm run build` for typecheck verification. Plain `tsc --noEmit` is vacuous against this project's tsconfig.
+
+Fixes, grouped by root cause:
+- **27 errors** from `LibNum` (`number | string | undefined`) loose-union arithmetic at library-field read sites — `lib/calculations.ts:calcOG/calcEBC/grainDiPh`, `RecipeTab.tsx`, `EditIngredientModal.tsx`, `AddIngredientModal.tsx`. Resolution: new `asNum(x: LibNum, fallback = 0): number` helper in `lib/utils.ts`. Funnels reads through one parser. Real semantic improvement.
+- **9 errors** from `LibEntry → Record<string, unknown>` casts in the inventory column system. Mechanical: `as Record` → `as unknown as Record` per TS's own suggestion. Runtime semantics identical.
+- **TankCalibration optionality** (3 errors in `fvVolume`) — fields are user-config and may be empty. Guarded via `asNum` so missing fields → 0 (treated as "no calibration" per existing call-site convention).
+- 1 regression I introduced earlier (`StylePickerDropdown.placeholderStyle()` missing `carb: null`).
+- 2 unused vars (`sectionToIngType`, `useState`).
+- 1 dead branch (`'water'` comparison after upstream type narrowing).
+
+Two non-trivial behavior changes worth flagging:
+- `fvVolume` now returns 0 for uncalibrated tanks instead of `NaN`-propagating. Silent — callers already guard on `> 0`.
+- Library numeric reads in `calcOG` / `calcEBC` / `grainDiPh` now correctly parse string-typed legacy data. **OG / EBC / pH calcs become more accurate on any recipe imported via BeerXML or BSMX before today.** No risk for Nomodachi (no real brewery data yet); flag as a "first deploy" event when BrewLab is shared with a brewery that has legacy library imports.
+
+Verified clean: cold-cache `npx tsc -b` → exit 0, 0 errors. Cold-cache `npm run build` → tsc + vite both pass.
+
+---
+
+# SESSION_LOG entry — 2026-05-07
+
+> Append to the top of `SESSION_LOG.md`.
+
+Long session focused on yeast tracking polish, inventory display consistency, sidebar/recipe-browsing rework, and extending the Style data model. Five distinct CC passes shipped, two Supabase migrations applied.
+
+---
+
+## Yeast tracking — tax batch semantics + generation rule
+
+The HTML's "From Brew #" field on harvested yeast was free-text and ambiguous — could be a tax batch, recipe name, or brew counter. Last session's `brewNum` → `taxBatch` rename gave us a real tax batch field; this session brought the harvested yeast UI in line.
+
+**Decision:** the yeast inventory needs to show **the tax batch number** (not beer name or per-lineage counter) because the tax office cares about traceability when auditing yeast lineage.
+
+Changes shipped:
+- "From Brew #" field relabeled "From Tax Batch #" on the harvest modal; pre-fills from `r.taxBatch`
+- Use-log modal: dropped the redundant Beer field, renamed Brew # → Used In Tax Batch # with auto-fill from the loaded recipe, kept the Date field (the React port had added this as a useful improvement over the HTML's two-prompt flow; preserving it allowed retroactive logging)
+- Inventory column relabels accordingly
+- Generation rule was inconsistent — Ferm-tab harvest kept the strain's last gen unchanged, Inventory-page "+ Log Harvest" auto-bumped +1. Unified rule: **harvest gen = parent brew's yeast gen + 1**, fresh yeast = Gen 1. Both entry points now apply this rule.
+- Wired the previously-disabled Ferm tab "🧫 Log Harvest" button (handoff docs claimed it was working but it was disabled in code)
+
+Caveat surfaced and fixed: `yeastSource` and `yeastGen` lived only in local state — not in `ingToRow`. After a fresh hydrate from another device, the Ferm-tab harvest pre-fill defaulted to fresh / Gen 2 even when the brew was actually pitched on harvested Gen 3. Fix: migration adding `yeast_source text` + `yeast_gen integer` to `recipe_ingredients`; round-trip code updated.
+
+---
+
+## Inventory display — tax batch + beer name everywhere a brew is referenced
+
+The harvested yeast change initially repurposed `entry.beer` to store the tax batch number, which broke consistency with the rest of the inventory: the regular ingredient ledger (grain, hops, misc) tracks "which brew used this" by **brew name**, not tax batch.
+
+Asked Ben to choose between: revert harvested yeast to beer name (consistency), or upgrade everything to show both tax batch + beer name. He picked **show both, everywhere a brew is referenced**.
+
+Implementation:
+- `entry.taxBatch` added as a new field; `entry.beer` restored to storing beer name
+- New paired field on harvest rows for the source's tax batch
+- HarvestedYeastView columns render inline as "ABC-23 — Hazy IPA" via a `formatPair` helper; legacy entries with only one field render gracefully
+- Regular ingredient ledger: `confirmRecordUsage` now also stores `taxBatch` derived from `brew.recipeId → recipe.taxBatch`
+- Order planner brew column headers updated to the same composite format; XLSX export same
+- `checkBrewFullyRecorded` matching switched to taxBatch-exact (more reliable than the brew-name substring match it was using); falls back to legacy substring match for entries without a tax batch
+
+**Key debt incurred and then paid off in the same session:** the harvested_yeast Supabase table is not a JSON blob (the prompt assumed it was). CC worked around the schema by overloading the unused `brew_num` column to carry tax-batch info per row type. This worked but was ugly — especially given BrewLab is meant to be shareable, every fresh brewery installation would inherit the oddity. Followed up immediately with a small migration adding a dedicated `tax_batch text NULL` column; the React code now writes there and `brew_num` is left in place but unused (deprecated).
+
+---
+
+## Recipe Explorer — sidebar tab rework + new right-side view
+
+Ben wanted a richer way to navigate his recipes than just the folder tree. Designed a new "Recipe Explorer" tab alongside Overview.
+
+**Tab row change:** `[Overview | Folders | By Style]` → `[Overview | Recipe Explorer]`. The "By Style" tab was dead anyway, and "Folders" was redundant with the always-visible recipe tree. Top buttons (`[+ New] [📁 Folder]`) unchanged. Added right-click on blank tree space → "+ New Folder" context menu.
+
+**Recipe Explorer right-pane**: 5 modes — By Date / By Folder / By Style / By Name / By Tax #. Each mode sorts/groups the recipes differently. Empty values for the sort field go under muted "No brew date" / "No tax batch" subheaders. Recipe rows match the sidebar's existing 3-line format.
+
+**Click behaviour decided mid-session:** initial port had explorer single-click open the recipe directly. Ben wanted a preview-first interaction: single-click → preview pane (split-pane within the explorer's right pane), double-click → open in main editor. Sidebar single-click while in Explorer mode auto-switches to Overview and shows the preview there (the alternative — silently updating preview state with no visible feedback — was confusing per CC's caveat).
+
+Caveat: browser fires `click` before `dblclick` (~250-500ms gap), so a double-click intended to open a recipe currently flashes the preview before the editor takes over. Fix is a 250ms debounce on click — sent to CC at session end, hadn't reported back when Ben wrapped up.
+
+---
+
+## Style data model extension
+
+BeerSmith's BJCP guide entries include rich descriptive content (Description, Profile, Ingredients, Examples, Web Link). BrewLab only had numeric ranges and a name. Ben wanted parity — every style should support these fields, BJCP and custom alike.
+
+**Sourcing decision:** on the question of pre-populating BJCP 2021 with descriptive content, my first take was "copyright concern" — Ben pushed back rightly that BJCP guidelines are publicly available and other apps include them. Real concern: sourcing reliably. Asking CC to type out 100+ multi-paragraph style descriptions risks hallucination. Decided to ship the schema with empty BJCP descriptive fields and let the future BeerSmith bulk-import flow populate them when it lands (BeerSmith's data has been vetted by their team).
+
+Implementation:
+- New optional fields on every style: `notes`, `carbonationMin/Max`, `description`, `profile`, `ingredients`, `examples`, `webLink`
+- BJCP styles get a writable overlay layer (`bl_style_overlays` settings dict keyed by `styleKey`) — numeric ranges still come read-only from `BJCP_2021`, but descriptive content can be edited and persisted
+- Custom styles persist descriptive fields directly on the record
+- Add Custom Style modal extended with all new inputs
+- Style Guide modal renders any non-empty descriptive fields below the existing range bars; Edit / Done toggle for in-place editing of any field on any style
+
+Caveat dropped: carbonation isn't rendered as a 5th visual range bar (would need plumbing the recipe's actual carbonation through to the Style Guide modal). Ben confirmed he just wants the carbonation number for reference, not visual matching — text in the descriptive section is fine.
+
+---
+
+## Cleanup items knocked out
+
+- **Style Guide dropdown removed.** It let users pick BJCP 2008 / 2015 / 2021 but only 2021 data was loaded — picking the others did nothing. Removed dropdown, hardcoded `bjcp2021`. The `StyleGuide` type in `types/index.ts` stays for forward-compat — when BJCP 2025 import lands, the multi-guide selector returns.
+- **Dead Save button on meta-bar removed.** Auto-save was already wired everywhere; the button never had an `onClick`. Adjacent meta-pills retain their spacing.
+
+---
+
+## Items dropped from the queue
+
+- **15.8L volume offset** — handoff docs framed it as "investigate before brewing real batches," not a confirmed bug. Ben's read: probably equipment settings, not code. Demoted to "verify when actually brewing."
+- **Mash thickness override placement** — current Mash Profile modal puts the L/kg field at the top, one click away. Good enough.
+- **Carbonation 5th range bar in Style Guide modal** — Ben wants the carb numbers as a text reference only, no visual matching needed.
+
+---
+
+## Items added to the queue
+
+- **Drop deprecated `brew_num` column from harvested_yeast** — once confirmed no other deployments depend on it
+- **BJCP 2021 descriptive data import** — bundled as a follow-up under BeerSmith bulk imports; populates the new descriptive fields when a BeerSmith XML is imported
+
+---
+
+## End state
+
+Both migrations applied today. All build work shipped or in flight (debounce was the last CC pass, sent right before wrapping). No data migration needed for any of today's changes — Ben has no real brewery data yet, and old entries hydrate gracefully through the new code paths.
+
+Next session is verification: smoke-test everything before declaring done.
+
 # BrewLab — Session Log
 
 Detailed per-session history. Day-to-day status lives in **START_HERE.md**; architectural context in **CLAUDE.md**. This file is for "what got built when, and why" — useful when you need to remember the reasoning behind a past decision.

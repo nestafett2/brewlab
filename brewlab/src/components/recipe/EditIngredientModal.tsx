@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useStore } from '../../store';
-import { fmtAmt } from '../../lib/utils';
+import { fmtAmt, asNum } from '../../lib/utils';
 import type { Ingredient, HopUse } from '../../types';
 import {
   calcOG, calcFG, calcABV, calcTotalIBU, calcEBC, sgToPlato,
@@ -113,7 +113,7 @@ export default function EditIngredientModal({ recipeId, ingredient, allIngredien
       atten = parseFloat(yeastIng.extra || '0');
       if (!atten) {
         const libY = yeastLib.find(y => y.id === yeastIng.libId || y.name === yeastIng.name);
-        atten = libY?.atten ?? 75;
+        atten = asNum(libY?.atten, 75);
       }
     }
     if (!atten) atten = 75;

@@ -29,7 +29,7 @@ import {
 import type {
   PlannerBrew, LedgerData, Ingredient,
 } from '../../types';
-import type { LibBySection, LibSection } from './orderForecast';
+import { ledgerHasBrew, type LibBySection, type LibSection } from './orderForecast';
 
 function brand(breweryName: string | undefined | null): string {
   return (breweryName?.trim() || 'BrewLab').replace(/[\s/\\?*[\]:]/g, '_');
@@ -44,6 +44,11 @@ export function exportOrderPlannerXlsx(args: {
   inventoryStock: Record<string, number>;
   ledgerData: LedgerData;
   getIngredients: (recipeId: string) => Ingredient[];
+  /** Resolve recipe id → composite "TAX — Beer" / single fallback for
+   *  the brew column header, and → taxBatch for already-recorded match.
+   *  Defaults to identity-on-name when not supplied (legacy callers). */
+  resolveBrewLabel?: (brew: PlannerBrew) => string;
+  getTaxBatch?: (recipeId: string) => string;
   breweryName: string | undefined | null;
 }): void {
   const sections: LibSection[] = args.section === 'all'
@@ -56,6 +61,8 @@ export function exportOrderPlannerXlsx(args: {
     .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
 
   const sheets: SheetSpec[] = [];
+  const labelOf = args.resolveBrewLabel ?? (b => b.name);
+  const taxOf   = args.getTaxBatch ?? (() => '');
 
   for (const sec of sections) {
     const ingType = sectionToIngType(sec);
@@ -63,7 +70,7 @@ export function exportOrderPlannerXlsx(args: {
     const entries = args.libBySection[sec];
 
     const brewHeaders = brews.flatMap(b => [
-      `${b.name} ${b.start.slice(5)}`, 'Balance',
+      `${labelOf(b)} ${b.start.slice(5)}`, 'Balance',
     ]);
     const headers = ['Ingredient', `On Hand (${unit})`, ...brewHeaders, 'Total Needed', 'Status'];
     const rows: CellValue[][] = [];
@@ -79,9 +86,11 @@ export function exportOrderPlannerXlsx(args: {
         const amt = Math.round(
           matched.reduce((s, i) => s + (parseFloat(String(i.amt ?? 0)) || 0), 0) * 1000,
         ) / 1000;
-        const brewTag = brew.name.toLowerCase().split(' ').slice(0, 3).join(' ');
-        const recorded = (args.ledgerData[ledgerKey] ?? []).some(e =>
-          e.used != null && (e.beer ?? '').toLowerCase().includes(brewTag));
+        const recorded = ledgerHasBrew(
+          args.ledgerData[ledgerKey] ?? [],
+          brew.name,
+          taxOf(brew.recipeId),
+        );
         return { amt, recorded };
       });
       const totalRecipe = brewUsage.reduce((s, u) => s + u.amt, 0);
@@ -178,7 +187,7 @@ export function exportInventoryCurrentXlsx(args: {
       if (k === '_stock')   row.push(stock);
       else if (k === '_opening') row.push(opening || '');
       else {
-        const v = (e as Record<string, unknown>)[k];
+        const v = (e as unknown as Record<string, unknown>)[k];
         if (typeof v === 'boolean') row.push(v ? 'Yes' : '');
         else row.push((v as CellValue) ?? '');
       }

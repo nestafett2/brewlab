@@ -12,18 +12,10 @@
  *      inside the modal so the user can keep adding without reopening.
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useStore } from '../../store';
-import type { CustomStyle, StyleGuide } from '../../types';
+import type { CustomStyle } from '../../types';
 import { profileSharedStyles as ss } from './EquipmentProfilesPanel';
-
-const STYLE_GUIDES: { value: StyleGuide; label: string }[] = [
-  { value: 'bjcp2021',     label: 'BJCP 2021' },
-  { value: 'bjcp2015',     label: 'BJCP 2015' },
-  { value: 'bjcp2008',     label: 'BJCP 2008' },
-  { value: 'brewersassoc', label: "Brewer's Association 2023" },
-  { value: 'none',         label: 'None' },
-];
 
 export default function StylesPanel() {
   const settings        = useStore(s => s.settings);
@@ -32,6 +24,18 @@ export default function StylesPanel() {
   const setCustomStyles = useStore(s => s.setCustomStyles);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [modalOpen,  setModalOpen]  = useState(false);
+
+  // Style Guide selector was removed (BJCP 2021 is the only supported
+  // guide today; multi-guide selection will return when the BJCP 2025
+  // import flow lands). Pin the persisted setting to 'bjcp2021' the
+  // first time the panel renders if it was something else, so any
+  // consumer reading `s.styleGuide` gets a valid string from the store
+  // rather than relying on each reader's `?? 'bjcp2021'` fallback.
+  useEffect(() => {
+    if (settings.styleGuide !== 'bjcp2021') {
+      setSettings({ styleGuide: 'bjcp2021' });
+    }
+  }, [settings.styleGuide, setSettings]);
 
   const open = (key: string | null) => {
     setEditingKey(key);
@@ -46,18 +50,7 @@ export default function StylesPanel() {
     <>
       <div className="settings-section">
         <div className="settings-title">Style Guidelines</div>
-        <div className="settings-grid">
-          <div className="settings-field">
-            <label>Style Guide</label>
-            <select
-              value={settings.styleGuide ?? 'bjcp2021'}
-              onChange={e => setSettings({ styleGuide: e.target.value as StyleGuide })}
-            >
-              {STYLE_GUIDES.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
-            </select>
-          </div>
-        </div>
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 4 }}>
           <button className="btn sm" onClick={() => open(null)}>＋ Add / Edit Custom Styles</button>
           <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)', marginTop: 6 }}>
             Add house styles, Japanese craft categories, or anything not in the standard guides.
@@ -105,6 +98,9 @@ const EMPTY_STYLE = (): EditableStyle => ({
   og_min: '', og_max: '', fg_min: '', fg_max: '',
   abv_min: '', abv_max: '', ibu_min: '', ibu_max: '',
   ebc_min: '', ebc_max: '',
+  carb_min: '', carb_max: '',
+  notes: '', description: '', profile: '',
+  ingredients: '', examples: '', webLink: '',
 });
 
 // Form state holds raw strings so blank inputs round-trip cleanly.
@@ -119,10 +115,17 @@ interface EditableStyle {
   abv_min: string; abv_max: string;
   ibu_min: string; ibu_max: string;
   ebc_min: string; ebc_max: string;
+  carb_min: string; carb_max: string;
+  notes: string;
+  description: string;
+  profile: string;
+  ingredients: string;
+  examples: string;
+  webLink: string;
 }
 
 function styleToForm(s: CustomStyle): EditableStyle {
-  const n2s = (n: number | null) => n == null ? '' : String(n);
+  const n2s = (n: number | null | undefined) => n == null ? '' : String(n);
   return {
     name: s.name ?? '',
     cat:  s.cat ?? '',
@@ -132,11 +135,21 @@ function styleToForm(s: CustomStyle): EditableStyle {
     abv_min: n2s(s.abv_min), abv_max: n2s(s.abv_max),
     ibu_min: n2s(s.ibu_min), ibu_max: n2s(s.ibu_max),
     ebc_min: n2s(s.ebc_min), ebc_max: n2s(s.ebc_max),
+    carb_min: n2s(s.carbonationMin), carb_max: n2s(s.carbonationMax),
+    notes:       s.notes ?? '',
+    description: s.description ?? '',
+    profile:     s.profile ?? '',
+    ingredients: s.ingredients ?? '',
+    examples:    s.examples ?? '',
+    webLink:     s.webLink ?? '',
   };
 }
 
 function formToStyle(f: EditableStyle): CustomStyle {
   const num = (v: string): number | null => v.trim() === '' ? null : parseFloat(v);
+  // Drop empty descriptive strings rather than persisting "" — keeps
+  // the saved record clean and lets `if (s.notes)` checks short-circuit.
+  const optStr = (v: string): string | undefined => v.trim() === '' ? undefined : v;
   return {
     name: f.name.trim(),
     cat:  f.cat.trim() || 'Custom Styles',
@@ -146,6 +159,14 @@ function formToStyle(f: EditableStyle): CustomStyle {
     abv_min: num(f.abv_min), abv_max: num(f.abv_max),
     ibu_min: num(f.ibu_min), ibu_max: num(f.ibu_max),
     ebc_min: num(f.ebc_min), ebc_max: num(f.ebc_max),
+    carbonationMin: num(f.carb_min),
+    carbonationMax: num(f.carb_max),
+    notes:       optStr(f.notes),
+    description: optStr(f.description),
+    profile:     optStr(f.profile),
+    ingredients: optStr(f.ingredients),
+    examples:    optStr(f.examples),
+    webLink:     optStr(f.webLink),
   };
 }
 
@@ -231,7 +252,7 @@ function CustomStyleModal({
         </div>
 
         <div style={rangeHeaderStyle}>STYLE RANGES (leave blank to skip)</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginBottom: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginBottom: 8 }}>
           <NumCell label="OG MIN °P"  value={form.og_min}  onChange={v => update('og_min',  v)} step={0.1} />
           <NumCell label="OG MAX °P"  value={form.og_max}  onChange={v => update('og_max',  v)} step={0.1} />
           <NumCell label="FG MIN °P"  value={form.fg_min}  onChange={v => update('fg_min',  v)} step={0.1} />
@@ -242,6 +263,28 @@ function CustomStyleModal({
           <NumCell label="IBU MAX"    value={form.ibu_max} onChange={v => update('ibu_max', v)} step={1}   />
           <NumCell label="EBC MIN"    value={form.ebc_min} onChange={v => update('ebc_min', v)} step={1}   />
           <NumCell label="EBC MAX"    value={form.ebc_max} onChange={v => update('ebc_max', v)} step={1}   />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginBottom: 14 }}>
+          <NumCell label="CARB MIN vols" value={form.carb_min} onChange={v => update('carb_min', v)} step={0.1} />
+          <NumCell label="CARB MAX vols" value={form.carb_max} onChange={v => update('carb_max', v)} step={0.1} />
+        </div>
+
+        <div style={rangeHeaderStyle}>NOTES &amp; DESCRIPTION (all optional)</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+          <TextAreaCell label="NOTES"       value={form.notes}       onChange={v => update('notes', v)}       rows={2} />
+          <TextAreaCell label="DESCRIPTION" value={form.description} onChange={v => update('description', v)} rows={3} />
+          <TextAreaCell label="PROFILE"     value={form.profile}     onChange={v => update('profile', v)}     rows={3} placeholder="Aroma · Appearance · Flavor · Mouthfeel" />
+          <TextAreaCell label="INGREDIENTS" value={form.ingredients} onChange={v => update('ingredients', v)} rows={2} />
+          <TextAreaCell label="EXAMPLES"    value={form.examples}    onChange={v => update('examples', v)}    rows={2} placeholder="Comma-separated commercial examples" />
+          <FormRow label="WEB LINK" colSpan={2}>
+            <input
+              type="url"
+              placeholder="https://…"
+              value={form.webLink}
+              onChange={e => update('webLink', e.target.value)}
+              style={textInputStyle}
+            />
+          </FormRow>
         </div>
 
         {keys.length > 0 && (
@@ -307,6 +350,29 @@ function NumCell({ label, value, onChange, step }: {
         value={value}
         onChange={e => onChange(e.target.value)}
         style={cellInputStyle}
+      />
+    </div>
+  );
+}
+
+function TextAreaCell({
+  label, value, onChange, rows = 2, placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  rows?: number;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <div style={cellLabelStyle}>{label}</div>
+      <textarea
+        rows={rows}
+        placeholder={placeholder}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{ ...cellInputStyle, resize: 'vertical', minHeight: rows * 18 }}
       />
     </div>
   );

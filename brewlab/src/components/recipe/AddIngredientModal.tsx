@@ -23,7 +23,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useStore } from '../../store';
 import { lsGet } from '../../lib/storage';
-import { fmtAmt } from '../../lib/utils';
+import { fmtAmt, asNum } from '../../lib/utils';
 import {
   calcOG, calcFG, calcABV, calcTotalIBU, calcEBC, sgToPlato,
 } from '../../lib/calculations';
@@ -271,7 +271,10 @@ export default function AddIngredientModal({ recipeId, type: initialType, substi
 
   // ── Library row click (mirrors HTML selectPickerRow) ──────────────────────
   const selectLibRow = useCallback((entry: LibEntry) => {
-    setSelectedLibId(entry.id);
+    // Library ids are `string | number` in the type; selectedLibId is
+    // `string`. Stringify here so the cast at the read sites isn't
+    // needed.
+    setSelectedLibId(String(entry.id));
     setName(entry.name || '');
     // Fill `extra` from EBC / AA / atten in priority order (matches HTML)
     const e = entry as Record<string, unknown>;
@@ -367,7 +370,7 @@ export default function AddIngredientModal({ recipeId, type: initialType, substi
       attenPct = parseFloat(yeastIng.extra || '0');
       if (!attenPct) {
         const libY = yeastLib.find(y => y.id === yeastIng.libId || y.name === yeastIng.name);
-        attenPct = libY?.atten ?? 75;
+        attenPct = asNum(libY?.atten, 75);
       }
     }
     if (!attenPct) attenPct = 75;

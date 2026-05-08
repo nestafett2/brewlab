@@ -19,7 +19,7 @@
  * dropdowns aren't empty for new installs.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useStore } from '../../store';
 import type { TankCalibration, TankType } from '../../types';
 

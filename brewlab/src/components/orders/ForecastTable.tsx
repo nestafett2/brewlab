@@ -40,10 +40,28 @@ export default function ForecastTable({ section }: Props) {
   const ledgerData     = useStore(s => s.ledgerData);
   const ingredientsByRecipe = useStore(s => s.ingredientsByRecipe);
   const loadIngredients     = useStore(s => s.loadIngredients);
+  const recipes = useStore(s => s.recipes);
   const maltLib  = useStore(s => s.maltLib);
   const hopLib   = useStore(s => s.hopLib);
   const yeastLib = useStore(s => s.yeastLib);
   const miscLib  = useStore(s => s.miscLib);
+
+  // Recipe lookup for brew → taxBatch / beerName resolution. The
+  // forecast header renders "TAX — Beer" composite labels and the
+  // already-recorded check prefers exact taxBatch match.
+  const recipeById = useMemo(() => {
+    const m = new Map<string, { taxBatch: string; beerName: string; name: string }>();
+    for (const r of recipes) {
+      m.set(r.id, {
+        taxBatch: r.taxBatch ?? '',
+        beerName: r.beerName ?? '',
+        name:     r.name ?? '',
+      });
+    }
+    return m;
+  }, [recipes]);
+  const getTaxBatch = (recipeId: string): string =>
+    recipeById.get(recipeId)?.taxBatch ?? '';
 
   const [recordUsageBrewId, setRecordUsageBrewId] = useState<string | null>(null);
 
@@ -87,6 +105,7 @@ export default function ForecastTable({ section }: Props) {
     rows: buildForecastRows(
       sec, timeline, libBySection, inventoryStock, ledgerData,
       recipeId => ingredientsByRecipe[recipeId] ?? [],
+      getTaxBatch,
     ),
   }));
   const anyRows = sectionRows.some(s => s.rows.length > 0);
@@ -117,6 +136,7 @@ export default function ForecastTable({ section }: Props) {
                 rows={rows}
                 timeline={timeline}
                 totalColCount={totalColCount}
+                recipeById={recipeById}
                 onBrewContext={brewId => setRecordUsageBrewId(brewId)}
               />
             );
@@ -137,13 +157,14 @@ export default function ForecastTable({ section }: Props) {
 // ── Sub-render: one section block (header + col headers + data rows) ─
 
 function SectionBlock({
-  sec, unit, rows, timeline, totalColCount, onBrewContext,
+  sec, unit, rows, timeline, totalColCount, recipeById, onBrewContext,
 }: {
   sec: LibSection;
   unit: string;
   rows: ReturnType<typeof buildForecastRows>;
   timeline: TimelineColumn[];
   totalColCount: number;
+  recipeById: Map<string, { taxBatch: string; beerName: string; name: string }>;
   onBrewContext: (brewId: string) => void;
 }) {
   return (
@@ -172,7 +193,7 @@ function SectionBlock({
               color: 'var(--text)', padding: '3px 6px',
             }}
           >
-            {col.brew.name}
+            {formatBrewHeader(col.brew, recipeById)}
             <br />
             <span style={{ fontSize: 7, color: 'var(--text-muted)' }}>
               {col.brew.start.slice(5)}
@@ -251,6 +272,27 @@ function SectionBlock({
       })}
     </>
   );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Composite brew header label — "ABC-23 — Hazy IPA" when the linked
+ * recipe has both a taxBatch and a beerName/name. Falls back to single
+ * values: just the brew name if there's no recipe link, just the tax
+ * batch if the recipe has a taxBatch but no beer name, etc.
+ */
+function formatBrewHeader(
+  brew: { name: string; recipeId?: string | null },
+  recipeById: Map<string, { taxBatch: string; beerName: string; name: string }>,
+): string {
+  const r = brew.recipeId ? recipeById.get(brew.recipeId) : undefined;
+  const tax = r?.taxBatch?.trim() ?? '';
+  const beer = (r?.beerName?.trim() || r?.name?.trim()) ?? '';
+  if (tax && beer) return `${tax} — ${beer}`;
+  if (tax)         return tax;
+  if (beer)        return beer;
+  return brew.name;
 }
 
 // ── Styles ────────────────────────────────────────────────────────────

@@ -1,0 +1,45 @@
+-- ============================================================================
+-- BrewLab — Add `tax_batch` column to harvested_yeast
+-- ============================================================================
+--
+-- Replaces the brew_num column overloading introduced in the inventory
+-- display change (the pass that taught HarvestedYeastView to render
+-- "ABC-23 — Hazy IPA" composite labels).
+--
+-- That pass needed somewhere to round-trip the tax batch alongside the
+-- existing beer_name column. Rather than land a migration immediately,
+-- it overloaded the pre-existing `brew_num` column — which was a
+-- legacy field for the dead-on-write `e.brewNum` value — by writing
+-- the new tax batch into it instead.
+--
+-- This migration cleans that up: a dedicated `tax_batch` column whose
+-- meaning is row-type dependent in the same way the overloaded brew_num
+-- column was:
+--   - on harvest rows: the tax batch the yeast was harvested from
+--                      (was stored on entry.harvestedFromTaxBatch)
+--   - on usage rows:   the tax batch the yeast was used in
+--                      (was stored on entry.taxBatch)
+--
+-- The legacy `brew_num` column stays in the schema (nullable, unused).
+-- Once every deployment has been confirmed empty it can be dropped in
+-- a future cleanup migration.
+--
+-- The `beer_name` column also stays dual-purpose (source brew's beer
+-- name on harvest rows / destination brew's beer name on usage rows),
+-- but that overloading is internally consistent — it always holds a
+-- beer name — and was not introduced by the same pass, so it isn't
+-- being cleaned up here.
+--
+-- No backfill: legacy rows have brew_num populated with the old
+-- e.brewNum dead-field value, NOT a tax batch — copying brew_num into
+-- tax_batch would render wrong values in the inventory display.
+-- Legacy rows hydrate with tax_batch IS NULL and HarvestedYeastView's
+-- formatPair helper falls back to single-value rendering for them.
+--
+-- Run this from the Supabase SQL editor BEFORE the matching code
+-- changes ship; otherwise the next harvested_yeast write hits PGRST204
+-- ("column not found in schema cache") and the row is dropped on the
+-- floor while the local write succeeds.
+
+ALTER TABLE harvested_yeast
+  ADD COLUMN IF NOT EXISTS tax_batch text NULL;
