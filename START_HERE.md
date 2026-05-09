@@ -1,6 +1,6 @@
 # BrewLab — START HERE
 
-**Last session: 6 May 2026 (long session — multiple CC rounds + toast/undo plan)**
+**Last session: 9 May 2026 (GitHub migration, Vercel deploy, Supabase live)**
 **Read this first. Everything else is reference.**
 
 ---
@@ -22,6 +22,15 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 - **Three Supabase migrations applied today** — `recipe_profiles` table, `deleted_at` columns on `recipes` and `ferm_log`, `mash` table.
 - **Supabase project** active. URL and anon key in CLAUDE.md.
 - **No real brewery data yet** — Ben hasn't started production brewing. Test recipes are rebuild debris and can be deleted any time.
+
+---
+
+## Hosting
+
+- **Live URL:** https://brewlab-red.vercel.app
+- **Source repo:** https://github.com/nestafett2/brewlab
+- Auto-deploys on every push to `main`.
+- Per-user Supabase credentials supplied via Settings → Connection in the live app (not Vercel env vars), preserving the shareable single-brewery-per-DB model.
 
 ---
 
@@ -50,69 +59,42 @@ All major page ports complete. Sync layer rebuild complete.
 
 ---
 
-## What Got Done Last Session (6 May 2026)
+## What Got Done Last Session (9 May 2026)
 
-Big session. Full Brew/Batch terminology rebuild + Tax Batch # field, three-action brew creation flow, brew history grouping, toast/undo system, recipe sidebar reorganization (drag-drop + folder context menu + multi-select), and a deletion-overhaul investigation that's mid-way through.
+Infrastructure session. Got BrewLab onto a live URL. No app feature work beyond a one-line `vite.config` fix.
 
-### Brew/Batch rename + Tax Batch # field
+### GitHub migration
 
-The HTML's `r.brewNum` (text, brewery-wide unique, NTA tax serial) was confusingly named. Picked **Option C**: rename `brewNum` → `taxBatch` everywhere; add NEW `brewNumber` int column for the per-lineage sequential counter. Migration applied: `2026-05-06_rename_brew_num_to_tax_batch_and_add_brew_number.sql`.
+Pushed the repo to a new personal-account home: **github.com/nestafett2/brewlab**. The original `nomodachi` work account is still suspended; appeal not yet filed (now low priority — code is safe on the personal account).
 
-- All ~30 call sites updated.
-- Meta-bar: BREW # pill wired to `brewNumber`, **read-only**, auto-filled. TAX BATCH # pill wired to `taxBatch`, free-text input, moved LEFT next to recipe name. Right-side order: BREW DATE → VERSION → BREW # → Save.
-- Tax-surface labels: "Brew #" → "Tax Batch #" everywhere `taxBatch` displays. "Beer #" cleanup in TaxSummaryTab/TaxMasterPage column headers (some columns were beer name → "Beer Name", others tax serial → "Tax Batch #").
-- One-time recompute pass on hydrate cleans up garbage values.
+Removed `.github/workflows/deploy-pages.yml` — GitHub Pages is no longer the host so the workflow was dead weight.
 
-### + New Brew flow
+### Vercel deploy
 
-Renamed and restructured. Single "+ New Version" button → primary "+ New Brew" + caret dropdown. Three actions:
-- **+ New Brew** (no version change, brewNumber+1)
-- **Amounts Changed** (minor bump 1.0 → 1.1)
-- **Ingredients Changed** (major bump 1.0 → 2.0)
+BrewLab is **live at https://brewlab-red.vercel.app**, auto-redeploys on every push to `main`.
 
-From a non-latest source: plain "+ New Brew" inherits source version; dropdown variants jump to next major from lineage's latest. New `NewBrewModal`. Switches to the new recipe after creation.
+One-line gotcha: `brewlab/vite.config.ts` had `base: '/brewlab/'` (set for the old `nomodachi.github.io/brewlab/` subpath). Vercel serves at root, so the deployed bundle 404'd on every asset until `base` was changed to `'/'`. Worth remembering if anyone ever flips back to a subpath host — it'll need to flip back.
 
-### Brew History tab
+### Supabase configured in the live app
 
-Renamed from "Batch History" → "Brew History". Version-change highlighting (amber + ✏). Major-version grouping (v1.x, v2.x), collapsible. Empty/null versions fall back to "1.0" → group with v1.x.
+Credentials entered into the deployed app via Settings → Connection. Sync verified — Vercel app pulls from the same Supabase project as local dev. Critically, **credentials stay per-user via in-app Settings, NOT Vercel env vars** — preserves the shareable single-brewery-per-DB model. Each brewery brings their own Supabase, configured in the running app.
 
-### Toast/undo
+### OneDrive risk dismissed
 
-Architecture: closure-based undos, Zustand slice, bottom-right position, stack capped at 4, 4500ms with undo / 2500ms without, hover-to-pause. Built and retrofitted across Libraries, Notes, Planner, Inventory, Orders.
+The standing concern that `.git/` could be corrupted by OneDrive sync was investigated and **dismissed**. The project path is `C:\Users\nesta\OneDrive\Desktop\Apps\Brewing App\brewlab` but OneDrive Backup is **OFF** for Desktop. Verified two ways:
+1. Right-click context menu on Desktop shows no OneDrive sync items / cloud icons.
+2. OneDrive Settings → Manage backup shows Desktop = "Not backed up".
 
-### Recipe sidebar reorganization
-
-Drag-and-drop (recipe → folder, folder → folder for subfolder, folder → root, reorder within parent). Folder right-click context menu (Rename / + New Subfolder / Delete folder, with cascade behavior matching HTML). Multi-select (plain click / Ctrl-click / Shift-click) with bulk move and bulk delete. Custom multi-drag image with "N recipes" badge. Top "Folder" button + bottom "+ New Folder" link both wired (were unwired). Subfolder + "New Recipe Here" buttons added inside FolderPreview.
-
-### Recipe row layout (3-line) + Brewery Overview
-
-Recipe rows in sidebar now show three lines: `#X name` / `style · BJCP code` / `v1.x`. Brewery Overview right pane uses the same format wherever brews are referenced.
-
-### Recipe deletion
-
-Investigated the existing delete path (Phase 1, read-only). Findings: tax_records and tax_master were already preserved by intent (NTA compliance safe). All other per-recipe data was soft-tombstoned but left as zombie rows in Supabase. Cross-hydrate undo was broken — undo restored local state but didn't clear the Supabase tombstone, so next hydrate re-prompted.
-
-Built an Archive two-tier model first, then unwound it after deciding the simpler model fit the brewer's workflow better.
-
-**Final model:** single Delete action works on any recipe. Hard-removes recipe + ingredients + all per-recipe blobs (brew_day, ferm_log, ferm_meta, cold_side, water_chem, recipe_profiles, mash) + planner cascade + harvested_yeast linked rows. ALWAYS preserves tax_records and tax_master (NTA compliance). 8-second toast undo with full snapshot-then-restore.
-
-Came along for the ride:
-- Cross-hydrate undo bug fixed (snapshot-restore now writes through to Supabase via lsSet)
-- BrewDayTab / PackagingTab dirtyRef guards (no more empty-blob writes on mount)
-- Tax Master and Yeast Tracker show "(recipe deleted)" inline for dangling refs
-
-Schema migration applied: 2026-05-07_rename_deleted_at_to_archived_at.sql. Column renamed but always NULL going forward — kept for cleanness.
+The OneDrive path is vestigial from a past Backup configuration. Project is NOT actively syncing. Removed from the pending list; do not re-raise.
 
 ---
 
 ## What's Still Broken / Pending
 
-### Infrastructure (resolve at start of next session)
+### Infrastructure
 
-- **GitHub account suspended.** Resolve before any push: appeal the suspension on the nomodachi work account, switch to the second personal account, or pick a different host (GitLab / Bitbucket / etc.).
-- **Local repo not connected to a remote.** Once a remote is sorted: `git remote add origin <url>` then `git push -u origin main` to back up everything.
-- **OneDrive + .git interaction.** The repo lives inside a OneDrive-synced folder, which can corrupt `.git/` over time. Either exclude `Brewing App/.git/` from OneDrive sync (OneDrive Settings → Choose folders), or move the project out of OneDrive entirely.
-- **Verify HTML reference app hosting.** If `nomodachi.github.io/brewlab` is down due to the GitHub suspension, the tablet/mobile views that load from there are broken until re-hosted (Vercel or elsewhere).
+- **HTML reference apps decision.** `brewlab-desktop.html` / `-tablet.html` / `-mobile.html` are still in the repo but not deployed. The React app supersedes them. Decide: delete from the repo, or re-host on Vercel as a separate project.
+- **GitHub work account appeal (low priority).** Code is safely on the `nestafett2` personal account. The suspended `nomodachi` work account can be appealed if/when convenient — not blocking anything.
 
 ### Pull from CC at start of next session
 - Confirm the deletion overhaul unwind didn't break anything: right-click any recipe → "Delete" appears (no Archive), delete a recipe with data → tax records persist, undo within 8s restores everything.
@@ -147,19 +129,11 @@ Schema migration applied: 2026-05-07_rename_deleted_at_to_archived_at.sql. Colum
 
 ## Next Session Focus
 
-1. **Pull CC's deliverables** from the deletion overhaul terminal. Apply the schema migration in Supabase SQL editor first, then test:
-   - Archive UI appears as a collapsible section at the bottom of the Recipes sidebar
-   - Empty/draft recipe right-click → "✕ Delete" (hard delete)
-   - Recipe with data right-click → "📦 Archive"
-   - Restore action on archived recipes works
-   - Undo a delete, refresh — recipe should stay (cross-hydrate undo bug fixed)
-   - Tax Master shows archived recipes with indicator; never shows truly-deleted recipes
-   - Yeast tracker shows "(archived)" on entries pointing to archived recipes
-
-2. **Pick the next item from the queue.** Recommendation:
-   - **15.8L volume offset** (data quality, self-contained, matters before real brewing)
-   - Or **BeerSmith bulk imports** if moving toward shareability
-   - Or **Style Guide decision** as a 5-min palate cleanser
+- **HTML reference apps decision** — delete from the repo, or re-host on Vercel as a separate project.
+- **BeerSmith bulk imports** — now more relevant since new breweries can be pointed at the live Vercel URL for trial.
+- **Eyeball the new recipe layout** in normal workflow (carryover from 7 May).
+- **Optional: calc-drift sanity check** from the 7 May TS fix — `calcOG` / `calcEBC` / `grainDiPh` now correctly parse string-typed legacy library numerics. Spot-check imported recipes; not urgent given no real brewery data.
+- **15.8L volume offset** — only if you want a self-contained data-quality task.
 
 ---
 
@@ -204,8 +178,8 @@ These are Ben's hard rules. Don't violate them.
 | Service | Account | Notes |
 |---|---|---|
 | Supabase | brewing@nomodachi.com | Project ID: `inxipvdturxgeapsznxb` |
-| GitHub | nomodachi (work account) | Repo: `nomodachi.github.io/brewlab` |
-| Vercel | Ben has personal account | BrewLab not yet deployed |
+| GitHub | nestafett2 (personal account) | Repo: `github.com/nestafett2/brewlab`. The `nomodachi` work account is suspended; appeal optional. |
+| Vercel | Ben's personal account | Deployed at `https://brewlab-red.vercel.app`, auto-deploys on push to `main`. |
 | Netlify | — | Abandoned. Hit free-tier bandwidth limit. Do not use. |
 
 **Supabase URL:** `https://inxipvdturxgeapsznxb.supabase.co`

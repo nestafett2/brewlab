@@ -1,3 +1,49 @@
+# SESSION_LOG entry — 2026-05-09
+
+Infrastructure-only session. No app feature work. Got BrewLab from local-only to live on a public URL with working sync.
+
+---
+
+## GitHub migration
+
+Pushed the repo to **github.com/nestafett2/brewlab** (personal account). The original `nomodachi` work account remains suspended; appeal not yet filed and now low priority — code is safe on the personal account, so the appeal is optional follow-up rather than blocking anything.
+
+Removed `.github/workflows/deploy-pages.yml` — GitHub Pages was the original deploy target on the work account. With Vercel taking over hosting and the work account dormant, the workflow had no job to do.
+
+---
+
+## Vercel deploy
+
+BrewLab is live at **https://brewlab-red.vercel.app**, auto-redeploys on every push to `main`.
+
+**The vite.config gotcha.** First deploy 404'd every asset. Cause: `brewlab/vite.config.ts` had `base: '/brewlab/'`, set when the deploy target was `nomodachi.github.io/brewlab/` (a subpath). Vercel serves at root, so the bundle's asset URLs need `base: '/'`. One-line fix.
+
+Worth flagging for future-me: if anyone ever flips back to a subpath host (GitHub Pages on a different account, or a custom domain with a `/brewlab/` prefix), the `base` will need to flip back. Easy to forget; Vite's behaviour is silent — assets just 404, no build-time warning.
+
+---
+
+## Supabase configured live
+
+Credentials entered into the deployed app via Settings → Connection. Sync verified by checking the live app pulls the same recipes/libraries as local dev (both pointed at the same Supabase project).
+
+**Architectural decision held.** Credentials stay **per-user via in-app Settings**, NOT in Vercel env vars. This was the right call to preserve: BrewLab's shareability model is single-brewery-per-DB, each brewery bringing their own Supabase. If the deployed app baked a single set of credentials into env vars, every visitor would land on Nomodachi's database. Per-user in-app config keeps that model intact — Ben can share the URL with another brewery and they configure their own backend.
+
+---
+
+## OneDrive risk dismissed
+
+Standing handoff item: "the repo is inside a OneDrive-synced folder, which can corrupt `.git/` over time." Investigated today. **Not a real risk.**
+
+The project path is `C:\Users\nesta\OneDrive\Desktop\Apps\Brewing App\brewlab`, which **looks** like an active OneDrive path — but OneDrive Backup is **OFF** for the Desktop folder. Verified two ways:
+1. Right-click context menu on Desktop shows no OneDrive sync items / cloud icons.
+2. OneDrive Settings → Manage backup shows Desktop = "Not backed up".
+
+The path is vestigial from a previous Backup configuration that was disabled at some point. Files are not actively syncing to the cloud. The `.git/` corruption concern was correct in principle but predicated on a sync that isn't actually running.
+
+Removed from the pending list. **Do not re-raise** — flagged here so future-me doesn't redo the investigation when the path looks suspicious again.
+
+---
+
 # SESSION_LOG entry — 2026-05-07 (afternoon)
 
 Recipe page layout redesign + 13-error TS cleanup that turned out to be 40 once cache-visibility was resolved. Many CC rounds, all desktop React; Tablet and Mobile pages untouched.
