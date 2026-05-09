@@ -428,6 +428,41 @@ export function calcEffectiveTrubLossL(
   return baseTrubLoss + hopAbsorptionL;
 }
 
+/**
+ * Total planned dry-hop grams ÷ batch volume. Reads RECIPE planned amounts
+ * (`use === 'dry hop'`), not Ferm-tab logged actuals — `totalDryHopGrams`
+ * (private, used by `calcDhPhPrediction`) covers the actuals path.
+ * Returns null when batchL ≤ 0; the caller renders an em-dash.
+ */
+export function calcDryHopGperL(
+  ingredients: Ingredient[],
+  batchL: number,
+): number | null {
+  if (batchL <= 0) return null;
+  let g = 0;
+  for (const h of ingredients) {
+    if (h.type !== 'hop') continue;
+    if ((h.use || '').toLowerCase() !== 'dry hop') continue;
+    g += h.unit === 'kg' ? h.amt * 1000 : h.amt;
+  }
+  return g / batchL;
+}
+
+/** Total whirlpool hop grams ÷ batch-into-WP volume (= batchL + trub loss). */
+export function calcWhirlpoolGperL(
+  ingredients: Ingredient[],
+  batchIntoWpL: number,
+): number | null {
+  if (batchIntoWpL <= 0) return null;
+  let g = 0;
+  for (const h of ingredients) {
+    if (h.type !== 'hop') continue;
+    if ((h.use || '').toLowerCase() !== 'whirlpool') continue;
+    g += h.unit === 'kg' ? h.amt * 1000 : h.amt;
+  }
+  return g / batchIntoWpL;
+}
+
 export interface BrewDayTargets {
   mashWaterL: number | null;
   spargeVolL: number | null;

@@ -4,6 +4,7 @@ import {
   calcOG, calcFG, calcABV, calcTotalIBU, calcEBC, calcGrainPct,
   calcClassification, sgToPlato, platoToSg,
   calcBrewDayTargets, calcActualEfficiency, calcEffectiveTrubLossL,
+  calcDryHopGperL, calcWhirlpoolGperL,
 } from '../../lib/calculations';
 import { asNum } from '../../lib/utils';
 import type { Ingredient, IngredientType } from '../../types';
@@ -150,6 +151,22 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
   const effectiveTrubLossL = useMemo(
     () => calcEffectiveTrubLossL(ingredients, hopLib, activeEquip),
     [ingredients, hopLib, activeEquip],
+  );
+
+  // Batch into WP + per-litre hop densities for the bottom-row panels.
+  // batchIntoWpL is the into-FV target + effective trub loss; same number
+  // shown in the PROCESS panel and used as the WP G/L divisor.
+  const batchIntoWpL = useMemo(
+    () => (recipe?.batchL || 0) + effectiveTrubLossL,
+    [recipe?.batchL, effectiveTrubLossL],
+  );
+  const dhGperL = useMemo(
+    () => calcDryHopGperL(ingredients, recipe?.batchL || 0),
+    [ingredients, recipe?.batchL],
+  );
+  const wpGperL = useMemo(
+    () => calcWhirlpoolGperL(ingredients, batchIntoWpL),
+    [ingredients, batchIntoWpL],
   );
 
   // Est Pre-Boil Gravity for the Totals panel. Same call BrewDayTab makes —
@@ -354,60 +371,46 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
           bottom 3-panel grid below. All three share the column, aligned
           to the recipe explorer on the far left. */}
       <div style={leftColStyle}>
-        {/* EQUIPMENT-DERIVED PILL STRIP — top of the left column, just
-            below the sub-tab nav. Compact info strip for values derived
-            from the recipe + active Equipment profile; spans only the
-            left column's width (not under ActionStack). The Equipment
-            selector itself lives in ActionStack > Setup. */}
-        <div style={pillStripStyle}>
-          <div style={pillStripInnerStyle}>
-            <div className="meta-pill">
-              <div className="meta-pill-label">Batch into FV</div>
-              <div className="meta-pill-val">
-                <input className="meta-pill-input" type="text" value={recipe.batchL || ''} onChange={e => updateRecipe(recipeId, { batchL: parseFloat(e.target.value) || 0 })} style={{ width: 44 }} />
-                <span className="meta-pill-unit">L</span>
+        {/* TOP METRIC STRIP — 5 stats matching the recipe-preview metric
+            bar. BATCH is editable (input styled to blend with the value
+            text); GRAIN / HOPS / IBU / ABV are computed read-only.
+            Process / volume fields moved into the PROCESS panel below. */}
+        <div style={topStripStyle}>
+          <div style={topStripInnerStyle}>
+            <div style={metricItemStyle}>
+              <div className="rp-stat-label">Batch</div>
+              <div className="rp-stat-val">
+                <input
+                  type="text"
+                  value={recipe.batchL || ''}
+                  onChange={e => updateRecipe(recipeId, { batchL: parseFloat(e.target.value) || 0 })}
+                  style={metricInputStyle}
+                />
+                <span style={metricUnitStyle}>L</span>
               </div>
             </div>
-            {/* Batch into WP = into-FV target + effective trub loss (base
-                trub + hot-side hop absorption). Read-only — recomputes
-                whenever ingredients or batchL change. */}
-            <div className="meta-pill" title="Total volume needed in the kettle for whirlpool. Equals Batch into FV + expected losses (base trub + whirlpool/boil hop absorption).">
-              <div className="meta-pill-label">Batch into WP</div>
-              <div className="meta-pill-val">
-                <span className="meta-pill-input" style={{ width: 44, display: 'inline-block', textAlign: 'left' }}>
-                  {recipe.batchL > 0 ? ((recipe.batchL || 0) + effectiveTrubLossL).toFixed(1) : '—'}
-                </span>
-                <span className="meta-pill-unit">L</span>
+            <div style={metricItemStyle}>
+              <div className="rp-stat-label">Grain</div>
+              <div className="rp-stat-val">
+                {stats.totalGrainKg > 0 ? `${stats.totalGrainKg.toFixed(2)} kg` : '—'}
               </div>
             </div>
-            <div className="meta-pill" title="Effective trub loss = equipment-profile base trub loss + hot-side hop absorption (whirlpool at 6 L/kg, boil/flameout/first-wort at pellet 1.0 L/kg or whole 3.0 L/kg).">
-              <div className="meta-pill-label">Expected loss</div>
-              <div className="meta-pill-val">
-                <span className="meta-pill-input" style={{ width: 44, display: 'inline-block', textAlign: 'left' }}>
-                  {effectiveTrubLossL > 0 ? effectiveTrubLossL.toFixed(1) : '—'}
-                </span>
-                <span className="meta-pill-unit">L</span>
+            <div style={metricItemStyle}>
+              <div className="rp-stat-label">Hops</div>
+              <div className="rp-stat-val">
+                {stats.totalHopG > 0 ? `${stats.totalHopG.toFixed(0)} g` : '—'}
               </div>
             </div>
-            <div className="meta-pill">
-              <div className="meta-pill-label">Boil</div>
-              <div className="meta-pill-val">
-                <input className="meta-pill-input" type="text" value={recipe.boilTime ?? 45} onChange={e => updateRecipe(recipeId, { boilTime: parseFloat(e.target.value) || 0 })} style={{ width: 32 }} />
-                <span className="meta-pill-unit">min</span>
+            <div style={metricItemStyle}>
+              <div className="rp-stat-label">IBU</div>
+              <div className="rp-stat-val">
+                {stats.ibu > 0 ? stats.ibu.toFixed(1) : '—'}
               </div>
             </div>
-            <div className="meta-pill">
-              <div className="meta-pill-label">BH Eff</div>
-              <div className="meta-pill-val">
-                <input className="meta-pill-input" type="text" value={recipe.bhEff ?? 67.60} onChange={e => updateRecipe(recipeId, { bhEff: parseFloat(e.target.value) || 0 })} style={{ width: 44 }} />
-                <span className="meta-pill-unit">%</span>
-              </div>
-            </div>
-            <div className="meta-pill">
-              <div className="meta-pill-label">WP Temp</div>
-              <div className="meta-pill-val">
-                <input className="meta-pill-input" type="text" value={recipe.whirlpoolTemp ?? 85} onChange={e => updateRecipe(recipeId, { whirlpoolTemp: parseFloat(e.target.value) || 0 })} style={{ width: 32 }} />
-                <span className="meta-pill-unit">°C</span>
+            <div style={metricItemStyle}>
+              <div className="rp-stat-label">ABV</div>
+              <div className="rp-stat-val">
+                {stats.abv > 0 ? `${stats.abv.toFixed(1)}%` : '—'}
               </div>
             </div>
           </div>
@@ -430,11 +433,21 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
         <div style={bottomRowStyle}>
           <StyleSummaryPanel recipe={recipe} stats={stats} />
           <TotalsPanel
-            totalGrainKg={stats.totalGrainKg}
-            totalHopG={stats.totalHopG}
             ibuSg={stats.ibuSg}
             preBoilGravityP={estPreBoilP}
             fgPlato={stats.fgPlato}
+            dhGperL={dhGperL}
+            wpGperL={wpGperL}
+          />
+          <ProcessPanel
+            boilTime={recipe.boilTime ?? 45}
+            bhEff={recipe.bhEff ?? 67.60}
+            whirlpoolTemp={recipe.whirlpoolTemp ?? 85}
+            expectedLossL={effectiveTrubLossL}
+            batchIntoWpL={batchIntoWpL}
+            onBoilChange={n => updateRecipe(recipeId, { boilTime: n })}
+            onBhEffChange={n => updateRecipe(recipeId, { bhEff: n })}
+            onWpTempChange={n => updateRecipe(recipeId, { whirlpoolTemp: n })}
           />
           <MeasuredPanel
             measOgPlato={measOgPlato}
@@ -580,29 +593,29 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
 // (dropdown open, modal open) and reaches into the store.
 
 function TotalsPanel({
-  totalGrainKg, totalHopG, ibuSg, preBoilGravityP, fgPlato,
+  ibuSg, preBoilGravityP, fgPlato, dhGperL, wpGperL,
 }: {
-  totalGrainKg: number;
-  totalHopG: number;
   ibuSg: number;
   preBoilGravityP: number | null;
   fgPlato: number;
+  dhGperL: number | null;
+  wpGperL: number | null;
 }) {
-  const grainStr   = totalGrainKg > 0 ? `${totalGrainKg.toFixed(2)} kg` : '—';
-  const hopStr     = totalHopG    > 0 ? `${totalHopG.toFixed(0)} g`    : '—';
   const ibuSgStr   = ibuSg > 0 ? ibuSg.toFixed(2) : '—';
   const preBoilStr = preBoilGravityP != null && preBoilGravityP > 0
     ? `${preBoilGravityP.toFixed(1)}°P` : '—';
   const fgStr      = fgPlato > 0 ? `${fgPlato.toFixed(1)}°P` : '—';
+  const dhStr      = dhGperL != null && dhGperL > 0 ? `${dhGperL.toFixed(2)} g/L` : '—';
+  const wpStr      = wpGperL != null && wpGperL > 0 ? `${wpGperL.toFixed(2)} g/L` : '—';
   return (
     <div style={panelStyle}>
       <div style={panelHeaderStyle}>Totals</div>
       <div style={panelBodyStyle}>
-        <PanelRow label="Total Grains"           value={grainStr} />
-        <PanelRow label="Total Hops"             value={hopStr} />
-        <PanelRow label="IBU/SG ratio"           value={ibuSgStr} />
-        <PanelRow label="Est Pre-Boil Gravity"   value={preBoilStr} />
-        <PanelRow label="Est Final Gravity"      value={fgStr} />
+        <PanelRow label="DH G/L"               value={dhStr} />
+        <PanelRow label="WP G/L"               value={wpStr} />
+        <PanelRow label="IBU/SG ratio"         value={ibuSgStr} />
+        <PanelRow label="Est Pre-Boil Gravity" value={preBoilStr} />
+        <PanelRow label="Est Final Gravity"    value={fgStr} />
       </div>
     </div>
   );
@@ -629,6 +642,59 @@ function MeasuredPanel({
         <PanelRow label="Measured Efficiency"  value={effStr} />
         <PanelRow label="Total Cost"           value={costStr} amber />
       </div>
+    </div>
+  );
+}
+
+function ProcessPanel({
+  boilTime, bhEff, whirlpoolTemp, expectedLossL, batchIntoWpL,
+  onBoilChange, onBhEffChange, onWpTempChange,
+}: {
+  boilTime: number;
+  bhEff: number;
+  whirlpoolTemp: number;
+  expectedLossL: number;
+  batchIntoWpL: number;
+  onBoilChange: (n: number) => void;
+  onBhEffChange: (n: number) => void;
+  onWpTempChange: (n: number) => void;
+}) {
+  const lossStr = expectedLossL > 0 ? `${expectedLossL.toFixed(1)} L` : '—';
+  const wpStr   = batchIntoWpL > 0 ? `${batchIntoWpL.toFixed(1)} L` : '—';
+  return (
+    <div style={panelStyle}>
+      <div style={panelHeaderStyle}>Process</div>
+      <div style={panelBodyStyle}>
+        <EditableRow label="Boil"    value={boilTime}      unit="min" onChange={onBoilChange} />
+        <EditableRow label="BH Eff"  value={bhEff}         unit="%"   onChange={onBhEffChange} />
+        <EditableRow label="WP Temp" value={whirlpoolTemp} unit="°C"  onChange={onWpTempChange} />
+        <PanelRow    label="Expected Loss" value={lossStr} />
+        <PanelRow    label="Batch into WP" value={wpStr} />
+      </div>
+    </div>
+  );
+}
+
+function EditableRow({
+  label, value, unit, onChange,
+}: {
+  label: string;
+  value: number;
+  unit: string;
+  onChange: (n: number) => void;
+}) {
+  return (
+    <div style={rowStyle}>
+      <span style={rowLabelStyle}>{label}</span>
+      <span style={rowValueStyle}>
+        <input
+          type="text"
+          value={value}
+          onChange={e => onChange(parseFloat(e.target.value) || 0)}
+          style={editableInputStyle}
+        />
+        {' '}{unit}
+      </span>
     </div>
   );
 }
@@ -664,30 +730,54 @@ const contentStyle: React.CSSProperties = {
   flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto',
 };
 
-// Compact pill strip between the cards (above) and bottom panels (below).
-// Tighter vertical padding than the legacy meta-bar Row 2 — reads as an
-// info strip, not chrome. Background blends with the panel-2 surface
-// used elsewhere in the app for derivative-value strips.
-const pillStripStyle: React.CSSProperties = {
+// Top metric strip — 5 stats matching the recipe-preview metric bar.
+// BATCH editable; GRAIN/HOPS/IBU/ABV computed read-only. panel2
+// background reads as an info strip rather than chrome.
+const topStripStyle: React.CSSProperties = {
   background: 'var(--panel2)',
   borderTop: '1px solid var(--border)',
   borderBottom: '1px solid var(--border)',
   flexShrink: 0,
 };
 
-const pillStripInnerStyle: React.CSSProperties = {
+const topStripInnerStyle: React.CSSProperties = {
   maxWidth: 1000,
   margin: '0 auto',
-  padding: '4px 16px',
+  padding: '8px 16px',
   display: 'flex',
   alignItems: 'center',
-  justifyContent: 'center',
-  gap: 14,
+  justifyContent: 'space-around',
+  gap: 24,
+};
+
+const metricItemStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  gap: 2,
+};
+
+const metricInputStyle: React.CSSProperties = {
+  width: 56,
+  background: 'transparent',
+  border: 'none',
+  color: 'inherit',
+  font: 'inherit',
+  padding: 0,
+  fontVariantNumeric: 'tabular-nums',
+  outline: 'none',
+};
+
+const metricUnitStyle: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 400,
+  color: 'var(--text-muted)',
+  marginLeft: 2,
 };
 
 const bottomRowStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
   gap: 10,
   padding: '10px 12px 12px',
   borderTop: '1px solid var(--border)',
@@ -742,4 +832,21 @@ const rowValueStyle: React.CSSProperties = {
   fontSize: 12,
   color: 'var(--text)',
   fontVariantNumeric: 'tabular-nums',
+};
+
+// Inline input for the PROCESS panel's editable rows. Visually blends
+// with the read-only PanelRow values — same mono/12px/tabular-nums —
+// with a subtle dashed underline as the only affordance hint.
+const editableInputStyle: React.CSSProperties = {
+  width: 40,
+  background: 'transparent',
+  border: 'none',
+  borderBottom: '1px dashed var(--border2)',
+  color: 'var(--text)',
+  fontFamily: 'var(--mono)',
+  fontSize: 12,
+  fontVariantNumeric: 'tabular-nums',
+  padding: '0 2px',
+  textAlign: 'right',
+  outline: 'none',
 };
