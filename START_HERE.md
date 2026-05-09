@@ -1,6 +1,6 @@
 # BrewLab — START HERE
 
-**Last session: 9 May 2026 (GitHub migration, Vercel deploy, Supabase live)**
+**Last session: 9 May 2026 (long day — morning: live deploy; evening: Recipe tab redesign + bug fixes)**
 **Read this first. Everything else is reference.**
 
 ---
@@ -61,31 +61,33 @@ All major page ports complete. Sync layer rebuild complete.
 
 ## What Got Done Last Session (9 May 2026)
 
-Infrastructure session. Got BrewLab onto a live URL. No app feature work beyond a one-line `vite.config` fix.
+Long day, two distinct chunks: morning got BrewLab onto a live URL; evening was UI polish + bug fixing.
 
-### GitHub migration
+### Morning — live deploy
 
-Pushed the repo to a new personal-account home: **github.com/nestafett2/brewlab**. The original `nomodachi` work account is still suspended; appeal not yet filed (now low priority — code is safe on the personal account).
+- **GitHub migration to `nestafett2/brewlab`** (personal account; `nomodachi` work account still suspended, appeal optional).
+- **Vercel deploy** — live at https://brewlab-red.vercel.app, auto-redeploys on every push to `main`. One-line gotcha: `vite.config.ts` `base` was `/brewlab/` (GitHub Pages subpath) → changed to `/` for Vercel root.
+- **Supabase configured live** via Settings → Connection. Per-user creds in-app, NOT Vercel env vars — preserves the shareable single-brewery-per-DB model.
+- **OneDrive risk dismissed** — path looks like OneDrive but Backup is OFF for Desktop. Verified twice; do not re-raise.
+- **`.github/workflows/deploy-pages.yml` removed** — Pages no longer the host.
 
-Removed `.github/workflows/deploy-pages.yml` — GitHub Pages is no longer the host so the workflow was dead weight.
+### Evening — PWA polish, Recipe tab redesign, bug fixes
 
-### Vercel deploy
+**iPad PWA polish.** Status bar was overlaying the BREWLAB top nav in standalone mode. Added `padding: env(safe-area-inset-*)` on `#root` (top/L/R only — dropped bottom after content shifted up leaving a home-indicator gap). Cleaned up `/brewlab/` subpath leftovers in `index.html`, `main.tsx`, `manifest.json`, and `sw.js`. `theme_color` updated from blue (`#0a84ff`) to dark gray (`#2c2c2e`) to match the actual top nav (`var(--panel)`).
 
-BrewLab is **live at https://brewlab-red.vercel.app**, auto-redeploys on every push to `main`.
+**Recipe tab redesign — 4 passes.**
+- **Pass 1** (`fbcd9c6`): top metric strip (BATCH/GRAIN/HOPS/IBU/ABV) replacing the 6 process pills; new PROCESS panel in the bottom row; TOTALS picks up DH G/L + WP G/L (new `calcDryHopGperL` / `calcWhirlpoolGperL` helpers).
+- **Pass 2** (`5202f53`): dense ingredient list — `IngredientCard.tsx` rewritten as flat sections (no card chrome, no header column row); right-click section header opens a column-visibility menu (mirrors inventory's pattern, persists per-section to `bl_recipe_cols_<type>`, local-only); misc gets extra top gap.
+- **Pass 3** (`75a3b10`): visual unification — bottom 4 panels lose backgrounds/borders/radius; panel headers go from amber Bebas to muted gray small-caps (matching ingredient section labels); meta-bar pills flatten; sidebars unified to main bg; orphan `.ing-card*` CSS deleted.
+- **Pass 4** (`b09724e`): polish — bottom panel rows cluster label+value on the left with whitespace right; ingredient amounts unbolded; top metrics center-grouped (40 px gap, dropped maxWidth); DryHopModal font sizes +2 across the board.
 
-One-line gotcha: `brewlab/vite.config.ts` had `base: '/brewlab/'` (set for the old `nomodachi.github.io/brewlab/` subpath). Vercel serves at root, so the deployed bundle 404'd on every asset until `base` was changed to `'/'`. Worth remembering if anyone ever flips back to a subpath host — it'll need to flip back.
+**BSMX audit.** Reference test file: `hop1.bsmx` (Wakatu hop, `F_H_PRICE = 141.7476156`). Audited React `importBSMX` against HTML reference (lines 17058–17220). All three suspected areas — price conversion (× 35.274 ¥/oz → ¥/kg), notes preservation, core fields — match HTML verbatim. **No bugs in the importer.**
 
-### Supabase configured in the live app
+**Brew Day MASH panel divergence fix** (`3863570`). Symptom: bob2 recipe (250 kg grain) showed Mash Water = 1320 L (total) instead of 750 L (mash only); Sparge = 0 instead of ~570; Strike = 71.7°C instead of 74.6°C. Root cause: `MashProfileModal` initializes from a hard-coded in-memory `DEFAULT_PROFILE` (`{ ratio: 3.0, steps: [...] }`) but only persists to `bl_mash_<recipeId>` on Save click. `BrewDayTab` reads `bl_mash_<recipeId>` directly, gets null, passes null to `calcBrewDayTargets`, which falls back to the water-balance ratio formula `(preBoilVolL + grainAbsorbTotL) / totalGrainKg` ≈ 5.28 L/kg. Fix: extracted `DEFAULT_MASH_PROFILE` to `lib/calculations.ts`; `BrewDayTab` applies the same fallback when localStorage is null. Both views now compute against the same baseline before the user explicitly saves.
 
-Credentials entered into the deployed app via Settings → Connection. Sync verified — Vercel app pulls from the same Supabase project as local dev. Critically, **credentials stay per-user via in-app Settings, NOT Vercel env vars** — preserves the shareable single-brewery-per-DB model. Each brewery brings their own Supabase, configured in the running app.
-
-### OneDrive risk dismissed
-
-The standing concern that `.git/` could be corrupted by OneDrive sync was investigated and **dismissed**. The project path is `C:\Users\nesta\OneDrive\Desktop\Apps\Brewing App\brewlab` but OneDrive Backup is **OFF** for Desktop. Verified two ways:
-1. Right-click context menu on Desktop shows no OneDrive sync items / cloud icons.
-2. OneDrive Settings → Manage backup shows Desktop = "Not backed up".
-
-The OneDrive path is vestigial from a past Backup configuration. Project is NOT actively syncing. Removed from the pending list; do not re-raise.
+**Library price display fix** (`fe4766f`). Two bugs surfaced after the BSMX audit confirmed the importer was correct.
+- **Issue A — malt price empty for imported entries.** `LIB_FIELDS.malts` had 9 entries (`name, maltster, supplier, malt_type, malted, tariff, ebc, price, notes`) but `LIB_HEADERS.malts` had 7 columns. The two are zipped positionally at render time, so `malted`/`tariff` shifted every column from EBC onward — the visual "Price ¥/kg" column was actually rendering the `tariff` boolean (always empty for imports). Fix: removed `malted` and `tariff` from `LIB_FIELDS.malts` (still in modal as checkboxes via `LIB_FIELD_DEFS`). Existing imported data was correct in Supabase; just being read from the wrong field name.
+- **Issue B — yeast library missing price column.** Added Price ¥/pkg to `LIB_HEADERS.yeast` + `LIB_FIELDS.yeast`, plus a price field to `LIB_FIELD_DEFS.yeast` so the Add/Edit modal can edit it.
 
 ---
 
@@ -93,24 +95,21 @@ The OneDrive path is vestigial from a past Backup configuration. Project is NOT 
 
 ### Infrastructure
 
-- **HTML reference apps decision.** `brewlab-desktop.html` / `-tablet.html` / `-mobile.html` are still in the repo but not deployed. The React app supersedes them. Decide: delete from the repo, or re-host on Vercel as a separate project.
 - **GitHub work account appeal (low priority).** Code is safely on the `nestafett2` personal account. The suspended `nomodachi` work account can be appealed if/when convenient — not blocking anything.
 
-### Pull from CC at start of next session
-- Confirm the deletion overhaul unwind didn't break anything: right-click any recipe → "Delete" appears (no Archive), delete a recipe with data → tax records persist, undo within 8s restores everything.
-- Confirm CC's commits all landed.
+### Recipe + Brew Day follow-ups
+
+- **Brew Day tab card chrome.** Visual unification pass only touched the Recipe tab — Brew Day's MASH / BOIL / PITCH & OXYGEN panels still have card backgrounds + borders. Apply the same flatten treatment.
+- **WaterTab passes `mashProfile: null`** to `calcBrewDayTargets`. Same divergence as the Brew Day MASH bug; may be intentional for ion-blending math (water-balance ratio is what mash-pH calc actually wants there). Investigate before applying the same fallback.
+- **`BrewDayTab.mashProfile` `useMemo([recipeId])` stale dep.** Doesn't refetch when the modal saves while Brew Day is mounted. Likely masked by tab unmount/remount; real edge case.
+- **Top metric strip spacing.** Still feels off per user — minor follow-up.
 
 ### End-of-port queue (priority-ish order)
 - **15.8L volume offset** in Brew Day calcs (data quality bug — investigate before brewing real batches)
-- **BeerSmith bulk imports** — grains, hops, suppliers (needed for new-brewery onboarding)
-- **Vercel deployment** (when ready to share)
-- **13 pre-existing TS errors** — cleanup pass
+- **BSMX recipe import** — selective hand-pick from user's 632-recipe BeerSmith export (not bulk)
 - **Style Guide setting** — decide function or remove (5 min)
-- **Dead Save button on meta-bar**
-- **Yeast harvest "From Brew #" semantics** — free-text could be either tax serial or per-lineage counter
-- **Mash thickness override** on Recipe or Water tab
 - **Beer style guideline import** flow (BJCP 2025) into Style Guide modal
-- **Broader undo coverage** — current undo doesn't restore the 7 per-recipe blobs (ferm_log, brew_day, cold_side, water_chem, etc.); when deletion overhaul ships, audit if this is still a gap.
+- **Broader undo coverage** — current undo doesn't restore the 7 per-recipe blobs (ferm_log, brew_day, cold_side, water_chem, etc.).
 
 ### Deferred
 - **Brewhouses-as-tankCalib** — when 2nd brewhouse arrives
@@ -129,10 +128,10 @@ The OneDrive path is vestigial from a past Backup configuration. Project is NOT 
 
 ## Next Session Focus
 
-- **HTML reference apps decision** — delete from the repo, or re-host on Vercel as a separate project.
-- **BeerSmith bulk imports** — now more relevant since new breweries can be pointed at the live Vercel URL for trial.
+- **Brew Day card chrome flatten pass** — extends Recipe tab unification to Brew Day's MASH / BOIL / PITCH & OXYGEN panels.
+- **BSMX recipe import (selective)** — user has a 632-recipe BeerSmith export; wants hand-picked imports rather than bulk dump. Build a recipe-picker modal on top of the existing `importBSMX` infrastructure (already handles grain/hop/yeast/misc lib entries; recipe path is new).
 - **Eyeball the new recipe layout** in normal workflow (carryover from 7 May).
-- **Optional: calc-drift sanity check** from the 7 May TS fix — `calcOG` / `calcEBC` / `grainDiPh` now correctly parse string-typed legacy library numerics. Spot-check imported recipes; not urgent given no real brewery data.
+- **Optional: calc-drift sanity check** from the 7 May TS fix — `calcOG` / `calcEBC` / `grainDiPh` correctly parse string-typed legacy library numerics. Spot-check imported recipes; not urgent.
 - **15.8L volume offset** — only if you want a self-contained data-quality task.
 
 ---

@@ -65,7 +65,7 @@ Phase 2 (React PWA in `brewlab/` subfolder) — see START_HERE.md for status.
       components/             ← recipe/ brewday/ ferm/ packaging/ tax/ planner/ inventory/ libraries/ settings/ shared/
       pages/                  ← Desktop.tsx Tablet.tsx Mobile.tsx
       store/index.ts          ← Zustand global state
-      styles/theme.css        ← Design tokens
+      theme.css               ← Design tokens
       main.tsx
     public/manifest.json      ← PWA manifest
     migrations/               ← SQL migrations (apply via Supabase SQL editor)
@@ -99,7 +99,7 @@ Zustand for global state (recipes, libraries, settings, planner). Calculations a
 
 ## Design System
 
-Dark theme primary; light mode toggle on mobile and desktop. Tablet is dark only. Design tokens (colors, fonts, spacing) live in `brewlab/src/styles/theme.css` — edit there, don't duplicate values in components.
+Dark theme primary; light mode toggle on mobile and desktop. Tablet is dark only. Design tokens (colors, fonts, spacing) live in `brewlab/src/theme.css` — edit there, don't duplicate values in components.
 
 ---
 

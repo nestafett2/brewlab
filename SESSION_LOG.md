@@ -1,3 +1,122 @@
+# SESSION_LOG entry — 2026-05-09 (evening) — PWA polish, Recipe tab redesign, BSMX audit, Mash + Library fixes
+
+PWA polish, Recipe tab redesign across 4 passes, BSMX audit, Brew Day MASH bug fix, library price column fix. Six code commits + audit-only investigation.
+
+---
+
+## iPad PWA polish
+
+Three commits-worth of polish bundled under `a6ffa76`:
+
+**Safe-area inset.** iOS PWA in standalone mode rendered the status bar over the BREWLAB top nav. Cause: `viewport-fit=cover` was set in the meta tag, but `#root` had no safe-area padding. Added `padding: env(safe-area-inset-*)` for top/L/R + `box-sizing: border-box` so `height: 100%` stays in viewport. Initially included `padding-bottom` too, but on iPad that left a ~21 px gap above the home indicator (the tablet has no bottom-fixed UI). Removed bottom inset.
+
+**Manifest + service worker subpath cleanup.** `index.html` `<link rel="manifest">`, `main.tsx` SW registration, `manifest.json` `start_url`/`scope`/icon paths, and `sw.js` cache list were all hardcoded to `/brewlab/` from the GitHub Pages era. After morning's `vite.config.ts` `base` fix to `/`, these were 404'ing on Vercel. Updated all paths to root.
+
+**Theme color.** `manifest.json` `theme_color` was `#0a84ff` (vivid blue) — Chrome's desktop PWA title bar was rendering bright blue instead of matching the dark app. Updated to `#2c2c2e` (`var(--panel)`, what `.menu-bar` actually uses). Synced `<meta name="theme-color">` in `index.html` to the same value.
+
+**Caveat for follow-up:** after this lands, desktop PWA needs to be uninstalled and reinstalled — Chrome caches the manifest by URL and the URL itself changed (`/brewlab/manifest.json` → `/manifest.json`). Closing/reopening the window isn't enough.
+
+---
+
+## Recipe tab redesign — 4 passes
+
+A multi-pass redesign of the recipe tab layout, ending with a flat visual language matching the recipe-preview pane.
+
+### Pass 1 (`fbcd9c6`) — top strip + PROCESS panel + TOTALS DH/WP per-litre
+
+The 6-pill strip above the ingredient cards (BATCH INTO FV / BATCH INTO WP / EXPECTED LOSS / BOIL / BH EFF / WP TEMP) was redundant — the BATCH-related ones are display values that don't need pill chrome, and the process-related ones (Boil, BH Eff, WP Temp) are inputs that are awkwardly stuffed into the strip.
+
+Replaced with a 5-stat metric strip in the recipe-preview style: BATCH (editable input) / GRAIN / HOPS / IBU / ABV. The 5 process/volume fields moved into a new PROCESS panel in the bottom row, alongside STYLE / TOTALS / MEASURED (now 4 columns).
+
+TOTALS panel changes: dropped Total Grains and Total Hops (now in top strip), added DH G/L and WP G/L. New pure helpers `calcDryHopGperL(ingredients, batchL)` and `calcWhirlpoolGperL(ingredients, batchIntoWpL)` in `lib/calculations.ts`. Distinct from existing private `totalDryHopGrams` (which counts ferm-meta logged actuals for DH pH prediction); these read planned recipe amounts.
+
+Verified mobile/tablet pages don't import `RecipeTab` or any of its panels — separate layouts, no follow-up needed.
+
+### Pass 2 (`5202f53`) — dense ingredient list
+
+Replaced the card-bordered ingredient sections with flat sections: dot + small-caps gray label + inline count + thin divider, then dense rows (~32 px target, padding `4px 8px`). Dropped the column-header row (`# AMOUNT NAME USE TIME IBU/% COST`) entirely.
+
+**Per-section column visibility menu.** Right-click on the section header opens a popover with a checkbox per column. Persists to `bl_recipe_cols_<type>` (local-only via direct localStorage; same pattern as inventory's `bl_inv_cols_<sec>`). Defaults: amount/name/use always shown; time/ibu shown for hops/misc; pct shown for grains; **cost and color/aa hidden by default** — user re-enables on demand.
+
+Misc section gets `extraTopGap` prop (12 px) for visual separation from yeast/hops/grains above it.
+
+**Decision held:** amount remains read-only display. Inline editing was removed 2026-05-04 because accidental edits on tax-relevant amounts were too easy. Edits go through the double-click Edit modal. The pass-2 prompt suggested "editable input, same behavior as today" — flagged the contradiction and preserved current read-only behavior.
+
+### Pass 3 (`75a3b10`) — visual unification
+
+Flattened card chrome across the recipe page to match the recipe-preview pane's flat language:
+
+- **Bottom 4 panels** (STYLE / TOTALS / PROCESS / MEASURED): dropped `panel` background, border, border-radius. Headers go from amber Bebas Neue to muted gray small-caps (font weight 700, letterSpacing 0.08em) — matching ingredient section labels.
+- **Recipe meta bar** (TAX BATCH # / BREW DATE / VERSION / BREW #): meta-pill divs flattened — no bg, no border-radius, padding 0. Tax Batch # input gets amber text color to keep tax-relevance prominence.
+- **Top metric strip**: dropped panel-2 background. Kept thin top/bottom 1px borders.
+- **Sidebars** (left recipe browser + right ActionStack): unified to main bg (`var(--bg)`). Kept 1px vertical dividers between sidebars and content.
+- **Section header divider** removed from `IngredientCard.headerStyle`.
+
+GC'd orphaned CSS classes: `.ing-card`, `.ing-card-header`, `.ing-card-dot`, `.ing-card-label`, `.ing-card-count`, `.ing-card table thead th` (all confirmed unused outside `theme.css` after pass 2's IngredientCard rewrite).
+
+### Pass 4 (`b09724e`) — polish
+
+Four targeted fixes after the unification:
+
+- **Bottom panels were running together** — values right-aligned to the column edge sat flush against the next column's label. Switched `rowStyle` from `justify-content: space-between` to flex-start with `gap: 20`. Labels and values cluster left, whitespace fills the right of each column.
+- **Ingredient amounts unbolded** — `cellAmountStyle.fontWeight` 600 → 400. Matches the rest of the table number styling.
+- **Top metric strip grouped centrally** — was `justify-content: space-around` distributing across full width; switched to `center` with `gap: 40`, dropped `maxWidth: 1000`. Reads like the recipe-preview metric bar.
+- **DryHopModal fonts +2 across the board** — the modal was using fontSize 8/9/10/12 (mostly 8s for labels, 10s for body). Bumped via 4 sequential `replace_all` in reverse order (12→14, then 10→12, 9→11, 8→10) to avoid compound rewrites. Final state: 14 for header / close button, 12 for body + inputs + hop names, 11 for slot header + add buttons + empty-state, 10 for section labels + column heads + footer status.
+
+---
+
+## BSMX importer audit
+
+User suspected prices weren't importing correctly from BeerSmith. Reference test file: `hop1.bsmx` with one Wakatu entry, `F_H_PRICE = 141.7476156` (¥/oz; should convert to ~5000 ¥/kg).
+
+Audited React `importBSMX` (`src/components/libraries/libraryImport.ts:198`) against HTML reference (`brewlab-desktop.html:17058–17220`). All three suspected areas check out:
+
+- **Price conversion**: `F_G_PRICE` and `F_H_PRICE` both `Math.round(pricePerOz * 35.274)` ✓; `F_Y_PRICE` correctly NOT converted (¥/package, not ¥/kg).
+- **Notes preservation**: all four sections preserve `F_*_NOTES` via `el.textContent.trim()`.
+- **Core fields**: name, AA, beta, origin (hops); equivalents for grains/yeast/misc — all present and matching HTML.
+
+**Result: no diff needed.** The importer is a verbatim port. The Wakatu entry would persist as `price: 5000`. If the user is seeing wrong/empty prices in the UI, the bug is downstream — flagged three places to look (library row rendering, recipe cost calc, Supabase round-trip).
+
+The downstream investigation later turned up the malt-column-shift bug (see Library price fix below). The audit was correct: importer was fine; renderer was reading the wrong field.
+
+---
+
+## Brew Day MASH panel divergence fix (`3863570`)
+
+**Symptom.** bob2 recipe with 250 kg grain. Mash Profile modal showed correct values (Mash 750 L, Sparge 570 L, Total 1320.5 L, Strike 74.6°C). Brew Day's MASH panel showed wrong values (Mash 1320.5 L, Sparge 0, Strike 71.7°C, Water Ratio 5.28 L/kg, "No mash profile saved").
+
+**Root cause.** Two-state divergence:
+- `MashProfileModal` initializes form state from `lsGet('bl_mash_<recipeId>') ?? DEFAULT_PROFILE`. The default has `ratio: 3.0` and standard steps. Modal computes its display via `calcBrewDayTargets` against this in-memory ratio. Persistence happens **only on Save click** (`lsSet`).
+- `BrewDayTab` reads `lsGet('bl_mash_<recipeId>')` directly with no fallback, and passes the result (often null when the user hasn't explicitly saved) to `calcBrewDayTargets`. The calc's mashRatio fallback then takes the **water-balance** branch: `mashRatioLkg = (preBoilVolL + grainAbsorbTotL) / totalGrainKg` (`calculations.ts:528–534`). For batchL=1050, grain=250, this evaluates to ~5.28 L/kg — total water, not mash water. Cascade: mashWaterL = 1320 (the TOTAL), spargeVolL ≈ 0, strikeTempC computed against the wrong mashWaterL.
+
+Numerical verification matched the user's reported wrong values exactly (within rounding).
+
+**Fix.** Extracted `DEFAULT_MASH_PROFILE` from `MashProfileModal.tsx` to `lib/calculations.ts` as a named export. `BrewDayTab` applies it as a fallback: `lsGet(...) ?? DEFAULT_MASH_PROFILE`. Both views now compute against the same baseline (ratio 3.0, std steps) before the user explicitly saves.
+
+**Out of scope, flagged.** `WaterTab.tsx:122–124` explicitly passes `mashProfile: null` for water-chem calcs — same divergence applies, but might be intentional (water-balance ratio could be what mash-pH calc wants there). And `BrewDayTab.tsx:99–101` `useMemo([recipeId])` won't refetch when the modal saves while BrewDayTab is mounted — likely masked by tab remount, but a real edge case.
+
+---
+
+## Library price display fix (`fe4766f`)
+
+Direct follow-up from the BSMX audit. User reported malt prices empty for imported entries.
+
+**Issue A — malt price empty.** Length mismatch in `libraryShared.ts`: `LIB_HEADERS.malts` had 7 columns, but `LIB_FIELDS.malts` had 9 entries (`'name', 'maltster', 'supplier', 'malt_type', 'malted', 'tariff', 'ebc', 'price', 'notes'`). The two are zipped positionally at render time (`LibrariesPage.tsx:471` iterates `fields`). For malts, that meant:
+
+| Header (col idx) | Reads field | Visible result |
+|---|---|---|
+| EBC | `malted` (boolean) | ✓ or — |
+| Price ¥/kg | `tariff` (boolean) | ✓ or — *(empty for all BSMX imports)* |
+| Notes | `ebc` (number) | EBC shown in notes column |
+
+`malted` and `tariff` are checkbox fields meant for the Add/Edit modal (`LIB_FIELD_DEFS.malts`); they shouldn't be table columns. Fix: remove from `LIB_FIELDS.malts` (modal coverage unchanged). Existing data in Supabase was correct all along — just being read from the wrong field name.
+
+**Issue B — yeast library missing price column.** Added `'Price ¥/pkg'` to `LIB_HEADERS.yeast` and `'price'` to `LIB_FIELDS.yeast`, plus a price field to `LIB_FIELD_DEFS.yeast` so the Add/Edit modal can edit it. Bulk-edit modal already had it (`LIB_BULK_FIELD_DEFS.yeast`).
+
+Hops/misc were already correct (lengths match) and untouched.
+
+---
+
 # SESSION_LOG entry — 2026-05-09
 
 Infrastructure-only session. No app feature work. Got BrewLab from local-only to live on a public URL with working sync.
