@@ -740,13 +740,12 @@ const topStripStyle: React.CSSProperties = {
 };
 
 const topStripInnerStyle: React.CSSProperties = {
-  maxWidth: 1000,
   margin: '0 auto',
   padding: '10px 16px',
   display: 'flex',
   alignItems: 'center',
-  justifyContent: 'space-around',
-  gap: 24,
+  justifyContent: 'center',
+  gap: 40,
 };
 
 const metricItemStyle: React.CSSProperties = {
@@ -810,8 +809,7 @@ const panelBodyStyle: React.CSSProperties = {
 const rowStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'baseline',
-  justifyContent: 'space-between',
-  gap: 10,
+  gap: 20,
 };
 
 const rowLabelStyle: React.CSSProperties = {

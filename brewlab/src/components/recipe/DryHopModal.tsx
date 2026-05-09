@@ -129,7 +129,7 @@ export default function DryHopModal({ slot, ingredients, meta, onSave, onDelete,
   // ── Render ──────────────────────────────────────────────────────────────
   const inputStyle: React.CSSProperties = {
     background: 'var(--panel2)', border: '1px solid var(--border2)', color: 'var(--text)',
-    fontFamily: 'var(--mono)', fontSize: 10, padding: '3px 6px', outline: 'none',
+    fontFamily: 'var(--mono)', fontSize: 12, padding: '3px 6px', outline: 'none',
   };
 
   return (
@@ -143,24 +143,24 @@ export default function DryHopModal({ slot, ingredients, meta, onSave, onDelete,
       >
         {/* Header */}
         <div style={{ padding: '12px 16px', background: 'var(--panel2)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase' as const, color: 'var(--amber)' }}>
+          <span style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase' as const, color: 'var(--amber)' }}>
             DRY HOP {slot}
           </span>
-          <button className="btn sm" onClick={onClose} style={{ fontSize: 12, padding: '0 6px' }}>x</button>
+          <button className="btn sm" onClick={onClose} style={{ fontSize: 14, padding: '0 6px' }}>x</button>
         </div>
 
         {/* Date / Temp / Notes */}
         <div style={{ padding: '12px 16px', display: 'flex', gap: 12, borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-            <label style={{ fontSize: 8, color: 'var(--text-muted)', letterSpacing: 0.5 }}>DATE</label>
+            <label style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 0.5 }}>DATE</label>
             <input type="text" placeholder="YYYY-MM-DD" value={date} onChange={e => setDate(e.target.value)} style={{ ...inputStyle, width: 130 }} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <label style={{ fontSize: 8, color: 'var(--text-muted)', letterSpacing: 0.5 }}>TEMP (C)</label>
+            <label style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 0.5 }}>TEMP (C)</label>
             <input type="text" placeholder="--" value={temp} onChange={e => setTemp(e.target.value)} style={{ ...inputStyle, width: 70 }} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
-            <label style={{ fontSize: 8, color: 'var(--text-muted)', letterSpacing: 0.5 }}>NOTES</label>
+            <label style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: 0.5 }}>NOTES</label>
             <input type="text" placeholder="--" value={notes} onChange={e => setNotes(e.target.value)} style={{ ...inputStyle, width: '100%' }} />
           </div>
         </div>
@@ -168,34 +168,34 @@ export default function DryHopModal({ slot, ingredients, meta, onSave, onDelete,
         {/* Body — scrollable */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {/* Recipe hops */}
-          <div style={{ padding: '8px 16px 4px', fontSize: 8, letterSpacing: 1, color: 'var(--text-muted)' }}>
+          <div style={{ padding: '8px 16px 4px', fontSize: 10, letterSpacing: 1, color: 'var(--text-muted)' }}>
             DRY HOP ADDITIONS FROM RECIPE
           </div>
           <div style={{ padding: '0 16px 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
             {recipeHops.length === 0 ? (
-              <div style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)', padding: '4px 0' }}>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-muted)', padding: '4px 0' }}>
                 No dry hop additions in this recipe.
               </div>
             ) : (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px', gap: 2, marginBottom: 4 }}>
-                  <span style={{ fontSize: 8, color: 'var(--text-muted)' }}>HOP</span>
-                  <span style={{ fontSize: 8, color: 'var(--text-muted)', textAlign: 'right' }}>RECIPE (g)</span>
-                  <span style={{ fontSize: 8, color: 'var(--text-muted)', textAlign: 'right' }}>ACTUAL (g)</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>HOP</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'right' }}>RECIPE (g)</span>
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'right' }}>ACTUAL (g)</span>
                 </div>
                 {recipeHops.map(({ hop, totalG, split, plannedG }) => {
                   const aaStr = hop.extra ? ` (${parseFloat(hop.extra).toFixed(1)}% AA)` : '';
                   return (
                     <div key={hop.id} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px', gap: 2, alignItems: 'center', padding: '5px 0', borderTop: '1px solid var(--border)' }}>
-                      <span style={{ fontSize: 10, color: 'var(--text)' }}>
+                      <span style={{ fontSize: 12, color: 'var(--text)' }}>
                         {hop.name}{aaStr}
                         {split && (
-                          <span style={{ fontSize: 8, color: 'var(--amber)', marginLeft: 4 }}>
+                          <span style={{ fontSize: 10, color: 'var(--amber)', marginLeft: 4 }}>
                             (split of {totalG.toFixed(0)}g total)
                           </span>
                         )}
                       </span>
-                      <span style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'right' }}>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'right' }}>
                         {plannedG.toFixed(0)}
                       </span>
                       <input
@@ -214,12 +214,12 @@ export default function DryHopModal({ slot, ingredients, meta, onSave, onDelete,
 
           {/* Extra hops */}
           <div style={{ padding: '6px 16px 4px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 8, letterSpacing: 1, color: 'var(--text-muted)' }}>ADDITIONAL HOPS</span>
-            <button className="btn sm" onClick={addExtra} style={{ fontSize: 9, padding: '2px 8px' }}>+ Add Hop</button>
+            <span style={{ fontSize: 10, letterSpacing: 1, color: 'var(--text-muted)' }}>ADDITIONAL HOPS</span>
+            <button className="btn sm" onClick={addExtra} style={{ fontSize: 11, padding: '2px 8px' }}>+ Add Hop</button>
           </div>
           <div style={{ padding: '0 16px 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
             {extraHops.length === 0 ? (
-              <div style={{ fontSize: 9, color: 'var(--text-muted)', padding: '2px 0' }}>None</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '2px 0' }}>None</div>
             ) : (
               extraHops.map((row, idx) => (
                 <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 90px 24px', gap: 6, alignItems: 'center', padding: '4px 0', borderTop: '1px solid var(--border)' }}>
@@ -233,12 +233,12 @@ export default function DryHopModal({ slot, ingredients, meta, onSave, onDelete,
 
           {/* Adjuncts */}
           <div style={{ padding: '6px 16px 4px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 8, letterSpacing: 1, color: 'var(--text-muted)' }}>ADJUNCTS</span>
-            <button className="btn sm" onClick={addAdj} style={{ fontSize: 9, padding: '2px 8px' }}>+ Add Adjunct</button>
+            <span style={{ fontSize: 10, letterSpacing: 1, color: 'var(--text-muted)' }}>ADJUNCTS</span>
+            <button className="btn sm" onClick={addAdj} style={{ fontSize: 11, padding: '2px 8px' }}>+ Add Adjunct</button>
           </div>
           <div style={{ padding: '0 16px 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
             {adjuncts.length === 0 ? (
-              <div style={{ fontSize: 9, color: 'var(--text-muted)', padding: '2px 0' }}>None</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '2px 0' }}>None</div>
             ) : (
               adjuncts.map((row, idx) => (
                 <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 52px 24px', gap: 6, alignItems: 'center', padding: '4px 0', borderTop: '1px solid var(--border)' }}>
@@ -256,10 +256,10 @@ export default function DryHopModal({ slot, ingredients, meta, onSave, onDelete,
 
         {/* Footer */}
         <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 8, color: alreadyRecorded ? 'var(--green)' : 'var(--text-muted)', flex: 1, minWidth: 80 }}>
+          <span style={{ fontSize: 10, color: alreadyRecorded ? 'var(--green)' : 'var(--text-muted)', flex: 1, minWidth: 80 }}>
             {alreadyRecorded ? `Recorded on ${recordedDate}` : 'Not yet recorded to inventory'}
           </span>
-          <button className="btn sm danger" onClick={handleDelete} title="Delete this dry hop entry" style={{ fontSize: 10 }}>
+          <button className="btn sm danger" onClick={handleDelete} title="Delete this dry hop entry" style={{ fontSize: 12 }}>
             🗑 Delete
           </button>
           <button className="btn" onClick={handleSave}>Save</button>

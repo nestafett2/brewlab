@@ -452,7 +452,7 @@ const cellAmountStyle: React.CSSProperties = {
   fontFamily: 'var(--mono)',
   fontSize: 13,
   color: 'var(--text)',
-  fontWeight: 600,
+  fontWeight: 400,
 };
 
 const cellNameStyle: React.CSSProperties = {
