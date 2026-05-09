@@ -422,7 +422,7 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
               <IngredientCard recipeId={recipeId} type="grain" label="GRAINS & FERMENTABLES" dotColor="#c8a060" items={grains} grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} />
               <IngredientCard recipeId={recipeId} type="hop"   label="HOPS"                  dotColor="#5ab568" items={hops}   grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} onOpenSplit={id => setDhSplitIngId(id)} />
               <IngredientCard recipeId={recipeId} type="yeast" label="YEAST"                 dotColor="#c060c0" items={yeast}  grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} />
-              <IngredientCard recipeId={recipeId} type="misc"  label="MISC"                  dotColor="#808080" items={misc}   grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} />
+              <IngredientCard recipeId={recipeId} type="misc"  label="MISC"                  dotColor="#808080" items={misc}   grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} extraTopGap />
             </div>
           </div>
         </div>
