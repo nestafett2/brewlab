@@ -25,6 +25,7 @@ import {
   calcDhPhPrediction,
   fvVolume,
   L_PER_BBL,
+  DEFAULT_MASH_PROFILE,
 } from '../../lib/calculations';
 import type { BrewDayData, MashReadingCol, MashProfile } from '../../types';
 import ChecklistStrip from './ChecklistStrip';
@@ -95,8 +96,13 @@ export default function BrewDayTab({ recipeId }: Props) {
   }, [equipProfiles, recipeProfiles?.equip]);
 
   // ── Per-recipe mash profile (not in store yet — read direct from LS) ─────
+  // Fall back to DEFAULT_MASH_PROFILE when nothing is saved so this tab
+  // computes against the same baseline (ratio 3.0, std steps) the Mash
+  // Profile modal renders before the user explicitly clicks Save.
+  // Without this fallback, calcBrewDayTargets takes its water-balance
+  // path and produces TOTAL water as "Mash Water" with sparge ≈ 0.
   const mashProfile = useMemo(
-    () => lsGet<MashProfile | null>(`bl_mash_${recipeId}`, null),
+    () => lsGet<MashProfile | null>(`bl_mash_${recipeId}`, null) ?? DEFAULT_MASH_PROFILE,
     [recipeId],
   );
 

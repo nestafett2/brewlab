@@ -21,7 +21,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useStore } from '../../store';
 import { lsGet, lsSet } from '../../lib/storage';
-import { calcBrewDayTargets } from '../../lib/calculations';
+import { calcBrewDayTargets, DEFAULT_MASH_PROFILE } from '../../lib/calculations';
 import { makeId } from '../../lib/utils';
 import type {
   Recipe, Ingredient, MashProfile, MashStep, MashStepType,
@@ -40,18 +40,6 @@ interface Props {
 const MASH_STEP_TYPES: MashStepType[] = [
   'Infusion', 'Step Mash', 'Decoction', 'Double Decoction', 'Mash Out', 'Temperature Rest',
 ];
-
-// HTML line 17970 — verbatim seed.
-const DEFAULT_PROFILE: MashProfile = {
-  id: '',  // unused for per-recipe blob
-  name: '',
-  ratio: 3.0,
-  steps: [
-    { type: 'Infusion', temp: 68, time: 60 },
-    { type: 'Mash Out', temp: 75, time: 10 },
-  ],
-  notes: '',
-};
 
 export default function MashProfileModal({ recipeId, recipe, ingredients, onClose }: Props) {
   const settings      = useStore(s => s.settings);
@@ -74,14 +62,14 @@ export default function MashProfileModal({ recipeId, recipe, ingredients, onClos
   // ── Local form state ─────────────────────────────────────────────────
   const initial = useMemo(() => {
     const persisted = lsGet<MashProfile | null>(`bl_mash_${recipeId}`, null);
-    return persisted ?? DEFAULT_PROFILE;
+    return persisted ?? DEFAULT_MASH_PROFILE;
   }, [recipeId]);
 
   const [ratio, setRatio] = useState<string>(
     initial.ratio != null ? String(initial.ratio) : '3.0',
   );
   const [steps, setSteps] = useState<MashStep[]>(
-    initial.steps?.length ? initial.steps : DEFAULT_PROFILE.steps,
+    initial.steps?.length ? initial.steps : DEFAULT_MASH_PROFILE.steps,
   );
   const [notes, setNotes] = useState<string>(initial.notes ?? '');
 
@@ -136,7 +124,7 @@ export default function MashProfileModal({ recipeId, recipe, ingredients, onClos
 
   // ── Action handlers ──────────────────────────────────────────────────
   const buildProfileBlob = (): MashProfile => {
-    const ratioNum = parseFloat(ratio) || DEFAULT_PROFILE.ratio!;
+    const ratioNum = parseFloat(ratio) || DEFAULT_MASH_PROFILE.ratio!;
     return { id: '', name: '', ratio: ratioNum, steps, notes };
   };
 
@@ -147,9 +135,9 @@ export default function MashProfileModal({ recipeId, recipe, ingredients, onClos
 
   const handleReset = () => {
     if (!window.confirm('Reset mash profile to defaults?')) return;
-    setRatio(String(DEFAULT_PROFILE.ratio));
-    setSteps(DEFAULT_PROFILE.steps);
-    setNotes(DEFAULT_PROFILE.notes ?? '');
+    setRatio(String(DEFAULT_MASH_PROFILE.ratio));
+    setSteps(DEFAULT_MASH_PROFILE.steps);
+    setNotes(DEFAULT_MASH_PROFILE.notes ?? '');
   };
 
   const handleLoadFromLib = (id: string) => {
@@ -157,14 +145,14 @@ export default function MashProfileModal({ recipeId, recipe, ingredients, onClos
     const p = mashProfiles.find(mp => mp.id === id);
     if (!p) return;
     setRatio(p.ratio != null ? String(p.ratio) : '3.0');
-    setSteps(p.steps?.length ? p.steps : DEFAULT_PROFILE.steps);
+    setSteps(p.steps?.length ? p.steps : DEFAULT_MASH_PROFILE.steps);
     setNotes(p.notes ?? '');
   };
 
   const handleSaveAsProfile = () => {
     const name = window.prompt('Save as profile name:');
     if (!name || !name.trim()) return;
-    const ratioNum = parseFloat(ratio) || DEFAULT_PROFILE.ratio!;
+    const ratioNum = parseFloat(ratio) || DEFAULT_MASH_PROFILE.ratio!;
     const next: MashProfile = {
       id: makeId(),
       name: name.trim(),

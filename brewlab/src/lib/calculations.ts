@@ -379,6 +379,24 @@ export function calcOrderQty(shortfall: number, type: IngredientType): number {
 
 const MASH_TEMP_DEFAULT_C = 68;
 const GRAIN_TEMP_DEFAULT_C = 20;
+
+/**
+ * Default mash profile — applied when a recipe has never had its mash
+ * profile saved. Shared by `MashProfileModal` (initial form state) and
+ * `BrewDayTab` (live-calc fallback) so both render the same numbers
+ * before the user explicitly saves anything. Verbatim from HTML
+ * `getDefaultMashProfile` (brewlab-desktop.html:17970).
+ */
+export const DEFAULT_MASH_PROFILE: MashProfile = {
+  id: '',
+  name: '',
+  ratio: 3.0,
+  steps: [
+    { type: 'Infusion', temp: 68, time: 60 },
+    { type: 'Mash Out', temp: 75, time: 10 },
+  ],
+  notes: '',
+};
 const TRUB_LOSS_DEFAULT_L = 40;
 const BOIL_OFF_RATE_DEFAULT_LH = 45;
 const GRAIN_ABSORB_DEFAULT_LKG = 0.75;
