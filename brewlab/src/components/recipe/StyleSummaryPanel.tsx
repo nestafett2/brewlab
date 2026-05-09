@@ -72,7 +72,7 @@ export default function StyleSummaryPanel({ recipe, stats }: Props) {
         >⊞</span>
       </div>
 
-      <div className="style-guide" style={{ padding: '10px 12px 12px' }}>
+      <div className="style-guide" style={{ paddingTop: 4 }}>
         <div ref={styleWrapRef} style={{ position: 'relative', marginBottom: 10 }}>
           <div
             onClick={() => setStyleOpen(o => !o)}
@@ -260,9 +260,6 @@ const rangeTextStyle: React.CSSProperties = {
 };
 
 const panelStyle: React.CSSProperties = {
-  background: 'var(--panel)',
-  border: '1px solid var(--border)',
-  borderRadius: 8,
   display: 'flex',
   flexDirection: 'column',
   minWidth: 0,
@@ -272,12 +269,11 @@ const panelHeaderStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
-  padding: '8px 12px',
-  borderBottom: '1px solid var(--border)',
-  fontFamily: 'var(--display)',
+  padding: '0 0 6px',
   fontSize: 11,
-  letterSpacing: 2,
-  color: 'var(--amber)',
+  fontWeight: 700,
+  letterSpacing: '0.08em',
+  color: 'var(--text-muted)',
   textTransform: 'uppercase' as const,
 };
 

@@ -312,7 +312,7 @@ body {
 /* --- Recipe Meta Bar --- */
 .recipe-meta-bar {
   height: 56px;
-  background: var(--panel);
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   display: flex;
@@ -324,11 +324,9 @@ body {
 .meta-pill {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  background: var(--panel2);
-  border-radius: 10px;
-  padding: 5px 12px;
-  min-width: 64px;
+  align-items: flex-start;
+  padding: 0;
+  min-width: 56px;
   cursor: default;
 }
 
@@ -365,7 +363,7 @@ body {
   font-size: 13px;
   font-weight: 600;
   outline: none;
-  text-align: center;
+  text-align: left;
   padding: 0;
 }
 
@@ -408,7 +406,7 @@ body {
 
 .recipe-browser {
   width: 220px;
-  background: var(--panel);
+  background: var(--bg);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -425,7 +423,7 @@ body {
 }
 
 .recipe-browser-header {
-  background: var(--panel2);
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
   padding: 8px 10px;
   display: flex;
@@ -764,54 +762,6 @@ tbody td {
 .td-pct { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
 .td-cost { font-family: var(--mono); font-size: 12px; color: var(--text-dim); text-align: right; }
 .td-cost.hi { color: var(--text); }
-
-/* Ingredient cards */
-.ing-card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  overflow: hidden;
-}
-
-.ing-card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
-}
-
-.ing-card-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.ing-card-label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  flex: 1;
-}
-
-.ing-card-count {
-  background: var(--panel2);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
-.ing-card table thead th {
-  background: var(--panel2);
-  font-size: 10px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
-}
 
 /* Style guide bars */
 .style-guide {

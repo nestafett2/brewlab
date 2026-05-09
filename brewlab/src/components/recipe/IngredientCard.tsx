@@ -386,7 +386,6 @@ const headerStyle: React.CSSProperties = {
   alignItems: 'center',
   gap: 8,
   padding: '4px 4px 6px',
-  borderBottom: '1px solid var(--border)',
   cursor: 'context-menu',
 };
 

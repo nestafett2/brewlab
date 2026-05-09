@@ -418,7 +418,7 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
 
         <div className="content" style={contentStyle}>
           <div className="table-wrap" style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
-            <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 1000 }}>
+            <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%', maxWidth: 1000 }}>
               <IngredientCard recipeId={recipeId} type="grain" label="GRAINS & FERMENTABLES" dotColor="#c8a060" items={grains} grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} />
               <IngredientCard recipeId={recipeId} type="hop"   label="HOPS"                  dotColor="#5ab568" items={hops}   grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} onOpenSplit={id => setDhSplitIngId(id)} />
               <IngredientCard recipeId={recipeId} type="yeast" label="YEAST"                 dotColor="#c060c0" items={yeast}  grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} />
@@ -731,10 +731,9 @@ const contentStyle: React.CSSProperties = {
 };
 
 // Top metric strip — 5 stats matching the recipe-preview metric bar.
-// BATCH editable; GRAIN/HOPS/IBU/ABV computed read-only. panel2
-// background reads as an info strip rather than chrome.
+// BATCH editable; GRAIN/HOPS/IBU/ABV computed read-only. Flat — sits on
+// the main bg with thin top/bottom dividers as the only chrome.
 const topStripStyle: React.CSSProperties = {
-  background: 'var(--panel2)',
   borderTop: '1px solid var(--border)',
   borderBottom: '1px solid var(--border)',
   flexShrink: 0,
@@ -743,7 +742,7 @@ const topStripStyle: React.CSSProperties = {
 const topStripInnerStyle: React.CSSProperties = {
   maxWidth: 1000,
   margin: '0 auto',
-  padding: '8px 16px',
+  padding: '10px 16px',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-around',
@@ -788,26 +787,21 @@ const bottomRowStyle: React.CSSProperties = {
 // ── Panel styles ───────────────────────────────────────────────────────
 
 const panelStyle: React.CSSProperties = {
-  background: 'var(--panel)',
-  border: '1px solid var(--border)',
-  borderRadius: 8,
   display: 'flex',
   flexDirection: 'column',
   minWidth: 0,
 };
 
 const panelHeaderStyle: React.CSSProperties = {
-  padding: '8px 12px',
-  borderBottom: '1px solid var(--border)',
-  fontFamily: 'var(--display)',
+  padding: '0 0 6px',
   fontSize: 11,
-  letterSpacing: 2,
-  color: 'var(--amber)',
+  fontWeight: 700,
+  letterSpacing: '0.08em',
+  color: 'var(--text-muted)',
   textTransform: 'uppercase' as const,
 };
 
 const panelBodyStyle: React.CSSProperties = {
-  padding: '8px 12px',
   display: 'flex',
   flexDirection: 'column',
   gap: 4,

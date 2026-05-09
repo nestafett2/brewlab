@@ -704,7 +704,7 @@ export default function Desktop() {
                 type="text"
                 value={selectedRecipeForMeta.taxBatch || ''}
                 onChange={e => updateRecipe(selectedRecipeForMeta.id, { taxBatch: e.target.value })}
-                style={{ width: 48 }}
+                style={{ width: 48, color: 'var(--amber)' }}
                 placeholder="—"
                 title="Brewery-wide manual NTA tax serial (e.g. 384). Brewery-wide unique."
               />
