@@ -22,15 +22,19 @@ export type LibEntry = MaltLib | HopLib | YeastLib | MiscLib;
 export const LIB_HEADERS: Record<LibSection, string[]> = {
   malts: ['Name', 'Maltster', 'Supplier', 'Type', 'EBC', 'Price ¥/kg', 'Notes'],
   hops:  ['Name', 'AA%', 'Beta%', 'Origin', 'Supplier', 'Price ¥/kg', 'Lot #', 'Notes'],
-  yeast: ['Name', 'Lab', 'Atten%', 'Temp Min', 'Temp Max', 'Notes'],
+  yeast: ['Name', 'Lab', 'Atten%', 'Temp Min', 'Temp Max', 'Price ¥/pkg', 'Notes'],
   misc:  ['Name', 'Type', 'Use', 'Happoshu', 'Notes'],
 };
 
 // ── Entry field keys per table column (HTML 16626) ────────────────────
+// Lengths MUST match LIB_HEADERS — these are zipped positionally at the
+// table-render call site (LibrariesPage table body iterates LIB_FIELDS).
+// `malted` / `tariff` are checkbox-only fields exposed via LIB_FIELD_DEFS
+// for the Add/Edit modal; they are deliberately NOT table columns.
 export const LIB_FIELDS: Record<LibSection, string[]> = {
-  malts: ['name', 'maltster', 'supplier', 'malt_type', 'malted', 'tariff', 'ebc', 'price', 'notes'],
+  malts: ['name', 'maltster', 'supplier', 'malt_type', 'ebc', 'price', 'notes'],
   hops:  ['name', 'aa', 'beta', 'origin', 'supplier', 'price', 'lot_num', 'notes'],
-  yeast: ['name', 'lab', 'atten', 'temp_min', 'temp_max', 'notes'],
+  yeast: ['name', 'lab', 'atten', 'temp_min', 'temp_max', 'price', 'notes'],
   misc:  ['name', 'misc_type', 'use', 'happoshu_trigger', 'price', 'notes'],
 };
 
@@ -98,6 +102,7 @@ export const LIB_FIELD_DEFS: Record<LibSection, FieldDef[]> = {
     { key: 'atten',      label: 'Atten%',       type: 'number' },
     { key: 'temp_min',   label: 'Min Temp°C',   type: 'number' },
     { key: 'temp_max',   label: 'Max Temp°C',   type: 'number' },
+    { key: 'price',      label: 'Price (¥/pkg)', type: 'number' },
   ],
   misc: [
     { key: 'name',             label: 'Name',         type: 'text', wide: true },
