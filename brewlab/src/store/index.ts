@@ -909,7 +909,7 @@ export const useStore = create<BrewLabState>((set, get) => ({
       ...source,
       id: newId,
       lineageId: newId,                            // fresh lineage
-      name: (source.name || '') + ' (copy)',
+      name: '',
       beerName: (source.beerName || source.name || '') + ' (copy)',
       brewDate: today(),
       taxBatch: '',                                // unique-constraint-safe
