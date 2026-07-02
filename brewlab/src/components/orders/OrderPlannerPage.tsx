@@ -134,7 +134,7 @@ export default function OrderPlannerPage() {
             >{s.label}</button>
           ))}
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <button
             className="btn sm"
             disabled
@@ -175,6 +175,7 @@ const toolbarStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 6,
   padding: '6px 12px', borderBottom: '1px solid var(--border)',
   background: 'var(--panel)', flexShrink: 0,
+  flexWrap: 'wrap', rowGap: 4,
 };
 
 const titleStyle: React.CSSProperties = {
