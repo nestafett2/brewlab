@@ -140,52 +140,26 @@ function buildMash(inputs: BrewDaySheetInputs): string {
   const targetPh = waterChem.targetPh ? String(waterChem.targetPh) : EM_DASH;
 
   const steps = mashProfile?.steps ?? [];
-  // Horizontal card layout for ≤2 steps (fits comfortably side by side);
-  // falls back to the vertical table for longer step programs.
   const stepsSectionHtml = steps.length === 0
     ? '<div class="bds-row"><span class="muted">No mash profile assigned — fill in by hand.</span></div>'
-    : steps.length <= 2
-      ? `
-      <div style="display:flex; gap:20px; padding:4px 0 8px;">
-        ${steps.map((s, i) => `
-          <div style="display:flex; align-items:center; gap:10px;">
-            <div style="font-size:12px; white-space:nowrap;"><span class="muted" style="margin-right:4px;">${i + 1}</span>${escapeHtml(s.type || '—')}</div>
-            <div style="display:flex; flex-direction:column; gap:3px; align-items:center;">
-              ${chip(fmt(s.temp, 1, ' °C'))}
-              ${blank(60)}
-            </div>
-            <div style="display:flex; flex-direction:column; gap:3px; align-items:center;">
-              ${chip(fmtInt(s.time, ' min'))}
-              ${blank(60)}
-            </div>
-          </div>
-        `).join('')}
-      </div>
-      `
-      : `
-      <table class="bds-table">
-        <thead>
-          <tr>
-            <th class="r" style="width:30px">#</th>
-            <th>Step</th>
-            <th class="r">Target °C</th>
-            <th class="r">Actual °C</th>
-            <th class="r">Target min</th>
-            <th class="r">Actual min</th>
-          </tr>
-        </thead>
-        <tbody>${steps.map((s, i) => `
-          <tr>
-            <td class="r">${i + 1}</td>
-            <td>${escapeHtml(s.type || '—')}</td>
-            <td class="r">${chip(fmt(s.temp, 1, ' °C'))}</td>
-            <td class="r">${blank(70)}</td>
-            <td class="r">${chip(fmtInt(s.time, ' min'))}</td>
-            <td class="r">${blank(70)}</td>
-          </tr>
-        `).join('')}</tbody>
-      </table>
-      `;
+    : `<table class="bds-table">
+        <thead><tr>
+          <th style="width:24px">#</th>
+          <th>Step</th>
+          <th class="r">Target °C</th>
+          <th class="r">Actual °C</th>
+          <th class="r">Target min</th>
+          <th class="r">Actual min</th>
+        </tr></thead>
+        <tbody>${steps.map((s, i) => `<tr>
+          <td class="r">${i + 1}</td>
+          <td>${escapeHtml(s.type || '—')}</td>
+          <td class="r">${chip(fmt(s.temp, 1, ' °C'))}</td>
+          <td class="r">${blank(60)}</td>
+          <td class="r">${chip(fmtInt(s.time, ' min'))}</td>
+          <td class="r">${blank(60)}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
 
   // Mash measurement grid — 4 rows × 6 cols of empty cells. Each cell
   // gets a min-height so handwriting space is consistent. Notes row gets
@@ -247,7 +221,7 @@ function buildLauterAndSparge(inputs: BrewDaySheetInputs): string {
     { n: 2, label: 'Finish sparge' },
     { n: 3, label: 'After underlet' },
     { n: 4, label: 'After grain rinse' },
-    { n: 5, label: `Sparge amount (target ${spargeTarget})`, targetChip: spargeTarget },
+    { n: 5, label: 'Sparge amount', targetChip: spargeTarget },
     { n: 6, label: 'Extra used (= 2 − 1)' },
     { n: 7, label: 'Need sparge (= 4 − 5)' },
     { n: 8, label: 'Finish # (= 3 + 6)' },
@@ -255,7 +229,7 @@ function buildLauterAndSparge(inputs: BrewDaySheetInputs): string {
 
   // Compact 2-column grid — 2 steps per row, step number small + muted.
   const spargeCell = (s: { n: number; label: string }) =>
-    `<td style="width:50%"><span class="muted" style="margin-right:6px">${s.n}</span>${escapeHtml(s.label)} ${blank(100)}</td>`;
+    `<td style="width:50%"><span class="muted" style="margin-right:6px">${s.n}</span>${escapeHtml(s.label)} ${blank(60)}</td>`;
   const spargeRows: string[] = [];
   for (let i = 0; i < spargeSteps.length; i += 2) {
     spargeRows.push(`<tr>${spargeCell(spargeSteps[i])}${spargeCell(spargeSteps[i + 1])}</tr>`);
@@ -275,10 +249,10 @@ function buildLauterAndSparge(inputs: BrewDaySheetInputs): string {
           <div class="bds-inline"><label>Sparge salts</label> ${spargeSalts || '<em class="muted">—</em>'}</div>
         </div>
         <div class="bds-lauter-right">
-          <div>First runnings <label>pH</label>${blank(60)} <label>Gravity</label>${blank(60)}</div>
-          <div>Last runnings <label>pH</label>${blank(60)} <label>Gravity</label>${blank(60)}</div>
-          <div><label>Pre-boil target vol</label>${chip(preBoilVol)} <label>Actual</label>${blank(80)}</div>
-          <div><label>Target gravity</label>${chip(preBoilP)} <label>Actual gravity</label>${blank(80)}</div>
+          <div>First runnings <label>pH</label>${blank(45)} <label>Gravity</label>${blank(45)}</div>
+          <div>Last runnings <label>pH</label>${blank(45)} <label>Gravity</label>${blank(45)}</div>
+          <div><label>Pre-boil target vol</label>${chip(preBoilVol)} <label>Actual</label>${blank(45)}</div>
+          <div><label>Target gravity</label>${chip(preBoilP)} <label>Actual gravity</label>${blank(45)}</div>
         </div>
       </div>
     </section>
@@ -419,18 +393,19 @@ function buildKnockoutAndPitch(inputs: BrewDaySheetInputs): string {
 
   return `
     <section class="bds-section">
-      <div class="bds-section-head">
+      <div class="bds-section-head bds-section-head-left">
         <span class="bds-section-title">KNOCKOUT &amp; PITCH</span>
         <span class="bds-section-meta">Yeast strain ${chip(yeastStrain)} · Pitch amount ${chip(pitchAmt)}</span>
       </div>
       <div class="bds-row">
         <div class="bds-row-cell"><label>Pitch temp target</label> ${chip(pitchTempTarget)}</div>
-        <div class="bds-row-cell"><label>Actual</label> ${blank(90)}</div>
+        <div class="bds-row-cell"><label>Actual</label> ${blank(70)}</div>
         <span class="muted">·</span>
         <div class="bds-row-cell"><label>Ferm temp target</label> ${chip(fermTempRef)}</div>
-        <span class="muted">·</span>
+      </div>
+      <div class="bds-row">
         <div class="bds-row-cell"><label>Pitch pH target</label> ${chip(pitchPhTarget)}</div>
-        <div class="bds-row-cell"><label>Actual</label> ${blank(90)}</div>
+        <div class="bds-row-cell"><label>Actual</label> ${blank(70)}</div>
       </div>
       <div class="bds-row">
         <div class="bds-row-cell"><label>O₂ LPM</label> ${blank(110)}</div>
@@ -476,6 +451,10 @@ const EXTRA_STYLES = `
   .bds-section { padding: 8px 0 4px; page-break-inside: avoid; border-bottom: 1px solid #eee; }
   .bds-section:last-of-type { border-bottom: none; }
   .bds-section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
+  /* Modifier — pulls the meta info close to the title instead of flush
+     right. Scoped to Knockout & Pitch only; Mash's section head still
+     needs space-between to push its meta to the far right. */
+  .bds-section-head-left { justify-content: flex-start; gap: 24px; }
   .bds-section-title { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; color: #444; }
   .bds-section-meta  { font-size: 11px; color: #444; }
   .bds-subhead { font-size: 11px; font-weight: 500; color: #555; margin: 4px 0 2px; letter-spacing: 0.6px; }
@@ -511,19 +490,19 @@ const EXTRA_STYLES = `
   .bds-table td.muted, .muted { color: #888; font-style: italic; }
 
   /* Mash measurement grid — handwriting cells, taller rows */
-  .bds-meas-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 6px; }
+  .bds-meas-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; margin-bottom: 6px; }
   .bds-meas-table th { border: 1px solid #ccc; background: #f7f7f7; font-size: 10px; color: #666; font-weight: 500; padding: 4px; text-align: center;
     -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .bds-meas-table .bds-meas-rowlabel { width: 70px; border: 1px solid #ccc; background: #f7f7f7; font-size: 11px; color: #444; padding: 4px 6px;
     -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .bds-meas-table .bds-meas-cell { border: 1px solid #ccc; height: 20px; }
   .bds-meas-table .bds-meas-cell-notes { height: 40px; }
-  .bds-meas-table .bds-meas-col { font-size: 10px; }
+  .bds-meas-table .bds-meas-col { width: auto; font-size: 10px; }
 
   /* Row-cell layout — used for the multi-cell metric rows in boil /
      knockout / efficiency sections. Each cell is a label + value pair. */
   .bds-row { display: flex; flex-wrap: wrap; gap: 18px; padding: 2px 0; }
-  .bds-row-cell { display: flex; align-items: baseline; gap: 6px; font-size: 12px; }
+  .bds-row-cell { display: flex; align-items: baseline; gap: 6px; font-size: 12px; white-space: nowrap; }
   .bds-row-cell label { color: #888; font-size: 11px; letter-spacing: 0.4px; }
 
   /* Inline non-row blank (used under the mash table for Flowmeter finish) */
