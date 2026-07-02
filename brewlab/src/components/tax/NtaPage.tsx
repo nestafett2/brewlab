@@ -149,8 +149,6 @@ export default function NtaPage() {
       intoFV: declared.intoFV,
       packaged: declared.packaged,
       basis: ntaBasisDefault,
-      hopRatio: key.hopRatio,
-      yeastRatio: key.yeastRatio,
       miscNames: key.miscNames,
     };
     addNtaSubmission(entry);
@@ -474,15 +472,16 @@ function CheckerTable({
 // ═══════════════════════════════════════════════════════════════════
 
 function ratioKeyOfSubmission(r: NtaSubmission): NtaRatioKey {
-  if (r.hopRatio != null && r.yeastRatio != null && r.miscNames != null) {
-    return { hopRatio: r.hopRatio, yeastRatio: r.yeastRatio, miscNames: r.miscNames };
-  }
-  // Recompute from stored values (matches HTML's ntaRatioKey on register row)
-  const malt = r.maltKg || 1;
   return {
-    hopRatio: r.hopsKg / malt,
-    yeastRatio: r.yeastKg / malt,
-    miscNames: r.miscList.map(m => m.name.toLowerCase()).sort().join('|'),
+    maltKg:    r.maltKg  ?? 0,
+    hopsKg:    r.hopsKg  ?? 0,
+    yeastKg:   r.yeastKg ?? 0,
+    waterL:    r.waterL  ?? 0,
+    ogP:       r.ogP     ?? 0,
+    abv:       r.abv     ?? 0,
+    // Prefer the cached match key; old register rows without it recompute
+    // from the stored misc list (matches ntaRatioKey's own derivation).
+    miscNames: r.miscNames ?? r.miscList.map(m => m.name.toLowerCase()).sort().join('|'),
   };
 }
 

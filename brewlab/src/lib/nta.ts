@@ -61,8 +61,12 @@ export interface NtaPer1000 extends NtaRaw {
 }
 
 export interface NtaRatioKey {
-  hopRatio: number;
-  yeastRatio: number;
+  maltKg: number;
+  hopsKg: number;
+  yeastKg: number;
+  waterL: number;
+  ogP: number;
+  abv: number;
   miscNames: string;
 }
 
@@ -214,31 +218,44 @@ export function ntaNormalise1000(raw: NtaRaw): NtaPer1000 {
 }
 
 /**
- * Per-malt-kg ratio key for matching. Two recipes with the same hop/yeast
- * ratio and the same misc list are considered the "same beer" for NTA
- * declaration purposes. Verbatim port of lines 11619–11627.
+ * Match key for the comparison grid. Two recipes are considered the "same
+ * beer" for NTA declaration purposes when malt/hops/yeast/water/OG/ABV are
+ * all within tolerance (see ntaMatchScore) AND the misc list is identical.
+ * Compares the per-1000L normalised fields directly rather than ratios —
+ * hop/yeast-to-malt ratios alone missed recipes that diverged on water
+ * volume, gravity, or ABV while keeping the same hop/yeast/malt balance.
  */
 export function ntaRatioKey(norm: NtaRaw | NtaPer1000): NtaRatioKey {
-  const malt = norm.maltKg || 1;
   return {
-    hopRatio:  norm.hopsKg  / malt,
-    yeastRatio: norm.yeastKg / malt,
+    maltKg:    norm.maltKg,
+    hopsKg:    norm.hopsKg,
+    yeastKg:   norm.yeastKg,
+    waterL:    norm.waterL,
+    ogP:       norm.ogP,
+    abv:       norm.abv,
     miscNames: norm.miscList.map(m => m.name.toLowerCase()).sort().join('|'),
   };
 }
 
 /**
- * Tolerance-based match between two ratio keys. Returns true when both
- * the hop and yeast ratios are within ±10% AND the misc-name lists are
- * identical. Verbatim port of lines 11629–11637.
+ * Tolerance-based match between two ratio keys. Returns true when malt,
+ * hops, yeast, water, OG, and ABV are each within ±10% AND the misc-name
+ * lists are identical.
  */
 export function ntaMatchScore(a: NtaRatioKey, b: NtaRatioKey): boolean {
   const tol = 0.10;
-  const within = (x: number, y: number): boolean =>
-    y === 0 ? x === 0 : Math.abs(x - y) / Math.max(x, y) <= tol;
-  if (!within(a.hopRatio, b.hopRatio)) return false;
-  if (!within(a.yeastRatio, b.yeastRatio)) return false;
-  if (a.miscNames !== b.miscNames) return false;
+  const within = (x: number, y: number): boolean => {
+    if (x === 0 && y === 0) return true;
+    if (x === 0 || y === 0) return false;
+    return Math.abs(x - y) / Math.max(x, y) <= tol;
+  };
+  if (!within(a.maltKg,  b.maltKg))  return false;
+  if (!within(a.hopsKg,  b.hopsKg))  return false;
+  if (!within(a.yeastKg, b.yeastKg)) return false;
+  if (!within(a.waterL,  b.waterL))  return false;
+  if (!within(a.ogP,     b.ogP))     return false;
+  if (!within(a.abv,     b.abv))     return false;
+  if (a.miscNames !== b.miscNames)   return false;
   return true;
 }
 
