@@ -142,24 +142,33 @@ function buildMash(inputs: BrewDaySheetInputs): string {
   const steps = mashProfile?.steps ?? [];
   const stepsSectionHtml = steps.length === 0
     ? '<div class="bds-row"><span class="muted">No mash profile assigned — fill in by hand.</span></div>'
-    : `<table class="bds-table">
-        <thead><tr>
-          <th style="width:24px">#</th>
-          <th>Step</th>
-          <th class="r">Target °C</th>
-          <th class="r">Actual °C</th>
-          <th class="r">Target min</th>
-          <th class="r">Actual min</th>
-        </tr></thead>
-        <tbody>${steps.map((s, i) => `<tr>
-          <td class="r">${i + 1}</td>
-          <td>${escapeHtml(s.type || '—')}</td>
-          <td class="r">${chip(fmt(s.temp, 1, ' °C'))}</td>
-          <td class="r">${blank(60)}</td>
-          <td class="r">${chip(fmtInt(s.time, ' min'))}</td>
-          <td class="r">${blank(60)}</td>
-        </tr>`).join('')}</tbody>
-      </table>`;
+    : `<div style="display:flex; gap:24px; padding:4px 0 6px;">
+        ${steps.map((s, i) => `
+          <div style="display:flex; align-items:flex-start; gap:8px;">
+            <div style="font-size:12px; padding-top:18px; white-space:nowrap;">
+              <span style="color:#888; margin-right:4px;">${i + 1}</span>${escapeHtml(s.type || '—')}
+            </div>
+            <div style="display:flex; gap:12px;">
+              <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+                <div style="display:flex; gap:12px; font-size:10px; color:#888;">
+                  <span style="min-width:60px; text-align:center;">Target</span>
+                  <span style="min-width:60px; text-align:center;">Actual</span>
+                </div>
+                <div style="font-size:10px; color:#888; align-self:flex-start;">°C</div>
+                <div style="display:flex; gap:12px; align-items:center;">
+                  ${chip(fmt(s.temp, 1, ' °C'))}
+                  ${blank(60)}
+                </div>
+                <div style="font-size:10px; color:#888; align-self:flex-start; margin-top:4px;">min</div>
+                <div style="display:flex; gap:12px; align-items:center;">
+                  ${chip(fmtInt(s.time, ' min'))}
+                  ${blank(60)}
+                </div>
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>`;
 
   // Mash measurement grid — 4 rows × 6 cols of empty cells. Each cell
   // gets a min-height so handwriting space is consistent. Notes row gets
