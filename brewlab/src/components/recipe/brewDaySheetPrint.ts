@@ -25,7 +25,23 @@ import type { BrewDayTargets } from '../../lib/calculations';
 import { printHtml, escapeHtml } from '../../lib/print';
 import { fmtNum } from '../../lib/format';
 import { fmtAmt } from '../../lib/utils';
-import { isWaterChem } from '../../lib/waterChem';
+import { WATER_CHEM_KW } from '../../lib/waterChem';
+
+// Print-only water-chem check — deliberately NOT lib/waterChem.ts's
+// isWaterChem. That helper lets an explicit `use` (e.g. 'mash', 'boil')
+// override the name regex, which is correct for tax purposes (trusts the
+// brewer's explicit choice) but means an imported water-chem ingredient
+// tagged use='mash'/'boil' isn't recognised as water-chem there — so it
+// leaked into this sheet's boil additions table instead of the salts
+// lines. Here, the name regex always wins over a non-water-chemistry
+// `use`, at the cost of a rare false positive (e.g. "Kaffir Lime" tagged
+// use='Boil'). Do not use this for tax/classification code — only for
+// this print sheet's display grouping.
+const isPrintWaterChem = (ing: Ingredient): boolean => {
+  const use = (ing.use || '').trim().toLowerCase();
+  if (use === 'water chemistry') return true;
+  return WATER_CHEM_KW.test(ing.name || '');
+};
 
 export interface BrewDaySheetInputs {
   recipe: Recipe;
@@ -81,11 +97,10 @@ const MINERAL_LABEL: Record<WaterMineral, string> = {
   nahco3: 'Baking soda',
 };
 
-// Ingredient-row water-chem items (type='misc', isWaterChem true) carry no
-// mash/sparge/boil sub-tag of their own — isWaterChem's `use`-precedence
-// rule means such a row's `use` is always exactly 'water chemistry' or
-// empty, never a process stage (see CLAUDE.md "Water Chemistry — Tax
-// Exclusion Rules"). Split them by name instead: acids/preservatives are
+// Ingredient-row water-chem items (type='misc', isPrintWaterChem true)
+// don't get routed to Mash vs Sparge salts via `use` — a brewer might tag
+// one 'mash' and another 'boil', but that's not reliable enough to sort
+// on. Split them by name instead: acids/preservatives are
 // typically dosed at boil/sparge for pH; mineral salts typically go into
 // the mash/sparge water.
 const ACID_KW = /acid|campden|metabisulfite/i;
@@ -144,7 +159,7 @@ function buildMash(inputs: BrewDaySheetInputs): string {
   // Ingredient-row water-chem items that read as mineral salts (not acids)
   // — see ACID_KW comment above.
   const mashSaltIngs = ingredients
-    .filter(ing => ing.type === 'misc' && isWaterChem(ing) && !ACID_KW.test(ing.name || ''))
+    .filter(ing => ing.type === 'misc' && isPrintWaterChem(ing) && !ACID_KW.test(ing.name || ''))
     .map(waterChemIngSalt)
     .join(', ');
   const mashSaltsCombined = [mashSalts, mashSaltIngs].filter(Boolean).join(', ');
@@ -235,7 +250,7 @@ function buildLauterAndSparge(inputs: BrewDaySheetInputs): string {
   // Ingredient-row water-chem items that read as acids/preservatives
   // (boil/sparge pH adjustments) — see ACID_KW comment above.
   const spargeSaltIngs = ingredients
-    .filter(ing => ing.type === 'misc' && isWaterChem(ing) && ACID_KW.test(ing.name || ''))
+    .filter(ing => ing.type === 'misc' && isPrintWaterChem(ing) && ACID_KW.test(ing.name || ''))
     .map(waterChemIngSalt)
     .join(', ');
   const spargeSaltsCombined = [spargeSalts, spargeSaltIngs].filter(Boolean).join(', ');
@@ -325,7 +340,7 @@ function buildBoilAndWhirlpool(inputs: BrewDaySheetInputs): string {
   const additions = ingredients.filter(ing =>
     (ing.type === 'hop' || ing.type === 'misc')
     && (ing.use || '').toLowerCase() !== 'dry hop'
-    && !(ing.type === 'misc' && isWaterChem(ing))
+    && !(ing.type === 'misc' && isPrintWaterChem(ing))
   );
   const tier = (ing: Ingredient) => {
     if (ing.type !== 'hop') return 2;
