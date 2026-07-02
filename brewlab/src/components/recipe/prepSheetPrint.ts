@@ -79,10 +79,6 @@ const fmt = (v: unknown, dp = 1, suffix = ''): string => {
   const n = num(v);
   return isFinite(n) ? n.toFixed(dp) + suffix : EM_DASH;
 };
-const fmtInt = (v: unknown, suffix = ''): string => {
-  const n = num(v);
-  return isFinite(n) ? Math.round(n).toString() + suffix : EM_DASH;
-};
 const fmtThousands = (n: number): string =>
   isFinite(n) ? n.toLocaleString('en-US') : EM_DASH;
 

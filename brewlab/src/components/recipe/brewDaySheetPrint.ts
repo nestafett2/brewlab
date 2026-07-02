@@ -291,7 +291,7 @@ function buildBoilAndWhirlpool(inputs: BrewDaySheetInputs): string {
 }
 
 function buildKnockoutAndPitch(inputs: BrewDaySheetInputs): string {
-  const { recipe, ingredients, targets, brewDay, waterChem, yeastLib } = inputs;
+  const { ingredients, targets, brewDay, waterChem, yeastLib } = inputs;
 
   // Both BrewDayData.pitchTemp and BrewDayData.fermTemp are PLANNED targets
   // entered by the brewer on the BrewDayTab — not actual measurements (per
