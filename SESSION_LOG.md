@@ -1,3 +1,20 @@
+## 2026-07-02 — Env catch-up: git + Vercel deploy after 7-week gap
+
+After ~7 weeks away, resumed work on a new Mac. Session was entirely git/env/deploy plumbing, no feature work.
+
+- Discovered 7 sessions of uncommitted code (05-09 late through 05-12) sitting in the working tree. HEAD was at `455c98f` (2026-05-09 evening); everything since was locally saved but never pushed.
+- Committed all catch-up work as `438a73a`. Push initially failed (no gh CLI on the new Mac); installed via Homebrew (`brew install gh`), authenticated via `gh auth login`.
+- Configured git identity: `nestafett2` / `nestafett2@gmail.com`. First commit landed with the wrong author (`ben@Bens-MacBook-Neo.local`, the pre-config default), causing Vercel Hobby-plan to reject the deploy. Fixed with `git commit --amend --author=` + force-push.
+- Vercel build then failed on two TS6133 unused-variable errors introduced 12 May but not caught locally (dev mode is lenient, `tsc -b` in production build is strict): `brewDaySheetPrint.ts:294` unused `recipe` param, `prepSheetPrint.ts:82` unused `fmtInt`. Both fixed (prefix underscore or remove, whichever cleaner).
+- Build then hit an ETIMEDOUT reading a `node_modules` file — OneDrive placeholder wasn't materialized. Full `rm -rf node_modules && npm ci` fixed it. Underlying issue: entire project lives inside OneDrive, which is genuinely risky for Git + Node builds. Flagged as a real problem to fix.
+- Vercel deploy went green on the third attempt.
+
+Two follow-ups added to START_HERE:
+- Move project out of OneDrive (real risk of Git corruption; needs a proper `~/Developer/brewlab` home).
+- Write retroactive migration `.sql` files for `recipes.extra_additions` and `recipes.brewer` (both are live in Supabase, doc history is missing).
+
+---
+
 # SESSION_LOG entry — 2026-05-12 — Print artifacts pass: Monthly Report fix + Prep Sheet + Brew Day Sheet + recipe metadata fields (brewer, extra additions)
 
 A substantial session. Three new print artifacts shipped, a fourth (Monthly Packaging Report) fixed in place, two new recipe schema fields added with full Supabase round-trip, and one source-of-truth bug caught and corrected by Ben. The HTML reference's 10 print paths are now confirmed all ported. Several reusable lessons surfaced — baking them in here so future sessions don't re-litigate.

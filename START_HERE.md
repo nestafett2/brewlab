@@ -1,6 +1,6 @@
 # BrewLab — START HERE
 
-**Last session: 12 May 2026 (print artifacts pass — Monthly Report fix + Prep Sheet + Brew Day Sheet + recipe metadata fields)**
+**Last session: 02 July 2026 (env catch-up — git + Vercel deploy after 7-week gap; no feature work)**
 **Read this first. Everything else is reference.**
 
 ---
@@ -80,6 +80,10 @@ Substantial session. Three new print artifacts shipped, the Monthly Packaging Re
 ---
 
 ## What's Still Broken / Pending
+
+### Housekeeping (do soon)
+- Move project out of OneDrive. Current location: /Users/ben/Library/CloudStorage/OneDrive-株式会社オープンエア/Apps/Brewing App. OneDrive placeholder files break Git and Node builds; moving to ~/Developer/brewlab (or similar non-synced location) is the real fix. Session on 2 July hit ETIMEDOUT on node_modules reads because of this.
+- Retroactive migration files for recipes.extra_additions and recipes.brewer. Both columns are live in Supabase, but no .sql file was ever saved in the migrations/ folder. Match the naming convention of the other 05-* migrations (dated 2026-05-12). Both are text NOT NULL DEFAULT ''.
 
 ### End-of-port polish (do together)
 - Typography pass (with click-any-text-to-find-token dev tool idea — defer until all tabs are visible together).
