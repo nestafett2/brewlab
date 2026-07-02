@@ -24,6 +24,8 @@ import type {
 import type { BrewDayTargets } from '../../lib/calculations';
 import { printHtml, escapeHtml } from '../../lib/print';
 import { fmtNum } from '../../lib/format';
+import { fmtAmt } from '../../lib/utils';
+import { isWaterChem } from '../../lib/waterChem';
 
 export interface BrewDaySheetInputs {
   recipe: Recipe;
@@ -79,6 +81,17 @@ const MINERAL_LABEL: Record<WaterMineral, string> = {
   nahco3: 'Baking soda',
 };
 
+// Ingredient-row water-chem items (type='misc', isWaterChem true) carry no
+// mash/sparge/boil sub-tag of their own — isWaterChem's `use`-precedence
+// rule means such a row's `use` is always exactly 'water chemistry' or
+// empty, never a process stage (see CLAUDE.md "Water Chemistry — Tax
+// Exclusion Rules"). Split them by name instead: acids/preservatives are
+// typically dosed at boil/sparge for pH; mineral salts typically go into
+// the mash/sparge water.
+const ACID_KW = /acid|campden|metabisulfite/i;
+const waterChemIngSalt = (ing: Ingredient): string =>
+  `${escapeHtml(ing.name || '—')} ${fmtAmt(ing.amt, ing.unit)}${ing.unit ? ' ' + escapeHtml(ing.unit) : ''}`;
+
 // ─── Section builders ───────────────────────────────────────────────
 
 function buildHeader(inputs: BrewDaySheetInputs): string {
@@ -121,13 +134,20 @@ function buildHeader(inputs: BrewDaySheetInputs): string {
 }
 
 function buildMash(inputs: BrewDaySheetInputs): string {
-  const { targets, waterChem, mashProfile } = inputs;
+  const { targets, waterChem, mashProfile, ingredients } = inputs;
 
   const mins = waterChem.minerals ?? {};
   const mashSalts = (Object.keys(mins) as WaterMineral[])
     .filter(k => { const m = mins[k]; return m && isFinite(num(m.mash)) && num(m.mash) > 0; })
     .map(k => `${MINERAL_LABEL[k]} ${fmt(num(mins[k]!.mash), 1)} g`)
     .join(' · ');
+  // Ingredient-row water-chem items that read as mineral salts (not acids)
+  // — see ACID_KW comment above.
+  const mashSaltIngs = ingredients
+    .filter(ing => ing.type === 'misc' && isWaterChem(ing) && !ACID_KW.test(ing.name || ''))
+    .map(waterChemIngSalt)
+    .join(', ');
+  const mashSaltsCombined = [mashSalts, mashSaltIngs].filter(Boolean).join(', ');
 
   const strikeVol = isNum(targets.mashWaterL) && targets.mashWaterL > 0
     ? fmt(targets.mashWaterL, 0, ' L')
@@ -199,19 +219,26 @@ function buildMash(inputs: BrewDaySheetInputs): string {
         <thead>${gridHead}</thead>
         <tbody>${gridBody}</tbody>
       </table>
-      <div class="bds-inline"><label>Mash salts</label> ${mashSalts || '<em class="muted">—</em>'}</div>
+      <div class="bds-inline"><label>Mash salts</label> ${mashSaltsCombined || '<em class="muted">—</em>'}</div>
     </section>
   `;
 }
 
 function buildLauterAndSparge(inputs: BrewDaySheetInputs): string {
-  const { targets, waterChem } = inputs;
+  const { targets, waterChem, ingredients } = inputs;
 
   const spargeMins = waterChem.minerals ?? {};
   const spargeSalts = (Object.keys(spargeMins) as WaterMineral[])
     .filter(k => { const m = spargeMins[k]; return m && isFinite(num(m.sparge)) && num(m.sparge) > 0; })
     .map(k => `${MINERAL_LABEL[k]} ${fmt(num(spargeMins[k]!.sparge), 1)} g`)
     .join(' · ');
+  // Ingredient-row water-chem items that read as acids/preservatives
+  // (boil/sparge pH adjustments) — see ACID_KW comment above.
+  const spargeSaltIngs = ingredients
+    .filter(ing => ing.type === 'misc' && isWaterChem(ing) && ACID_KW.test(ing.name || ''))
+    .map(waterChemIngSalt)
+    .join(', ');
+  const spargeSaltsCombined = [spargeSalts, spargeSaltIngs].filter(Boolean).join(', ');
 
   const spargeTarget = isNum(targets.spargeVolL) && targets.spargeVolL > 0
     ? fmt(targets.spargeVolL, 0, ' L')
@@ -256,7 +283,7 @@ function buildLauterAndSparge(inputs: BrewDaySheetInputs): string {
           <table class="bds-table">
             <tbody>${spargeRowsHtml}</tbody>
           </table>
-          <div class="bds-inline"><label>Sparge salts</label> ${spargeSalts || '<em class="muted">—</em>'}</div>
+          <div class="bds-inline"><label>Sparge salts</label> ${spargeSaltsCombined || '<em class="muted">—</em>'}</div>
         </div>
         <div class="bds-lauter-right">
           <div>First runnings <label>pH</label>${blank(45)} <label>Gravity</label>${blank(45)}</div>
@@ -292,10 +319,13 @@ function buildBoilAndWhirlpool(inputs: BrewDaySheetInputs): string {
     : EM_DASH;
 
   // Hot-side additions — hops (boil + whirlpool) and non-dry-hop misc.
+  // Water-chem misc rows are excluded — they surface in the Mash/Sparge
+  // salts lines instead, not this table.
   // Sort: boil hops (highest time first) → whirlpool hops → misc (no time).
   const additions = ingredients.filter(ing =>
     (ing.type === 'hop' || ing.type === 'misc')
     && (ing.use || '').toLowerCase() !== 'dry hop'
+    && !(ing.type === 'misc' && isWaterChem(ing))
   );
   const tier = (ing: Ingredient) => {
     if (ing.type !== 'hop') return 2;
