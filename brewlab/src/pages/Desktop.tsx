@@ -304,6 +304,14 @@ export default function Desktop() {
       allocatedIds.push(newId);
       if (!firstId) firstId = newId;
 
+      // Assign per-CLAUDE.md ingredient ID rule — `${recipeId}_${idx}`
+      // (NOT sequential integers — would collide on Supabase PK). Built
+      // before `rec` so computeRecipeStats below has real ingredient ids.
+      const ings: Ingredient[] = p.ingredients.map((ing, idx) => ({
+        ...ing,
+        id: `${newId}_${idx}`,
+      }));
+
       const rec: Recipe = {
         id: newId,
         lineageId: newId,
@@ -328,7 +336,10 @@ export default function Desktop() {
         ebc: 0,
         ogPlato: p.ogPlato,
         fgPlato: p.fgPlato,
-        bhEff: p.bhEff,
+        // BeerXML no longer supplies EFFICIENCY — the source software's
+        // own efficiency assumption doesn't carry over meaningfully, so
+        // new imports use the brewery's own default instead.
+        bhEff: settings.defaultBhEff ?? 72,
         boilTime: p.boilTime,
         whirlpoolTemp: 85,
         bdFv: '',
@@ -337,14 +348,16 @@ export default function Desktop() {
         brewer: '',
         archivedAt: null,
       };
-      addRecipe(rec);
 
-      // Assign per-CLAUDE.md ingredient ID rule — `${recipeId}_${idx}`
-      // (NOT sequential integers — would collide on Supabase PK).
-      const ings: Ingredient[] = p.ingredients.map((ing, idx) => ({
-        ...ing,
-        id: `${newId}_${idx}`,
-      }));
+      // Recompute OG/FG from the imported grain bill at the new default
+      // BH efficiency, rather than trusting the BeerXML's raw OG/FG
+      // (computed under the source software's own, now-discarded,
+      // efficiency assumption).
+      const stats = computeRecipeStats({ recipe: rec, ingredients: ings, maltLib, hopLib, yeastLib, miscLib, settings });
+      rec.ogPlato = stats.ogPlato;
+      rec.fgPlato = stats.fgPlato;
+
+      addRecipe(rec);
       setIngredients(newId, ings);
 
       // Mash profile blob — only persist if the BeerXML had MASH steps.
@@ -1748,9 +1761,13 @@ function SingleRecipePreview({
         </div>
       )}
 
-      {/* Top stats grid */}
+      {/* Top stats grid. Efficiency dropped — BeerXML's EFFICIENCY no
+          longer feeds bhEff (the brewery's own default applies at
+          confirm time instead), and OG/FG shown here get recomputed
+          from the grain bill at that same default before the recipe
+          is created, so they're only a rough preview. */}
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10,
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10,
         marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)',
       }}>
         <div>
@@ -1760,10 +1777,6 @@ function SingleRecipePreview({
         <div>
           <div style={labelStyle}>Boil</div>
           <div style={valueStyle}>{recipe.boilTime} min</div>
-        </div>
-        <div>
-          <div style={labelStyle}>Eff</div>
-          <div style={valueStyle}>{fmtNum(recipe.bhEff, { suffix: '%' })}</div>
         </div>
         <div>
           <div style={labelStyle}>OG / FG</div>

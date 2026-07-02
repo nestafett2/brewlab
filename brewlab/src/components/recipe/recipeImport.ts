@@ -38,8 +38,6 @@ export interface ParsedRecipe {
   batchL: number;
   /** <BOIL_TIME> in minutes. */
   boilTime: number;
-  /** <EFFICIENCY> %. Default 75 if missing (matches HTML). */
-  bhEff: number;
   /** Computed from <OG> SG: ((og-1)*1000)/4. */
   ogPlato: number;
   /** Computed from <FG> SG. */
@@ -141,7 +139,6 @@ export function parseRecipeXML(xmlText: string): ParsedRecipe[] {
     const name      = getText(recipe, 'NAME') || 'Imported Recipe';
     const batchL    = parseFloat(getText(recipe, 'BATCH_SIZE')) || 0;
     const boilTime  = parseInt(getText(recipe, 'BOIL_TIME')) || 60;
-    const bhEff     = parseFloat(getText(recipe, 'EFFICIENCY')) || 75;
     const og        = parseFloat(getText(recipe, 'OG')) || 1.050;
     const fg        = parseFloat(getText(recipe, 'FG')) || 0;
     const notes     = getText(recipe, 'NOTES');
@@ -276,7 +273,6 @@ export function parseRecipeXML(xmlText: string): ParsedRecipe[] {
       styleKey,
       batchL,
       boilTime,
-      bhEff,
       ogPlato: sgToPlato(og),
       fgPlato: sgToPlato(fg),
       notes,

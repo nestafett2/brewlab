@@ -105,6 +105,18 @@ export default function AdvancedPanel() {
           </div>
 
           <div className="settings-field">
+            <label>Default BH Efficiency (%)</label>
+            <input
+              type="number"
+              min={0} max={100} step={0.1}
+              style={{ width: 80 }}
+              value={settings.defaultBhEff ?? 72}
+              onChange={e => setSettings({ defaultBhEff: numOrZero(e.target.value) })}
+              title="Default brewhouse efficiency applied to new recipes and BeerXML imports."
+            />
+          </div>
+
+          <div className="settings-field">
             <label>Beer Buffer Capacity</label>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <input

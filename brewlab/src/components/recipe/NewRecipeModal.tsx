@@ -6,8 +6,10 @@
  *
  * Two tabs:
  *   • Blank Recipe — beer/label name + style picker. Same defaults the
- *     previous inline createNewRecipe() applied (batchL=1050, bhEff=67.60,
+ *     previous inline createNewRecipe() applied (batchL=1050,
  *     boilTime=45, whirlpoolTemp=85, version='1.0', classification='Beer').
+ *     bhEff defaults to settings.defaultBhEff (Settings → Advanced →
+ *     Calculation Constants), falling back to 67.60 if unset.
  *   • From Template — recipe name (editable, seeded from the selected
  *     template) + scrollable template list with delete-✕ per row. Confirm
  *     button is disabled until a template is selected and the name is
@@ -50,6 +52,7 @@ type ModalTab = 'new' | 'tpl';
 
 export default function NewRecipeModal({ onClose, onCreated, defaultFolderId }: Props) {
   const recipes = useStore(s => s.recipes);
+  const settings = useStore(s => s.settings);
   const addRecipe = useStore(s => s.addRecipe);
   const templates = useStore(s => s.templates);
   const deleteTemplate = useStore(s => s.deleteTemplate);
@@ -159,7 +162,7 @@ export default function NewRecipeModal({ onClose, onCreated, defaultFolderId }: 
       rating: 0,
       brewAgain: null,
       cost: 0, abv: 0, ibu: 0, ebc: 0, ogPlato: 0, fgPlato: 0,
-      bhEff: 67.60,
+      bhEff: settings.defaultBhEff ?? 72,
       boilTime: 45,
       whirlpoolTemp: 85,
       bdFv: '',
