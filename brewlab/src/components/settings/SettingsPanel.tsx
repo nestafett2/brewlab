@@ -10,11 +10,12 @@ import StylesPanel from './StylesPanel';
 import TanksPanel from './TanksPanel';
 import WaterProfilesPanel from './WaterProfilesPanel';
 import SuppliersPanel from './SuppliersPanel';
+import OrderPlannerSettingsPanel from './OrderPlannerSettingsPanel';
 
 const SECTIONS = [
   'Units', 'Bitterness', 'Advanced', 'Styles', 'Tanks',
   'Equipment Profiles', 'Water Profiles', 'Mash Profiles',
-  'Pitch Profiles', 'Suppliers', 'Connection',
+  'Pitch Profiles', 'Suppliers', 'Order Planner', 'Connection',
 ] as const;
 type Section = typeof SECTIONS[number];
 
@@ -51,6 +52,7 @@ export default function SettingsPanel() {
            section === 'Mash Profiles'      ? <MashProfilesPanel />       :
            section === 'Pitch Profiles'     ? <PitchProfilesPanel />      :
            section === 'Suppliers'          ? <SuppliersPanel />          :
+           section === 'Order Planner'      ? <OrderPlannerSettingsPanel /> :
            section === 'Connection'         ? <ConnectionPanel />         :
            <Stub label={section} />}
         </div>
