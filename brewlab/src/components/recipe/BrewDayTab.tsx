@@ -30,7 +30,6 @@ import {
 import type { BrewDayData, MashReadingCol } from '../../types';
 import ChecklistStrip from './ChecklistStrip';
 import RecordUsageModal from '../inventory/RecordUsageModal';
-import { printBrewDaySheet } from './brewDaySheetPrint';
 
 interface Props { recipeId: string }
 
@@ -54,8 +53,6 @@ export default function BrewDayTab({ recipeId }: Props) {
   const getBrewDay    = useStore(s => s.getBrewDay);
   const setBrewDay    = useStore(s => s.setBrewDay);
   const getFermMeta   = useStore(s => s.getFermMeta);
-  // Snapshot-only — printBrewDaySheet reads water-chem at click time.
-  const getWaterChem  = useStore(s => s.getWaterChem);
 
   // ── Local state ─────────────────────────────────────────────────────────
   const [bd, setBd] = useState<BrewDayData>(() => getBrewDay(recipeId));
@@ -620,29 +617,6 @@ export default function BrewDayTab({ recipeId }: Props) {
               : `Linked to brew: ${linkedBrew.name}`
             : 'No planner brew is linked to this recipe yet.'}
         </span>
-        <button
-          className="btn sm"
-          disabled={!targets}
-          onClick={() => {
-            if (!targets) return;
-            const tankName = recipe.bdFv ? (tankCalib[recipe.bdFv]?.name ?? recipe.bdFv) : '';
-            // Use `mashProfile` (the resolved value, mashSaved ?? DEFAULT)
-            // not `mashSaved` directly — keeps the printed steps and the
-            // printed strike-temp / mash-water targets in agreement (both
-            // ultimately derived from the same profile).
-            printBrewDaySheet({
-              recipe, ingredients, targets,
-              brewDay: bd,
-              waterChem: getWaterChem(recipeId),
-              mashProfile,
-              tankName,
-              // Per-recipe brewer wins; falls back to brewery-wide setting.
-              brewerName: (recipe.brewer || '').trim() || settings.breweryName || '',
-              yeastLib,
-            });
-          }}
-          title="A4 brew-day handwriting sheet — targets pre-printed, actuals blank"
-        >🖨 Print Brew Day Sheet</button>
         <button
           className="btn sm"
           disabled={!linkedBrew}

@@ -1,12 +1,11 @@
 import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useStore } from '../../store';
 import {
-  calcOG, calcFG, calcABV, calcTotalIBU, calcEBC, calcGrainPct,
-  calcClassification, sgToPlato,
+  calcClassification,
   calcBrewDayTargets, calcEffectiveTrubLossL,
   calcDryHopGperL, calcWhirlpoolGperL,
+  computeRecipeStats,
 } from '../../lib/calculations';
-import { asNum } from '../../lib/utils';
 import { fmtNum } from '../../lib/format';
 import { isWaterChem } from '../../lib/waterChem';
 import type { Ingredient, IngredientType } from '../../types';
@@ -19,7 +18,6 @@ import GrainPctModal from './GrainPctModal';
 import HopIbuModal from './HopIbuModal';
 import DhSplitModal from './DhSplitModal';
 import MashProfileModal from './MashProfileModal';
-import { printPrepSheet } from './prepSheetPrint';
 
 export default function RecipeTab({ recipeId }: { recipeId: string }) {
   const recipes = useStore(s => s.recipes);
@@ -48,12 +46,6 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
   const setActiveTab          = useStore(s => s.setActiveTab);
   const setTabVisibility      = useStore(s => s.setTabVisibility);
   const setPendingPlannerAdd  = useStore(s => s.setPendingPlannerAdd);
-  // Snapshot reads for the Prep Sheet print path. Getters (not subscriptions)
-  // because the print handler only needs values at click time.
-  const getWaterChem  = useStore(s => s.getWaterChem);
-  const getBrewDay    = useStore(s => s.getBrewDay);
-  const tankCalib     = useStore(s => s.tankCalib);
-  const harvestedYeast = useStore(s => s.harvestedYeast);
 
   const [addType, setAddType] = useState<IngredientType | null>(null);
   const [substituteMode, setSubstituteMode] = useState(false);
@@ -86,64 +78,12 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
   const miscOther     = useMemo(() => miscAll.filter(i => !isWaterChem(i)), [miscAll]);
 
   // === All calculations — recompute live when ingredients/recipe/settings change ===
+  // computeRecipeStats is shared with Desktop.tsx's Print-dropdown handler
+  // (Prep Sheet) so the printed numbers can never drift from this totals strip.
   const stats = useMemo(() => {
     if (!recipe) return null;
-    const batchL = recipe.batchL || 0;
-    const empty = {
-      ogSg: 1, ogPlato: 0, fgSg: 1, fgPlato: 0,
-      abv: 0, ibu: 0, ibuSg: 0, ebc: 0,
-      grainPcts: new Map<string, number>(),
-      perHop: new Map<string, number>(),
-      totalGrainKg: 0, totalHopG: 0, totalCost: 0,
-    };
-    if (batchL <= 0) return empty;
-
-    // Read BH efficiency and WP temp from recipe (set via meta bar pills)
-    const bhEff = recipe.bhEff || 67.60;
-    const wpTemp = recipe.whirlpoolTemp ?? settings.whirlpoolTemp ?? 85;
-
-    const ogSg = calcOG(grains, maltLib, batchL, bhEff);
-    const ogPlato = ogSg > 1 ? sgToPlato(ogSg) : 0;
-
-    const yeastIng = ingredients.find(i => i.type === 'yeast');
-    let atten = 0;
-    if (yeastIng) {
-      atten = parseFloat(yeastIng.extra || '0');
-      if (!atten) {
-        const libY = yeastLib.find(y => y.id === yeastIng.libId || y.name === yeastIng.name);
-        atten = asNum(libY?.atten, 75);
-      }
-    }
-    if (!atten) atten = 75;
-    const fgSg = calcFG(ogSg, atten);
-    const fgPlato = fgSg > 1 ? sgToPlato(fgSg) : 0;
-    const abv = calcABV(ogSg, fgSg);
-
-    const { total: ibu, perHop } = calcTotalIBU({
-      method: settings.ibuMethod, hops: ingredients, hopLib, batchL, ogSg,
-      whirlpoolTemp: wpTemp, mashHopAdj: settings.mashHopAdj,
-      leafHopAdj: settings.leafHopAdj, largeBatchUtil: settings.largeBatchUtil,
-    });
-    const ibuSg = ogSg > 1 ? ibu / ((ogSg - 1) * 1000) : 0;
-    const ebc = calcEBC(ingredients, maltLib, batchL);
-    const grainPcts = calcGrainPct(ingredients);
-    const totalGrainKg = grains.reduce((s, g) => s + (g.unit === 'g' ? g.amt * 0.001 : g.amt), 0);
-    const totalHopG = hops.reduce((s, h) => s + (h.unit === 'kg' ? h.amt * 1000 : h.amt), 0);
-
-    // Cost: check ingredient cost first, then look up library price.
-    // Water rows have no library — skip the lookup, use any explicit cost.
-    const totalCost = ingredients.reduce((s, ing) => {
-      if (ing.cost > 0) return s + ing.cost;
-      if (ing.type === 'water') return s;
-      const dataKey = { grain: maltLib, hop: hopLib, yeast: yeastLib, misc: miscLib }[ing.type] as any[];
-      const lib = (dataKey || []).find((e: any) => (e.name || '').toLowerCase() === (ing.name || '').toLowerCase() || e.id === ing.libId);
-      if (!lib?.price) return s;
-      const amtKg = ing.unit === 'g' ? ing.amt * 0.001 : ing.amt;
-      return s + (ing.type === 'yeast' ? lib.price : lib.price * amtKg);
-    }, 0);
-
-    return { ogSg, ogPlato, fgSg, fgPlato, abv, ibu, ibuSg, ebc, grainPcts, perHop, totalGrainKg, totalHopG, totalCost };
-  }, [recipe, ingredients, grains, hops, maltLib, hopLib, yeastLib, miscLib, settings]);
+    return computeRecipeStats({ recipe, ingredients, maltLib, hopLib, yeastLib, miscLib, settings });
+  }, [recipe, ingredients, maltLib, hopLib, yeastLib, miscLib, settings]);
 
   // Active equip + mash profile for the pre-boil gravity calc (Totals panel).
   // Selection chain matches BrewDayTab: explicit per-recipe → first profile → null.
@@ -331,47 +271,6 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
     setActiveTab('planner');
   }, [recipe, recipeId, setPendingPlannerAdd, setTabVisibility, setActiveTab]);
 
-  // Print Prep Sheet — A4 portrait artifact for the brewer's workstation.
-  // Snapshots all the data the prep sheet needs at click time and dispatches
-  // to prepSheetPrint.ts. No live subscriptions on waterChem / brewDay —
-  // getters pull from localStorage so the printed page reflects whatever is
-  // saved at the moment of the click.
-  const handlePrintPrepSheet = useCallback(() => {
-    if (!recipe || !stats) {
-      pushToast({ message: 'Open a recipe first.', variant: 'info' });
-      return;
-    }
-    const waterChem = getWaterChem(recipeId);
-    const brewDay   = getBrewDay(recipeId);
-    const targets   = calcBrewDayTargets({
-      recipe, ingredients, maltLib, hopLib, yeastLib,
-      equip: activeEquip, mashProfile: activeMash,
-      grainAbsorbLkg: settings.grainAbsorb,
-      grainTempC: settings.defaultGrainTemp,
-      coolingShrinkagePct: settings.coolingShrinkage,
-    });
-    const tankName = recipe.bdFv ? (tankCalib[recipe.bdFv]?.name ?? recipe.bdFv) : '';
-    const firstStep = activeMash?.steps?.[0];
-    printPrepSheet({
-      recipe, ingredients, stats,
-      waterChem, brewDay, targets,
-      mashStepTempC: typeof firstStep?.temp === 'number' ? firstStep.temp : undefined,
-      mashStepDurationMin: typeof firstStep?.time === 'number' ? firstStep.time : undefined,
-      tankName,
-      // Per-recipe brewer wins; falls back to brewery-wide setting; print
-      // builder turns empty into "—".
-      brewerName: (recipe.brewer || '').trim() || settings.breweryName || '',
-      maltLib, hopLib, yeastLib,
-      harvestedYeast,
-    });
-  }, [
-    recipe, stats, recipeId, ingredients,
-    maltLib, hopLib, yeastLib,
-    activeEquip, activeMash, settings,
-    tankCalib, harvestedYeast,
-    getWaterChem, getBrewDay, pushToast,
-  ]);
-
   // Carrageenan quick-add (30g/1200L scaled, happoshu trigger)
   const quickAddCarrageenan = useCallback(() => {
     if (!recipe) { pushToast({ message: 'Open a recipe first.', variant: 'info' }); return; }
@@ -540,7 +439,6 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
         onGrainPct={() => { if (grains.length === 0) { pushToast({ message: 'No grains in recipe.', variant: 'info' }); return; } setGrainPctModal(true); }}
         onHopIbu={() => { const bh = hops.filter(h => (h.use || '').toLowerCase() !== 'dry hop'); if (bh.length === 0) { pushToast({ message: 'No bittering hops in recipe.', variant: 'info' }); return; } setHopIbuModal(true); }}
         onAddToPlanner={handleAddToPlanner}
-        onPrintPrepSheet={handlePrintPrepSheet}
       />
 
       {addType && (

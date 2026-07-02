@@ -5,8 +5,8 @@
 
 import type {
   Ingredient, Classification, IngredientType,
-  MaltLib, HopLib, YeastLib, MashProfile, EquipmentProfile, Recipe,
-  TankCalibration, IbuMethod,
+  MaltLib, HopLib, YeastLib, MiscLib, MashProfile, EquipmentProfile, Recipe,
+  TankCalibration, IbuMethod, BrewSettings,
   WaterIon, WaterMineral, WaterProfile,
   FermMeta,
 } from '../types';
@@ -350,6 +350,98 @@ export function calcGrainPct(grains: Ingredient[]): Map<string, number> {
     pcts.set(g.id, totalKg > 0 ? (kg / totalKg) * 100 : 0);
   }
   return pcts;
+}
+
+// === Recipe Stats (Ingredients-tab totals; also the Prep Sheet source) ===
+//
+// Single source of truth for the Recipe tab's on-screen totals strip AND
+// the Prep Sheet print — both call this so the printed numbers can never
+// drift from what's shown on screen. Same "extract so two consumers agree
+// by construction" pattern as Tax Master's groupRowsByMonth.
+
+export interface RecipeStats {
+  ogSg: number;
+  ogPlato: number;
+  fgSg: number;
+  fgPlato: number;
+  abv: number;
+  ibu: number;
+  ibuSg: number;
+  ebc: number;
+  grainPcts: Map<string, number>;
+  perHop: Map<string, number>;
+  totalGrainKg: number;
+  totalHopG: number;
+  totalCost: number;
+}
+
+export function computeRecipeStats(params: {
+  recipe: Recipe;
+  ingredients: Ingredient[];
+  maltLib: MaltLib[];
+  hopLib: HopLib[];
+  yeastLib: YeastLib[];
+  miscLib: MiscLib[];
+  settings: BrewSettings;
+}): RecipeStats {
+  const { recipe, ingredients, maltLib, hopLib, yeastLib, miscLib, settings } = params;
+  const grains = ingredients.filter(i => i.type === 'grain');
+  const hops = ingredients.filter(i => i.type === 'hop');
+  const batchL = recipe.batchL || 0;
+  const empty: RecipeStats = {
+    ogSg: 1, ogPlato: 0, fgSg: 1, fgPlato: 0,
+    abv: 0, ibu: 0, ibuSg: 0, ebc: 0,
+    grainPcts: new Map<string, number>(),
+    perHop: new Map<string, number>(),
+    totalGrainKg: 0, totalHopG: 0, totalCost: 0,
+  };
+  if (batchL <= 0) return empty;
+
+  // Read BH efficiency and WP temp from recipe (set via meta bar pills)
+  const bhEff = recipe.bhEff || 67.60;
+  const wpTemp = recipe.whirlpoolTemp ?? settings.whirlpoolTemp ?? 85;
+
+  const ogSg = calcOG(grains, maltLib, batchL, bhEff);
+  const ogPlato = ogSg > 1 ? sgToPlato(ogSg) : 0;
+
+  const yeastIng = ingredients.find(i => i.type === 'yeast');
+  let atten = 0;
+  if (yeastIng) {
+    atten = parseFloat(yeastIng.extra || '0');
+    if (!atten) {
+      const libY = yeastLib.find(y => y.id === yeastIng.libId || y.name === yeastIng.name);
+      atten = asNum(libY?.atten, 75);
+    }
+  }
+  if (!atten) atten = 75;
+  const fgSg = calcFG(ogSg, atten);
+  const fgPlato = fgSg > 1 ? sgToPlato(fgSg) : 0;
+  const abv = calcABV(ogSg, fgSg);
+
+  const { total: ibu, perHop } = calcTotalIBU({
+    method: settings.ibuMethod, hops: ingredients, hopLib, batchL, ogSg,
+    whirlpoolTemp: wpTemp, mashHopAdj: settings.mashHopAdj,
+    leafHopAdj: settings.leafHopAdj, largeBatchUtil: settings.largeBatchUtil,
+  });
+  const ibuSg = ogSg > 1 ? ibu / ((ogSg - 1) * 1000) : 0;
+  const ebc = calcEBC(ingredients, maltLib, batchL);
+  const grainPcts = calcGrainPct(ingredients);
+  const totalGrainKg = grains.reduce((s, g) => s + (g.unit === 'g' ? g.amt * 0.001 : g.amt), 0);
+  const totalHopG = hops.reduce((s, h) => s + (h.unit === 'kg' ? h.amt * 1000 : h.amt), 0);
+
+  // Cost: check ingredient cost first, then look up library price.
+  // Water rows have no library — skip the lookup, use any explicit cost.
+  const totalCost = ingredients.reduce((s, ing) => {
+    if (ing.cost > 0) return s + ing.cost;
+    if (ing.type === 'water') return s;
+    const dataKey = { grain: maltLib, hop: hopLib, yeast: yeastLib, misc: miscLib }[ing.type] as any[];
+    const lib = (dataKey || []).find((e: any) => (e.name || '').toLowerCase() === (ing.name || '').toLowerCase() || e.id === ing.libId);
+    if (!lib?.price) return s;
+    const amtKg = ing.unit === 'g' ? ing.amt * 0.001 : ing.amt;
+    return s + (ing.type === 'yeast' ? lib.price : lib.price * amtKg);
+  }, 0);
+
+  return { ogSg, ogPlato, fgSg, fgPlato, abv, ibu, ibuSg, ebc, grainPcts, perHop, totalGrainKg, totalHopG, totalCost };
 }
 
 // === Recipe Normalisation (per 1000L for NTA) ===

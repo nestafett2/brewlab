@@ -52,6 +52,9 @@ import { newRecipeId, today } from '../lib/utils';
 import { fmtNum } from '../lib/format';
 import { lsSet } from '../lib/storage';
 import { isWaterChem } from '../lib/waterChem';
+import { computeRecipeStats, calcBrewDayTargets, DEFAULT_MASH_PROFILE } from '../lib/calculations';
+import { printPrepSheet } from '../components/recipe/prepSheetPrint';
+import { printBrewDaySheet } from '../components/recipe/brewDaySheetPrint';
 
 export type RecipeSubTab = 'ingredients' | 'brewday' | 'ferm' | 'cold' | 'tax'
   | 'taxsummary' | 'analysis' | 'water' | 'history' | 'checklist';
@@ -90,6 +93,44 @@ export default function Desktop() {
   // when the equipment-derived pill strip moved out of the meta bar.)
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // ── Print dropdown (recipe sub-tab bar) ──────────────────────────────
+  // Prep Sheet + Brew Day Sheet used to be owned by RecipeTab/BrewDayTab
+  // respectively, each reading its own live component state. The dropdown
+  // lives on the persistent sub-tab bar instead, visible regardless of
+  // which sub-tab is mounted — so both handlers read fresh from the store
+  // at click time (same getter pattern the old handlers already used for
+  // waterChem/brewDay) rather than depending on a specific tab being open.
+  const ingredientsByRecipe    = useStore(s => s.ingredientsByRecipe);
+  const maltLib                = useStore(s => s.maltLib);
+  const hopLib                 = useStore(s => s.hopLib);
+  const yeastLib                = useStore(s => s.yeastLib);
+  const miscLib                 = useStore(s => s.miscLib);
+  const settings                 = useStore(s => s.settings);
+  const equipProfiles           = useStore(s => s.equipProfiles);
+  const mashProfiles            = useStore(s => s.mashProfiles);
+  const recipeProfilesByRecipe  = useStore(s => s.recipeProfilesByRecipe);
+  const tankCalib                = useStore(s => s.tankCalib);
+  const getWaterChem             = useStore(s => s.getWaterChem);
+  const getBrewDay               = useStore(s => s.getBrewDay);
+  const [printMenuOpen, setPrintMenuOpen] = useState(false);
+  const printMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close the Print dropdown on any click outside it, and on Escape.
+  // Deferred mousedown listener so the click that opens the menu doesn't
+  // immediately close it — same pattern as RecipeTab's ingredient ctx-menu.
+  useEffect(() => {
+    if (!printMenuOpen) return;
+    const close = () => setPrintMenuOpen(false);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    const id = setTimeout(() => document.addEventListener('mousedown', close), 0);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [printMenuOpen]);
 
   // ── Floating recipe-preview popover (sidebar single-click) ─────────
   // Stays on the current tab; doesn't update `preview` (which still
@@ -747,6 +788,82 @@ export default function Desktop() {
     setSubTabByRecipe(prev => ({ ...prev, [activeRecipeId]: t }));
   };
 
+  // Print Prep Sheet — A4 portrait artifact for the brewer's workstation.
+  // Moved here (from RecipeTab) so the Print dropdown works from any
+  // sub-tab. Mirrors RecipeTab's former handlePrintPrepSheet exactly:
+  // same activeEquip/activeMash resolution chain, same targets calc.
+  const handlePrintPrepSheet = () => {
+    const recipe = activeRecipeId ? recipes.find(r => r.id === activeRecipeId) : null;
+    if (!recipe) { pushToast({ message: 'Open a recipe first.', variant: 'info' }); return; }
+    const ingredients = ingredientsByRecipe[recipe.id] ?? [];
+    const stats = computeRecipeStats({ recipe, ingredients, maltLib, hopLib, yeastLib, miscLib, settings });
+    const recipeProfiles = recipeProfilesByRecipe[recipe.id];
+    const equipId = recipeProfiles?.equip;
+    const activeEquip = (equipId ? equipProfiles.find(p => p.id === equipId) : null) ?? equipProfiles[0] ?? null;
+    const mashId = recipeProfiles?.mash;
+    const activeMash = mashId ? mashProfiles.find(p => p.id === mashId) ?? null : null;
+    const waterChem = getWaterChem(recipe.id);
+    const brewDay   = getBrewDay(recipe.id);
+    const targets   = calcBrewDayTargets({
+      recipe, ingredients, maltLib, hopLib, yeastLib,
+      equip: activeEquip, mashProfile: activeMash,
+      grainAbsorbLkg: settings.grainAbsorb,
+      grainTempC: settings.defaultGrainTemp,
+      coolingShrinkagePct: settings.coolingShrinkage,
+    });
+    const tankName = recipe.bdFv ? (tankCalib[recipe.bdFv]?.name ?? recipe.bdFv) : '';
+    const firstStep = activeMash?.steps?.[0];
+    printPrepSheet({
+      recipe, ingredients, stats,
+      waterChem, brewDay, targets,
+      mashStepTempC: typeof firstStep?.temp === 'number' ? firstStep.temp : undefined,
+      mashStepDurationMin: typeof firstStep?.time === 'number' ? firstStep.time : undefined,
+      tankName,
+      // Per-recipe brewer wins; falls back to brewery-wide setting; print
+      // builder turns empty into "—".
+      brewerName: (recipe.brewer || '').trim() || settings.breweryName || '',
+      maltLib, hopLib, yeastLib,
+      harvestedYeast,
+    });
+  };
+
+  // Print Brew Day Sheet — A4 handwriting sheet. Moved here (from
+  // BrewDayTab) so the Print dropdown works from any sub-tab. Reads the
+  // per-recipe MASH blob via getMash (BrewDayTab's `mashProfile`, distinct
+  // from the named-library `activeMash` the Prep Sheet handler above uses)
+  // and falls back to DEFAULT_MASH_PROFILE exactly as BrewDayTab does.
+  const handlePrintBrewDaySheet = () => {
+    const recipe = activeRecipeId ? recipes.find(r => r.id === activeRecipeId) : null;
+    if (!recipe) { pushToast({ message: 'Open a recipe first.', variant: 'info' }); return; }
+    const ingredients = ingredientsByRecipe[recipe.id] ?? [];
+    const recipeProfiles = recipeProfilesByRecipe[recipe.id];
+    const equipId = recipeProfiles?.equip;
+    const activeEquip = (equipId ? equipProfiles.find(p => p.id === equipId) : null) ?? equipProfiles[0] ?? null;
+    const mashProfile = getMash(recipe.id) ?? DEFAULT_MASH_PROFILE;
+    const targets = calcBrewDayTargets({
+      recipe, ingredients, maltLib, hopLib, yeastLib,
+      equip: activeEquip, mashProfile,
+      grainAbsorbLkg: settings.grainAbsorb && settings.grainAbsorb > 0 ? settings.grainAbsorb : undefined,
+      grainTempC: typeof settings.defaultGrainTemp === 'number' && isFinite(settings.defaultGrainTemp)
+        ? settings.defaultGrainTemp
+        : undefined,
+      coolingShrinkagePct: typeof settings.coolingShrinkage === 'number' && settings.coolingShrinkage > 0
+        ? settings.coolingShrinkage
+        : undefined,
+    });
+    const tankName = recipe.bdFv ? (tankCalib[recipe.bdFv]?.name ?? recipe.bdFv) : '';
+    printBrewDaySheet({
+      recipe, ingredients, targets,
+      brewDay: getBrewDay(recipe.id),
+      waterChem: getWaterChem(recipe.id),
+      mashProfile,
+      tankName,
+      // Per-recipe brewer wins; falls back to brewery-wide setting.
+      brewerName: (recipe.brewer || '').trim() || settings.breweryName || '',
+      yeastLib,
+    });
+  };
+
   return (
     <div className="desktop-layout">
       {/* ═══ Menu Bar ═══ */}
@@ -1125,6 +1242,36 @@ export default function Desktop() {
               {label}
             </div>
           ))}
+
+          {/* Print dropdown — single entry point for the Prep Sheet and
+              Brew Day Sheet prints. Sits flush right, after the last tab;
+              not a tab itself (buttons "sit" on the tab row here, they
+              don't participate in the flex:1 tab-width split). */}
+          <div
+            ref={printMenuRef}
+            style={{ position: 'relative', marginLeft: 8, flexShrink: 0 }}
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <button
+              className="btn sm"
+              onClick={() => setPrintMenuOpen(o => !o)}
+              title="Print a brewer's worksheet for this recipe"
+            >
+              Print ▾
+            </button>
+            {printMenuOpen && (
+              <div className="menu-dropdown open" style={{ left: 'auto', right: 0, minWidth: 160 }}>
+                <div
+                  className="menu-dd-item"
+                  onClick={() => { handlePrintPrepSheet(); setPrintMenuOpen(false); }}
+                >Prep Sheet</div>
+                <div
+                  className="menu-dd-item"
+                  onClick={() => { handlePrintBrewDaySheet(); setPrintMenuOpen(false); }}
+                >Brew Day Sheet</div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
