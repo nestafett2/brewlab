@@ -89,6 +89,9 @@ function buildHeader(inputs: BrewDaySheetInputs): string {
   const style = recipe.style || EM_DASH;
   const brewNum = recipe.taxBatch || EM_DASH;
   const date = recipe.brewDate || EM_DASH;
+  const og = recipe.ogPlato > 0 ? fmt(recipe.ogPlato, 1, '°P') : EM_DASH;
+  const fg = recipe.fgPlato > 0 ? fmt(recipe.fgPlato, 1, '°P') : EM_DASH;
+  const abv = recipe.abv > 0 ? fmt(recipe.abv, 1, '%') : EM_DASH;
 
   return `
     <div class="bds-header">
@@ -108,9 +111,9 @@ function buildHeader(inputs: BrewDaySheetInputs): string {
         <span class="bds-stat"><label>Tank</label> ${escapeHtml(tankName || EM_DASH)}</span>
       </div>
       <div class="bds-stats-group">
-        <span class="bds-stat"><label>Target OG</label> ${blank(60)}</span>
-        <span class="bds-stat"><label>FG</label> ${blank(60)}</span>
-        <span class="bds-stat"><label>ABV</label> ${blank(60)}</span>
+        <span class="bds-stat"><label>Target OG</label> ${chip(og)}</span>
+        <span class="bds-stat"><label>FG</label> ${chip(fg)}</span>
+        <span class="bds-stat"><label>ABV</label> ${chip(abv)}</span>
       </div>
     </div>
   `;
@@ -264,7 +267,7 @@ function buildLauterAndSparge(inputs: BrewDaySheetInputs): string {
       <div class="bds-section-head">
         <span class="bds-section-title">LAUTER &amp; SPARGE</span>
       </div>
-      <div class="bds-lauter-col">
+      <div class="bds-lauter-wrap">
         <div class="bds-lauter-left">
           <table class="bds-table">
             <tbody>${spargeRowsHtml}</tbody>
@@ -272,22 +275,10 @@ function buildLauterAndSparge(inputs: BrewDaySheetInputs): string {
           <div class="bds-inline"><label>Sparge salts</label> ${spargeSalts || '<em class="muted">—</em>'}</div>
         </div>
         <div class="bds-lauter-right">
-          <div class="bds-row">
-            <div class="bds-row-cell"><label>First runnings pH</label> ${blank(60)}</div>
-            <div class="bds-row-cell"><label>Gravity</label> ${blank(60)}</div>
-          </div>
-          <div class="bds-row">
-            <div class="bds-row-cell"><label>Last runnings pH</label> ${blank(60)}</div>
-            <div class="bds-row-cell"><label>Gravity</label> ${blank(60)}</div>
-          </div>
-          <div class="bds-row">
-            <div class="bds-row-cell"><label>Target vol</label> ${chip(preBoilVol)}</div>
-            <div class="bds-row-cell"><label>Actual</label> ${blank(60)}</div>
-          </div>
-          <div class="bds-row">
-            <div class="bds-row-cell"><label>Target gravity</label> ${chip(preBoilP)}</div>
-            <div class="bds-row-cell"><label>Actual</label> ${blank(60)}</div>
-          </div>
+          <div>First runnings <label>pH</label>${blank(60)} <label>Gravity</label>${blank(60)}</div>
+          <div>Last runnings <label>pH</label>${blank(60)} <label>Gravity</label>${blank(60)}</div>
+          <div><label>Pre-boil target vol</label>${chip(preBoilVol)} <label>Actual</label>${blank(80)}</div>
+          <div><label>Target gravity</label>${chip(preBoilP)} <label>Actual gravity</label>${blank(80)}</div>
         </div>
       </div>
     </section>
@@ -362,18 +353,15 @@ function buildBoilAndWhirlpool(inputs: BrewDaySheetInputs): string {
         <div class="bds-col-right">
           <div class="bds-row">
             <div class="bds-row-cell"><label>Boil duration</label> ${chip(boilDuration)}</div>
-          </div>
-          <div class="bds-row">
+            <span class="muted">·</span>
             <div class="bds-row-cell"><label>Post-boil target</label> ${chip(postBoilVol)}</div>
-            <div class="bds-row-cell"><label>Actual</label> ${blank(90)}</div>
+            <div class="bds-row-cell"><label>Actual</label> ${blank(70)}</div>
           </div>
           <div class="bds-row">
             <div class="bds-row-cell"><label>WP temp target</label> ${chip(wpTemp)}</div>
-            <div class="bds-row-cell"><label>Actual</label> ${blank(90)}</div>
-          </div>
-          <div class="bds-row">
-            <div class="bds-row-cell"><label>WP time</label> ${blank(90)}</div>
-            <div class="bds-row-cell"><label>Rest</label> ${blank(90)}</div>
+            <div class="bds-row-cell"><label>Actual</label> ${blank(70)}</div>
+            <div class="bds-row-cell"><label>WP time</label> ${blank(70)}</div>
+            <div class="bds-row-cell"><label>Rest</label> ${blank(70)}</div>
           </div>
         </div>
       </div>
@@ -480,17 +468,17 @@ const EXTRA_STYLES = `
   .bds-header-right { text-align: right; }
   .bds-brew-label { font-size: 11px; color: #666; letter-spacing: 1px; }
   .bds-brew-num   { font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
-  .bds-stats-row { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0 12px; border-bottom: 1px solid #ddd; font-size: 12px; }
+  .bds-stats-row { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0 6px; border-bottom: 1px solid #ddd; font-size: 12px; }
   .bds-stats-group { display: flex; flex-wrap: wrap; gap: 14px; }
   .bds-stat label { color: #888; font-size: 11px; letter-spacing: 0.5px; margin-right: 4px; text-transform: uppercase; }
 
   /* Sections */
-  .bds-section { padding: 14px 0 8px; page-break-inside: avoid; border-bottom: 1px solid #eee; }
+  .bds-section { padding: 8px 0 4px; page-break-inside: avoid; border-bottom: 1px solid #eee; }
   .bds-section:last-of-type { border-bottom: none; }
-  .bds-section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+  .bds-section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
   .bds-section-title { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; color: #444; }
   .bds-section-meta  { font-size: 11px; color: #444; }
-  .bds-subhead { font-size: 11px; font-weight: 500; color: #555; margin: 10px 0 4px; letter-spacing: 0.6px; }
+  .bds-subhead { font-size: 11px; font-weight: 500; color: #555; margin: 4px 0 2px; letter-spacing: 0.6px; }
 
   /* Target chip — pre-printed value the brewer reads. Soft amber/cream so
      it reads "this is a target" without overpowering the page. */
@@ -518,7 +506,7 @@ const EXTRA_STYLES = `
   /* Tables — mash steps, sparge tracker, runnings */
   .bds-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 6px; }
   .bds-table th { border: none; border-bottom: 1px solid #999; padding: 4px 6px; text-align: left; font-weight: 500; font-size: 11px; color: #444; }
-  .bds-table td { border: none; border-bottom: 1px solid #eee; padding: 6px; }
+  .bds-table td { border: none; border-bottom: 1px solid #eee; padding: 3px; }
   .bds-table th.r, .bds-table td.r { text-align: right; font-variant-numeric: tabular-nums; }
   .bds-table td.muted, .muted { color: #888; font-style: italic; }
 
@@ -528,13 +516,13 @@ const EXTRA_STYLES = `
     -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .bds-meas-table .bds-meas-rowlabel { width: 70px; border: 1px solid #ccc; background: #f7f7f7; font-size: 11px; color: #444; padding: 4px 6px;
     -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .bds-meas-table .bds-meas-cell { border: 1px solid #ccc; height: 24px; }
+  .bds-meas-table .bds-meas-cell { border: 1px solid #ccc; height: 20px; }
   .bds-meas-table .bds-meas-cell-notes { height: 40px; }
   .bds-meas-table .bds-meas-col { font-size: 10px; }
 
   /* Row-cell layout — used for the multi-cell metric rows in boil /
      knockout / efficiency sections. Each cell is a label + value pair. */
-  .bds-row { display: flex; flex-wrap: wrap; gap: 18px; padding: 4px 0; }
+  .bds-row { display: flex; flex-wrap: wrap; gap: 18px; padding: 2px 0; }
   .bds-row-cell { display: flex; align-items: baseline; gap: 6px; font-size: 12px; }
   .bds-row-cell label { color: #888; font-size: 11px; letter-spacing: 0.4px; }
 
@@ -547,9 +535,10 @@ const EXTRA_STYLES = `
   .bds-col-right { flex: 0 0 38%; }
 
   /* Two-column layout — Lauter & Sparge's step grid + runnings/pre-boil */
-  .bds-lauter-col { display: flex; gap: 12px; }
-  .bds-lauter-left { flex: 0 0 63%; }
-  .bds-lauter-right { flex: 0 0 35%; font-size: 11px; }
+  .bds-lauter-wrap { display: flex; gap: 12px; }
+  .bds-lauter-left { flex: 0 0 54%; }
+  .bds-lauter-right { flex: 0 0 43%; font-size: 11px; display: flex; flex-direction: column; gap: 6px; justify-content: flex-start; }
+  .bds-lauter-right label { color: #888; font-size: 10px; margin-right: 4px; }
 
   /* Notes box — lined handwriting surface. Five faint rules so the
      brewer's writing tracks straight even without ruled paper. */
