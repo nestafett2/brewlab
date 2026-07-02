@@ -133,6 +133,9 @@ Full formulas in CALCULATIONS.md.
 - NEVER recalculated from live data afterwards — legal compliance requirement
 - Editing recipe or packaging after filing does NOT change filed figures
 
+### NTA match logic (updated 2026-07-02)
+`ntaMatchScore` compares per-1000L normalised values directly — `maltKg`, `hopsKg`, `yeastKg`, `waterL`, `ogP`, `abv` all within ±10% tolerance, plus exact misc name list match. The original hop/yeast ratio approach (`hopsKg/maltKg` and `yeastKg/maltKg`) was replaced because it caused false matches between recipes that had zero hops and zero yeast regardless of malt amounts. `NtaRatioKey` no longer contains `hopRatio` or `yeastRatio` — do not re-introduce these fields.
+
 ### Water Chemistry — Tax Exclusion Rules
 
 Salts and acids (phosphoric, lactic, gypsum, CaCl2, etc.) are water adjustments. They MUST NEVER appear in:

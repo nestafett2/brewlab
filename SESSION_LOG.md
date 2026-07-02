@@ -1,3 +1,62 @@
+# SESSION_LOG entry — 2026-07-02 — Print dropdown, Brew Day Sheet overhaul, NTA match bug fix, NTA print selector, manuals
+
+## Print ▾ dropdown
+
+Replaced the scattered print buttons (one in ActionStack sidebar, one in BrewDayTab bottom strip) with a single Print ▾ dropdown button on the right end of the recipe sub-tab bar in Desktop.tsx. Dropdown contains two items: Prep Sheet and Brew Day Sheet. Both call the existing print handler functions. ActionStack.tsx had the onPrintPrepSheet prop removed; BrewDayTab.tsx had the print button and getWaterChem import removed. Print handlers moved up to Desktop.tsx where they have access to all required data.
+
+CC scope-crept during this task — refactored a useMemo block into a shared function in calculations.ts without being asked, and ran a full app QA test before committing, burning ~15 minutes on a task that should have taken 2. Lesson: prompts need to end with "do not test, do not run the app, commit and push when done" and should specify exact line numbers to avoid exploratory reads.
+
+## Brew Day Sheet layout overhaul (ongoing)
+
+Multiple CC passes iterating on brewDaySheetPrint.ts layout. Changes landed:
+- Mash steps: tried horizontal card layout (two steps side by side with Target/Actual columns stacked), then reverted to vertical table per Ben's preference after seeing the output
+- Header: OG/FG/ABV restored as target chips labelled "Target OG / FG / ABV"
+- Flowmeter start and finish moved into the section header meta line
+- Lauter & Sparge: two-column layout — 8-step flowmeter grid on left, runnings (first/last pH + gravity) and pre-boil targets on right
+- Boil & Whirlpool: two-column layout — hot-side additions table on left (hops + misc sorted boil→whirlpool→misc), process fields on right condensed to 2 rows. Checkboxes added to additions table. OG target removed from this section.
+- Knockout & Pitch: yeast strain + pitch amount moved to section header line; pitch temp / ferm temp / pitch pH condensed to one row
+- Efficiency section removed entirely
+- Salt additions: mash salts shown below mash section, sparge salts shown in lauter section
+- Global spacing tightened to fit one page
+
+Still pending: full one-page fit, grid alignment pass, Pre-trans column equal width fix.
+
+## NTA Submitter match bug fix
+
+Bug: ntaMatchScore was comparing only hop/yeast ratios (hopsKg/maltKg and yeastKg/maltKg). Two recipes with zero hops and zero yeast would always match each other regardless of malt amounts, because the within() helper returned true when y===0 and x===0.
+
+Fix: expanded NtaRatioKey interface to include maltKg, hopsKg, yeastKg, waterL, ogP, abv (dropped the ratio approach entirely). ntaRatioKey() now stores per-1000L values directly. ntaMatchScore() compares all six fields at ±10% tolerance plus exact misc name list match. The within() helper now returns false when one value is zero and the other is not.
+
+Also updated ratioKeyOfSubmission() in NtaPage.tsx to populate all new fields. Removed now-dead hopRatio/yeastRatio reads from handleSubmit(). Docstrings updated to reflect new behavior.
+
+Files: src/lib/nta.ts, src/components/tax/NtaPage.tsx. Commit: c1d86b0.
+
+## NTA Submitter print selector
+
+Print Form button previously printed the entire ntaRegister (all submitted recipes). Replaced with a two-mode UI: clicking Print Form enters selection mode, showing checkboxes on each row of the Submitted Recipes Register. Select All button selects all. Print Selected prints only the checked entries via printNtaForm(selectedEntries). Cancel exits selection mode. Reset state after printing.
+
+File: src/components/tax/NtaPage.tsx. Commit: db8e793.
+
+## User manual + Workflow guide
+
+Drafted two Word documents:
+- BrewLab_User_Manual.docx — feature reference, tab by tab, all three devices
+- BrewLab_Workflows.docx — step-by-step workflows: creating a recipe, order planning (including receiving deliveries and inventory update), brew day, fermentation, packaging, NTA tax filing, syncing
+
+Both generated via docx npm script. Ben noted the original manual draft was a feature list not a manual — rewritten as step-by-step workflows. NTA submission workflow clarified by reading NtaPage.tsx directly and testing in the live app.
+
+## Bugs flagged this session
+
+- Duplicate recipe inherits Recipe Name (仕込記号): duplicateRecipe store action copies recipe.name from source. NTA Submitter matches by recipe name so duplicates incorrectly show as matching previously submitted recipes. Fix: clear recipe.name in duplicateRecipe the same way brewNum is cleared.
+- hopLib in BrewDaySheetInputs: field declared in interface and passed from Desktop.tsx but never read anywhere in brewDaySheetPrint.ts. Was added with intention of showing AA% in boil additions table but never wired. Either add AA% column using hopLib or remove the field.
+
+## NTA improvements flagged
+
+- Dedicated Submitted Recipes view: accessible from menu, shows all submitted recipes sortable by date submitted, with Print All button for when tax office requests full history
+- Print Form gate: button should only be available after recipe is marked as submitted for the currently checked recipe
+
+---
+
 ## 2026-07-02 — Env catch-up: git + Vercel deploy after 7-week gap
 
 After ~7 weeks away, resumed work on a new Mac. Session was entirely git/env/deploy plumbing, no feature work.
