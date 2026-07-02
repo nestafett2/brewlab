@@ -15,7 +15,9 @@ import type {
   Recipe,
   Ingredient,
   YeastLib,
+  HopLib,
   WaterChemData,
+  WaterMineral,
   MashProfile,
   BrewDayData,
 } from '../../types';
@@ -35,6 +37,7 @@ export interface BrewDaySheetInputs {
   tankName: string;                     // resolved (or '')
   brewerName: string;                   // settings.breweryName (or '')
   yeastLib: YeastLib[];
+  hopLib: HopLib[];
 }
 
 // ─── Format helpers ─────────────────────────────────────────────────
@@ -64,6 +67,16 @@ const chip = (text: string): string =>
 // Wraps a handwriting blank. Width hint controls the underline length.
 const blank = (width = 90): string =>
   `<span class="bds-blank" style="min-width:${width}px"></span>`;
+
+// Friendly mineral names for salt-addition lines (mirrors prepSheetPrint.ts).
+const MINERAL_LABEL: Record<WaterMineral, string> = {
+  gypsum: 'Gypsum',
+  cacl2:  'CaCl₂',
+  epsom:  'Epsom',
+  mgcl2:  'MgCl₂',
+  nacl:   'NaCl',
+  nahco3: 'Baking soda',
+};
 
 // ─── Section builders ───────────────────────────────────────────────
 
@@ -108,6 +121,12 @@ function buildHeader(inputs: BrewDaySheetInputs): string {
 
 function buildMash(inputs: BrewDaySheetInputs): string {
   const { targets, waterChem, mashProfile } = inputs;
+
+  const mins = waterChem.minerals ?? {};
+  const mashSalts = (Object.keys(mins) as WaterMineral[])
+    .filter(k => { const m = mins[k]; return m && isFinite(num(m.mash)) && num(m.mash) > 0; })
+    .map(k => `${MINERAL_LABEL[k]} ${fmt(num(mins[k]!.mash), 1)} g`)
+    .join(' · ');
 
   const strikeVol = isNum(targets.mashWaterL) && targets.mashWaterL > 0
     ? fmt(targets.mashWaterL, 0, ' L')
@@ -173,12 +192,19 @@ function buildMash(inputs: BrewDaySheetInputs): string {
         <tbody>${gridBody}</tbody>
       </table>
       <div class="bds-inline">Flowmeter finish ${blank(80)}</div>
+      <div class="bds-inline"><label>Mash salts</label> ${mashSalts || '<em class="muted">—</em>'}</div>
     </section>
   `;
 }
 
 function buildLauterAndSparge(inputs: BrewDaySheetInputs): string {
-  const { targets } = inputs;
+  const { targets, waterChem } = inputs;
+
+  const spargeMins = waterChem.minerals ?? {};
+  const spargeSalts = (Object.keys(spargeMins) as WaterMineral[])
+    .filter(k => { const m = spargeMins[k]; return m && isFinite(num(m.sparge)) && num(m.sparge) > 0; })
+    .map(k => `${MINERAL_LABEL[k]} ${fmt(num(spargeMins[k]!.sparge), 1)} g`)
+    .join(' · ');
 
   const spargeTarget = isNum(targets.spargeVolL) && targets.spargeVolL > 0
     ? fmt(targets.spargeVolL, 0, ' L')
@@ -235,12 +261,13 @@ function buildLauterAndSparge(inputs: BrewDaySheetInputs): string {
         <div class="bds-row-cell"><label>Target gravity</label> ${chip(preBoilP)}</div>
         <div class="bds-row-cell"><label>Actual gravity</label> ${blank(110)}</div>
       </div>
+      <div class="bds-inline"><label>Sparge salts</label> ${spargeSalts || '<em class="muted">—</em>'}</div>
     </section>
   `;
 }
 
 function buildBoilAndWhirlpool(inputs: BrewDaySheetInputs): string {
-  const { recipe, targets } = inputs;
+  const { recipe, targets, ingredients } = inputs;
 
   const boilDuration = isNum(recipe.boilTime) && recipe.boilTime > 0
     ? `${recipe.boilTime} min`
@@ -257,25 +284,75 @@ function buildBoilAndWhirlpool(inputs: BrewDaySheetInputs): string {
     ? fmt(recipe.whirlpoolTemp, 0, ' °C')
     : EM_DASH;
 
+  // Hot-side additions — hops (boil + whirlpool) and non-dry-hop misc.
+  // Sort: boil hops (highest time first) → whirlpool hops → misc (no time).
+  const additions = ingredients.filter(ing =>
+    (ing.type === 'hop' || ing.type === 'misc')
+    && (ing.use || '').toLowerCase() !== 'dry hop'
+  );
+  const tier = (ing: Ingredient) => {
+    if (ing.type !== 'hop') return 2;
+    return (ing.use || '').toLowerCase() === 'whirlpool' ? 1 : 0;
+  };
+  additions.sort((a, b) => tier(a) - tier(b) || (num(b.time) || 0) - (num(a.time) || 0));
+
+  const additionRows = additions.length > 0
+    ? additions.map(ing => {
+        const amtStr = ing.type === 'hop'
+          ? fmt(ing.unit === 'kg' ? ing.amt : ing.amt / 1000, 3, ' kg')
+          : fmt(ing.amt, 1, ` ${ing.unit || ''}`.trimEnd());
+        const timeStr = isNum(ing.time) ? `${ing.time} min` : EM_DASH;
+        return `
+          <tr>
+            <td class="r">${amtStr}</td>
+            <td>${escapeHtml(ing.name || '—')}</td>
+            <td>${escapeHtml(ing.use || '—')}</td>
+            <td class="r">${timeStr}</td>
+          </tr>
+        `;
+      }).join('')
+    : '<tr><td colspan="4" class="muted">No boil/whirlpool additions.</td></tr>';
+
   return `
     <section class="bds-section">
       <div class="bds-section-head">
         <span class="bds-section-title">BOIL &amp; WHIRLPOOL</span>
       </div>
-      <div class="bds-row">
-        <div class="bds-row-cell"><label>Boil duration</label> ${chip(boilDuration)}</div>
-      </div>
-      <div class="bds-row">
-        <div class="bds-row-cell"><label>Post-boil target</label> ${chip(postBoilVol)}</div>
-        <div class="bds-row-cell"><label>Actual</label> ${blank(110)}</div>
-        <div class="bds-row-cell"><label>OG target</label> ${chip(ogTarget)}</div>
-        <div class="bds-row-cell"><label>Actual</label> ${blank(110)}</div>
-      </div>
-      <div class="bds-row">
-        <div class="bds-row-cell"><label>Whirlpool temp target</label> ${chip(wpTemp)}</div>
-        <div class="bds-row-cell"><label>Actual temp</label> ${blank(110)}</div>
-        <div class="bds-row-cell"><label>WP time</label> ${blank(90)}</div>
-        <div class="bds-row-cell"><label>Rest</label> ${blank(90)}</div>
+      <div class="bds-two-col">
+        <div class="bds-col-left">
+          <table class="bds-table">
+            <thead>
+              <tr>
+                <th class="r">Amount</th>
+                <th>Name</th>
+                <th>Use</th>
+                <th class="r">Time</th>
+              </tr>
+            </thead>
+            <tbody>${additionRows}</tbody>
+          </table>
+        </div>
+        <div class="bds-col-right">
+          <div class="bds-row">
+            <div class="bds-row-cell"><label>Boil duration</label> ${chip(boilDuration)}</div>
+          </div>
+          <div class="bds-row">
+            <div class="bds-row-cell"><label>Post-boil target</label> ${chip(postBoilVol)}</div>
+            <div class="bds-row-cell"><label>Actual</label> ${blank(90)}</div>
+          </div>
+          <div class="bds-row">
+            <div class="bds-row-cell"><label>OG target</label> ${chip(ogTarget)}</div>
+            <div class="bds-row-cell"><label>Actual</label> ${blank(90)}</div>
+          </div>
+          <div class="bds-row">
+            <div class="bds-row-cell"><label>WP temp target</label> ${chip(wpTemp)}</div>
+            <div class="bds-row-cell"><label>Actual</label> ${blank(90)}</div>
+          </div>
+          <div class="bds-row">
+            <div class="bds-row-cell"><label>WP time</label> ${blank(90)}</div>
+            <div class="bds-row-cell"><label>Rest</label> ${blank(90)}</div>
+          </div>
+        </div>
       </div>
     </section>
   `;
@@ -351,37 +428,6 @@ function buildKnockoutAndPitch(inputs: BrewDaySheetInputs): string {
         <div class="bds-row-cell"><label>O₂ LPM</label> ${blank(110)}</div>
         <div class="bds-row-cell"><label>O₂ time</label> ${blank(110)}</div>
         <div class="bds-row-cell"><label>CM (tank reading)</label> ${blank(110)}</div>
-      </div>
-    </section>
-  `;
-}
-
-function buildEfficiency(inputs: BrewDaySheetInputs): string {
-  const { recipe, targets } = inputs;
-
-  const mashEffEst = isNum(targets.estMashEffPct) && targets.estMashEffPct > 0
-    ? fmt(targets.estMashEffPct, 0, '%')
-    : EM_DASH;
-  const bhEffEst = isNum(recipe.bhEff) && recipe.bhEff > 0
-    ? fmt(recipe.bhEff, 0, '%')
-    : EM_DASH;
-
-  return `
-    <section class="bds-section">
-      <div class="bds-section-head">
-        <span class="bds-section-title">EFFICIENCY</span>
-        <span class="bds-section-meta muted">Fill in after data entry · actuals auto-compute in the app</span>
-      </div>
-      <div class="bds-row">
-        <div class="bds-row-cell"><label>Mash eff (est)</label> ${chip(mashEffEst)}</div>
-        <div class="bds-row-cell"><label>Mash eff (actual)</label> ${blank(110)}</div>
-      </div>
-      <div class="bds-row">
-        <div class="bds-row-cell"><label>BH eff (est)</label> ${chip(bhEffEst)}</div>
-        <div class="bds-row-cell"><label>BH eff (actual)</label> ${blank(110)}</div>
-      </div>
-      <div class="bds-row">
-        <div class="bds-row-cell"><label>Total L into FV</label> ${blank(140)}</div>
       </div>
     </section>
   `;
@@ -474,6 +520,11 @@ const EXTRA_STYLES = `
   /* Inline non-row blank (used under the mash table for Flowmeter finish) */
   .bds-inline { padding: 4px 0; font-size: 12px; color: #444; }
 
+  /* Two-column layout — Boil & Whirlpool's additions table + condensed fields */
+  .bds-two-col { display: flex; gap: 16px; }
+  .bds-col-left { flex: 0 0 60%; }
+  .bds-col-right { flex: 0 0 38%; }
+
   /* Notes box — lined handwriting surface. Five faint rules so the
      brewer's writing tracks straight even without ruled paper. */
   .bds-notes-box {
@@ -502,7 +553,6 @@ export function printBrewDaySheet(inputs: BrewDaySheetInputs): void {
     buildLauterAndSparge(inputs),
     buildBoilAndWhirlpool(inputs),
     buildKnockoutAndPitch(inputs),
-    buildEfficiency(inputs),
     buildNotes(),
   ].join('\n');
 

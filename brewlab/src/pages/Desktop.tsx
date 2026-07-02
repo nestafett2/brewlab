@@ -861,6 +861,7 @@ export default function Desktop() {
       // Per-recipe brewer wins; falls back to brewery-wide setting.
       brewerName: (recipe.brewer || '').trim() || settings.breweryName || '',
       yeastLib,
+      hopLib,
     });
   };
 
