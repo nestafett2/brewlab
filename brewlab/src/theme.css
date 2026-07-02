@@ -2045,14 +2045,14 @@ input[type=number] {
 }
 .rp-stat-label {
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 .rp-stat-val {
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 400;
   color: var(--text);
 }
 

@@ -306,13 +306,15 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
             <div style={metricItemStyle}>
               <div className="rp-stat-label">Batch</div>
               <div className="rp-stat-val">
-                <input
-                  type="text"
-                  value={recipe.batchL || ''}
-                  onChange={e => updateRecipe(recipeId, { batchL: parseFloat(e.target.value) || 0 })}
-                  style={metricInputStyle}
-                />
-                <span style={metricUnitStyle}>L</span>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 0 }}>
+                  <input
+                    type="text"
+                    value={recipe.batchL || ''}
+                    onChange={e => updateRecipe(recipeId, { batchL: parseFloat(e.target.value) || 0 })}
+                    style={metricInputStyle}
+                  />
+                  <span style={metricUnitStyle}>L</span>
+                </div>
               </div>
             </div>
             <div style={metricItemStyle}>
@@ -666,6 +668,7 @@ const leftColStyle: React.CSSProperties = {
 // pinned at the bottom because they have flexShrink: 0 via bottomRowStyle.
 const contentStyle: React.CSSProperties = {
   flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'auto',
+  background: 'var(--panel)',
 };
 
 // Top metric strip — 5 stats matching the recipe-preview metric bar.
@@ -685,7 +688,7 @@ const topStripInnerStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'flex-start',
-  gap: 8,
+  gap: 28,
 };
 
 const metricItemStyle: React.CSSProperties = {
@@ -696,7 +699,7 @@ const metricItemStyle: React.CSSProperties = {
 };
 
 const metricInputStyle: React.CSSProperties = {
-  width: 56,
+  width: 44,
   background: 'transparent',
   border: 'none',
   color: 'inherit',
@@ -710,7 +713,7 @@ const metricUnitStyle: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 400,
   color: 'var(--text-muted)',
-  marginLeft: 2,
+  marginLeft: 0,
 };
 
 // Brewer header row — slim meta-strip under the top metric strip.
