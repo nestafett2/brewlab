@@ -89,9 +89,6 @@ function buildHeader(inputs: BrewDaySheetInputs): string {
   const style = recipe.style || EM_DASH;
   const brewNum = recipe.taxBatch || EM_DASH;
   const date = recipe.brewDate || EM_DASH;
-  const og = recipe.ogPlato > 0 ? fmt(recipe.ogPlato, 1, '°P') : EM_DASH;
-  const fg = recipe.fgPlato > 0 ? fmt(recipe.fgPlato, 1, '°P') : EM_DASH;
-  const abv = recipe.abv > 0 ? fmt(recipe.abv, 1, '%') : EM_DASH;
 
   return `
     <div class="bds-header">
@@ -111,9 +108,9 @@ function buildHeader(inputs: BrewDaySheetInputs): string {
         <span class="bds-stat"><label>Tank</label> ${escapeHtml(tankName || EM_DASH)}</span>
       </div>
       <div class="bds-stats-group">
-        <span class="bds-stat"><label>OG</label> ${chip(og)}</span>
-        <span class="bds-stat"><label>FG</label> ${chip(fg)}</span>
-        <span class="bds-stat"><label>ABV</label> ${chip(abv)}</span>
+        <span class="bds-stat"><label>Target OG</label> ${blank(60)}</span>
+        <span class="bds-stat"><label>FG</label> ${blank(60)}</span>
+        <span class="bds-stat"><label>ABV</label> ${blank(60)}</span>
       </div>
     </div>
   `;
@@ -140,39 +137,29 @@ function buildMash(inputs: BrewDaySheetInputs): string {
   const targetPh = waterChem.targetPh ? String(waterChem.targetPh) : EM_DASH;
 
   const steps = mashProfile?.steps ?? [];
-  const stepRows = steps.length > 0
-    ? steps.map((s, i) => `
-      <tr>
-        <td class="r">${i + 1}</td>
-        <td>${escapeHtml(s.type || '—')}</td>
-        <td class="r">${chip(fmt(s.temp, 1, ' °C'))}</td>
-        <td class="r">${blank(70)}</td>
-        <td class="r">${chip(fmtInt(s.time, ' min'))}</td>
-        <td class="r">${blank(70)}</td>
-      </tr>
-    `).join('')
-    : '<tr><td colspan="6" class="muted">No mash profile assigned — fill in by hand.</td></tr>';
-
-  // Mash measurement grid — 4 rows × 6 cols of empty cells. Each cell
-  // gets a min-height so handwriting space is consistent.
-  const measRows = ['Temp', 'pH', 'Gravity', 'Notes'];
-  const measCols = ['', '', '', '', '', 'Pre-trans'];
-  const gridHead = `<tr><th></th>${measCols.map((c, i) =>
-    `<th class="bds-meas-col">${i < 5 ? '' : escapeHtml(c)}</th>`
-  ).join('')}</tr>`;
-  const gridBody = measRows.map(r => `<tr>
-    <td class="bds-meas-rowlabel">${escapeHtml(r)}</td>
-    ${measCols.map(() => '<td class="bds-meas-cell"></td>').join('')}
-  </tr>`).join('');
-
-  return `
-    <section class="bds-section">
-      <div class="bds-section-head">
-        <span class="bds-section-title">MASH</span>
-        <span class="bds-section-meta">
-          Strike ${chip(strikeStr)} · Target pH ${chip(targetPh)} · Flowmeter start ${blank(80)}
-        </span>
+  // Horizontal card layout for ≤2 steps (fits comfortably side by side);
+  // falls back to the vertical table for longer step programs.
+  const stepsSectionHtml = steps.length === 0
+    ? '<div class="bds-row"><span class="muted">No mash profile assigned — fill in by hand.</span></div>'
+    : steps.length <= 2
+      ? `
+      <div style="display:flex; gap:20px; padding:4px 0 8px;">
+        ${steps.map((s, i) => `
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="font-size:12px; white-space:nowrap;"><span class="muted" style="margin-right:4px;">${i + 1}</span>${escapeHtml(s.type || '—')}</div>
+            <div style="display:flex; flex-direction:column; gap:3px; align-items:center;">
+              ${chip(fmt(s.temp, 1, ' °C'))}
+              ${blank(60)}
+            </div>
+            <div style="display:flex; flex-direction:column; gap:3px; align-items:center;">
+              ${chip(fmtInt(s.time, ' min'))}
+              ${blank(60)}
+            </div>
+          </div>
+        `).join('')}
       </div>
+      `
+      : `
       <table class="bds-table">
         <thead>
           <tr>
@@ -184,14 +171,47 @@ function buildMash(inputs: BrewDaySheetInputs): string {
             <th class="r">Actual min</th>
           </tr>
         </thead>
-        <tbody>${stepRows}</tbody>
+        <tbody>${steps.map((s, i) => `
+          <tr>
+            <td class="r">${i + 1}</td>
+            <td>${escapeHtml(s.type || '—')}</td>
+            <td class="r">${chip(fmt(s.temp, 1, ' °C'))}</td>
+            <td class="r">${blank(70)}</td>
+            <td class="r">${chip(fmtInt(s.time, ' min'))}</td>
+            <td class="r">${blank(70)}</td>
+          </tr>
+        `).join('')}</tbody>
       </table>
+      `;
+
+  // Mash measurement grid — 4 rows × 6 cols of empty cells. Each cell
+  // gets a min-height so handwriting space is consistent. Notes row gets
+  // extra height (bds-meas-cell-notes) since it holds free text, not a
+  // single reading.
+  const measRows = ['Temp', 'pH', 'Gravity', 'Notes'];
+  const measCols = ['', '', '', '', '', 'Pre-trans'];
+  const gridHead = `<tr><th></th>${measCols.map((c, i) =>
+    `<th class="bds-meas-col">${i < 5 ? '' : escapeHtml(c)}</th>`
+  ).join('')}</tr>`;
+  const gridBody = measRows.map(r => `<tr>
+    <td class="bds-meas-rowlabel">${escapeHtml(r)}</td>
+    ${measCols.map(() => `<td class="bds-meas-cell${r === 'Notes' ? ' bds-meas-cell-notes' : ''}"></td>`).join('')}
+  </tr>`).join('');
+
+  return `
+    <section class="bds-section">
+      <div class="bds-section-head">
+        <span class="bds-section-title">MASH</span>
+        <span class="bds-section-meta">
+          Strike ${chip(strikeStr)} · Target pH ${chip(targetPh)} · Flowmeter start ${blank(80)} · Flowmeter finish ${blank(80)}
+        </span>
+      </div>
+      ${stepsSectionHtml}
       <div class="bds-subhead">Mash measurements</div>
       <table class="bds-meas-table">
         <thead>${gridHead}</thead>
         <tbody>${gridBody}</tbody>
       </table>
-      <div class="bds-inline">Flowmeter finish ${blank(80)}</div>
       <div class="bds-inline"><label>Mash salts</label> ${mashSalts || '<em class="muted">—</em>'}</div>
     </section>
   `;
@@ -244,24 +264,32 @@ function buildLauterAndSparge(inputs: BrewDaySheetInputs): string {
       <div class="bds-section-head">
         <span class="bds-section-title">LAUTER &amp; SPARGE</span>
       </div>
-      <table class="bds-table">
-        <tbody>${spargeRowsHtml}</tbody>
-      </table>
-      <div class="bds-row">
-        <div class="bds-row-cell"><label>First runnings pH</label> ${blank(80)}</div>
-        <div class="bds-row-cell"><label>Gravity</label> ${blank(80)}</div>
-        <span class="muted">·</span>
-        <div class="bds-row-cell"><label>Last runnings pH</label> ${blank(80)}</div>
-        <div class="bds-row-cell"><label>Gravity</label> ${blank(80)}</div>
+      <div class="bds-lauter-col">
+        <div class="bds-lauter-left">
+          <table class="bds-table">
+            <tbody>${spargeRowsHtml}</tbody>
+          </table>
+          <div class="bds-inline"><label>Sparge salts</label> ${spargeSalts || '<em class="muted">—</em>'}</div>
+        </div>
+        <div class="bds-lauter-right">
+          <div class="bds-row">
+            <div class="bds-row-cell"><label>First runnings pH</label> ${blank(60)}</div>
+            <div class="bds-row-cell"><label>Gravity</label> ${blank(60)}</div>
+          </div>
+          <div class="bds-row">
+            <div class="bds-row-cell"><label>Last runnings pH</label> ${blank(60)}</div>
+            <div class="bds-row-cell"><label>Gravity</label> ${blank(60)}</div>
+          </div>
+          <div class="bds-row">
+            <div class="bds-row-cell"><label>Target vol</label> ${chip(preBoilVol)}</div>
+            <div class="bds-row-cell"><label>Actual</label> ${blank(60)}</div>
+          </div>
+          <div class="bds-row">
+            <div class="bds-row-cell"><label>Target gravity</label> ${chip(preBoilP)}</div>
+            <div class="bds-row-cell"><label>Actual</label> ${blank(60)}</div>
+          </div>
+        </div>
       </div>
-      <div class="bds-subhead">Pre-boil</div>
-      <div class="bds-row">
-        <div class="bds-row-cell"><label>Target vol</label> ${chip(preBoilVol)}</div>
-        <div class="bds-row-cell"><label>Actual vol</label> ${blank(110)}</div>
-        <div class="bds-row-cell"><label>Target gravity</label> ${chip(preBoilP)}</div>
-        <div class="bds-row-cell"><label>Actual gravity</label> ${blank(110)}</div>
-      </div>
-      <div class="bds-inline"><label>Sparge salts</label> ${spargeSalts || '<em class="muted">—</em>'}</div>
     </section>
   `;
 }
@@ -274,9 +302,6 @@ function buildBoilAndWhirlpool(inputs: BrewDaySheetInputs): string {
     : EM_DASH;
   const postBoilVol = isNum(targets.postBoilVolL) && targets.postBoilVolL > 0
     ? fmt(targets.postBoilVolL, 1, ' L')
-    : EM_DASH;
-  const ogTarget = recipe.ogPlato > 0
-    ? fmt(recipe.ogPlato, 2, ' °P')
     : EM_DASH;
   // Whirlpool temp reference — recipe carries it. Brewer still writes
   // the actual measurement; the target chip is a reminder.
@@ -304,6 +329,7 @@ function buildBoilAndWhirlpool(inputs: BrewDaySheetInputs): string {
         const timeStr = isNum(ing.time) ? `${ing.time} min` : EM_DASH;
         return `
           <tr>
+            <td style="width:20px">☐</td>
             <td class="r">${amtStr}</td>
             <td>${escapeHtml(ing.name || '—')}</td>
             <td>${escapeHtml(ing.use || '—')}</td>
@@ -311,7 +337,7 @@ function buildBoilAndWhirlpool(inputs: BrewDaySheetInputs): string {
           </tr>
         `;
       }).join('')
-    : '<tr><td colspan="4" class="muted">No boil/whirlpool additions.</td></tr>';
+    : '<tr><td colspan="5" class="muted">No boil/whirlpool additions.</td></tr>';
 
   return `
     <section class="bds-section">
@@ -323,6 +349,7 @@ function buildBoilAndWhirlpool(inputs: BrewDaySheetInputs): string {
           <table class="bds-table">
             <thead>
               <tr>
+                <th></th>
                 <th class="r">Amount</th>
                 <th>Name</th>
                 <th>Use</th>
@@ -338,10 +365,6 @@ function buildBoilAndWhirlpool(inputs: BrewDaySheetInputs): string {
           </div>
           <div class="bds-row">
             <div class="bds-row-cell"><label>Post-boil target</label> ${chip(postBoilVol)}</div>
-            <div class="bds-row-cell"><label>Actual</label> ${blank(90)}</div>
-          </div>
-          <div class="bds-row">
-            <div class="bds-row-cell"><label>OG target</label> ${chip(ogTarget)}</div>
             <div class="bds-row-cell"><label>Actual</label> ${blank(90)}</div>
           </div>
           <div class="bds-row">
@@ -410,19 +433,16 @@ function buildKnockoutAndPitch(inputs: BrewDaySheetInputs): string {
     <section class="bds-section">
       <div class="bds-section-head">
         <span class="bds-section-title">KNOCKOUT &amp; PITCH</span>
+        <span class="bds-section-meta">Yeast strain ${chip(yeastStrain)} · Pitch amount ${chip(pitchAmt)}</span>
       </div>
       <div class="bds-row">
         <div class="bds-row-cell"><label>Pitch temp target</label> ${chip(pitchTempTarget)}</div>
-        <div class="bds-row-cell"><label>Actual</label> ${blank(110)}</div>
+        <div class="bds-row-cell"><label>Actual</label> ${blank(90)}</div>
+        <span class="muted">·</span>
         <div class="bds-row-cell"><label>Ferm temp target</label> ${chip(fermTempRef)}</div>
-      </div>
-      <div class="bds-row">
+        <span class="muted">·</span>
         <div class="bds-row-cell"><label>Pitch pH target</label> ${chip(pitchPhTarget)}</div>
-        <div class="bds-row-cell"><label>Actual</label> ${blank(110)}</div>
-      </div>
-      <div class="bds-row">
-        <div class="bds-row-cell"><label>Yeast strain</label> ${chip(yeastStrain)}</div>
-        <div class="bds-row-cell"><label>Pitch amount</label> ${chip(pitchAmt)}</div>
+        <div class="bds-row-cell"><label>Actual</label> ${blank(90)}</div>
       </div>
       <div class="bds-row">
         <div class="bds-row-cell"><label>O₂ LPM</label> ${blank(110)}</div>
@@ -509,6 +529,7 @@ const EXTRA_STYLES = `
   .bds-meas-table .bds-meas-rowlabel { width: 70px; border: 1px solid #ccc; background: #f7f7f7; font-size: 11px; color: #444; padding: 4px 6px;
     -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .bds-meas-table .bds-meas-cell { border: 1px solid #ccc; height: 24px; }
+  .bds-meas-table .bds-meas-cell-notes { height: 40px; }
   .bds-meas-table .bds-meas-col { font-size: 10px; }
 
   /* Row-cell layout — used for the multi-cell metric rows in boil /
@@ -524,6 +545,11 @@ const EXTRA_STYLES = `
   .bds-two-col { display: flex; gap: 16px; }
   .bds-col-left { flex: 0 0 60%; }
   .bds-col-right { flex: 0 0 38%; }
+
+  /* Two-column layout — Lauter & Sparge's step grid + runnings/pre-boil */
+  .bds-lauter-col { display: flex; gap: 12px; }
+  .bds-lauter-left { flex: 0 0 63%; }
+  .bds-lauter-right { flex: 0 0 35%; font-size: 11px; }
 
   /* Notes box — lined handwriting surface. Five faint rules so the
      brewer's writing tracks straight even without ruled paper. */
