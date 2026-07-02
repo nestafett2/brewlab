@@ -1,6 +1,6 @@
 # BrewLab — START HERE
 
-**Last session: 02 July 2026 (env catch-up — git + Vercel deploy after 7-week gap; no feature work)**
+**Last session: 02 July 2026 (Print ▾ dropdown, Brew Day Sheet layout overhaul, NTA Submitter fixes, user manual draft)**
 **Read this first. Everything else is reference.**
 
 ---
@@ -59,23 +59,26 @@ All major page ports complete. Sync layer rebuild complete.
 
 ---
 
-## What Got Done Last Session (12 May 2026)
+## What Got Done Last Session (02 July 2026)
 
-Substantial session. Three new print artifacts shipped, the Monthly Packaging Report print path fixed in place, two new recipe schema fields added with full Supabase round-trip. All 10 HTML print functions are now confirmed ported.
+**Print ▾ dropdown** — added to the right end of the recipe sub-tab bar replacing the old scattered print buttons. Contains Prep Sheet and Brew Day Sheet. Single entry point for all recipe printing.
 
-**Print port verification.** Started with concern that HTML print functions (`printTaxRecord`, `printMonthlyReport`, etc.) might be unported. Function-name grep was misleading — the porter restructured features (Monthly Report became a sub-tab of Tax Master). Follow-up grep on the calculation fingerprint (`fvBtWaste`, `totalWastePkg`, `kegWaste`, `flowmeterWaste` used together) found everything ported. Lesson logged for future "is feature X ported?" investigations: grep for the calc fingerprint, not the function name.
+**Brew Day Sheet layout overhaul** — ongoing iteration. Mash steps back to vertical table. Two-column Lauter & Sparge (steps left, runnings + pre-boil right). Boil & Whirlpool two-column with additions left and process fields right. Salt additions showing in mash and sparge sections. Efficiency section removed. Still iterating on spacing and layout to fit one page.
 
-**Monthly Packaging Report print fix.** `TaxMasterPage.tsx`'s `printSubTab` was special-casing nothing — the Total sub-tab dumped a flat 24-column table instead of the HTML reference's per-month block layout (table + sidebar per month, page-break-inside:avoid, UNSCHEDULED section, date range in title). Fixed by adding a dedicated `printMonthlyReport` branch in `handlePrint` dispatch and narrowing `printSubTab`'s signature to `'brew' | 'cond'`. Extracted shared `groupRowsByMonth()` to module scope so on-screen `TotalSubTab` (via `useMemo`) and the print builder agree on grouping by construction. Sidebar metrics computed locally — on-screen `MonthSummaryCard` splits Beer/Happoshu by COUNT (units of kegs/cans), the HTML print sidebar splits by LITRES. Same source fields, different aggregations. "UNSCHEDULED" renamed to "NO PACKAGE DATE" everywhere (Ben's choice — more specific). Added per-block auto-suppress yellow Happoshu row highlight in print only (`#FFF8C4`, `print-color-adjust: exact` for Chrome PDF without "background graphics" toggle). The all-Happoshu edge case encoded as auto-suppress rather than an explicit toggle. A3 landscape kept; A4 question parked until Ben sees real output.
+**NTA Submitter match bug fixed** — ntaMatchScore was only comparing hop/yeast ratios, so any two recipes with zero hops and zero yeast would falsely match each other regardless of how different their malt amounts were. Fixed by comparing malt, hops, yeast, water, OG, and ABV all at ±10% tolerance.
 
-**Fake-data fixture for testing.** New `fake-monthly-report-data.json` (17 KB) at project root + reproducible generator at `brewlab/scripts/gen-fake-monthly-report-data.mjs`. Eight brews #432–439 with Japanese craft names spanning Feb/Mar/Apr 2026, 6 Beer + 2 Happoshu (one in each packaged month so sidebar split is testable), 2 unscheduled (both Beer). Mixed 350/500 ml cans. One intentional outlier brew (Goro Pilsner 5.4% FV→BT loss) for the high-waste rendering path. `.gitignore` updated for `fake-*.json` and `brewlab-backup-*.json`. Imported via Settings → Import Backup; round-trip verified.
+**NTA Submitter print selector** — Print Form button now opens a selection UI with checkboxes on each submitted recipe row. Print Selected prints only the chosen entries. Select All button available.
 
-**Prep Sheet print — new feature.** `src/components/recipe/prepSheetPrint.ts`. A4 portrait, 10 mm margins, 12 px body / 11 px labels / 18 px header. Designed across 5 mockup iterations. Five sections: header + targets stripe (OG/FG/ABV/IBU/SRM chips) → fermentables (MILL FIRST — first physical task on prep day) → water (strike/mash/sparge grid + minerals + salt additions inline) → hops & boil → yeast (single inline row — Ben specifically didn't want the full pitch math chain) → extra additions (free-text, suppressed entirely when empty — no ghost header). Soft amber/cream target chips (`#FFF4D9`, `print-color-adjust: exact`). No row dividers in tables, header underline only. Yeast section uses honest harvested display ("10 L harvested (short 27% — supplement w/ fresh)" in amber-red if short, "sufficient" muted green if not) — doesn't fabricate a top-up amount. Whirlpool section dropped (Ben's call — belongs on brew day sheet, not prep). Button: Recipe tab TOOLS group, after "Add to Planner".
+**User manual + Workflow guide** — drafted as Word docs. Workflow guide covers: creating a recipe, order planning, brew day, fermentation, packaging, NTA tax filing, syncing.
 
-**Brew Day Sheet print — new feature.** `src/components/recipe/brewDaySheetPrint.ts`. Same A4 shape as prep sheet but with " · brew day" suffix on the beer-name H1 and IBU/SRM dropped from targets row (irrelevant mid-brew). Designed by following Ben's existing Excel-sheet-2 layout, converted to chronological brew order. Six sections: mash (with 4×6 measurement grid — 5 unlabeled cols + 1 Pre-trans) → lauter & sparge (8-step flowmeter tracker matching Ben's Excel verbatim: start sparge / finish sparge / after underlet / after grain rinse / sparge amount / extra used / need sparge / finish #) → boil & whirlpool → knockout & pitch → efficiency → notes. Two distinct blank styles, deliberately: inline underlines for short fields, bordered empty cells for grid handwriting. Notes box has feint horizontal rules via CSS `repeating-linear-gradient` so handwriting tracks straight. Single-column layout (column packing fights handwriting density). Button: Brew Day tab bottom action strip, next to "📝 Record Usage". Disabled when targets haven't computed.
+**Bugs flagged:**
+- When you duplicate a recipe, the Recipe Name (仕込記号 — the tax identifier you file with the NTA) is copied from the original. This means the NTA Submitter sees them as the same recipe and incorrectly shows a match. The Recipe Name should be blank on a duplicate, the same way Brew # is cleared. Needs a one-line fix in the duplicateRecipe store action.
+- In brewDaySheetPrint.ts, the hopLib field is declared in the BrewDaySheetInputs interface and passed in from Desktop.tsx, but nothing in the file actually reads it. It was added with the intention of showing AA% in the boil additions table but was never wired. Either add AA% to the additions table using hopLib, or remove the field from the interface and the call site in Desktop.tsx to keep the code clean.
 
-**Two new recipe schema fields.** `extraAdditions` (free-text additions field — Ben chose this over a structured cellar-additions schema) and `brewer` (per-recipe brewer name — Ben chose per-recipe over per-brew-day for current scale; per-brew-day would be more flexible if multiple brewers ever brew the same recipe). Two SQL migrations applied today (`text NOT NULL DEFAULT ''`). Both fields seeded in all four recipe-creation paths (`createRecipeFromTemplate`, BeerXML import, blank-recipe path; `createNewVersion` + `duplicateRecipe` inherit via spread). Initially shipped with the safe asymmetric read-but-don't-write pattern (read with empty-string fallback, omit from `recipeToRow` to avoid PGRST204); after Ben confirmed the SQL was applied, flipped to full read+write — both fields now round-trip across devices. UI: Brewer single-line input in a slim header row at the top of the Recipe tab; Extra additions textarea between ingredient cards and bottom panel. Both prints fall back: `recipe.brewer || settings.breweryName || "—"`.
-
-**Ferm/pitch temp field-source bug.** Initial brew day sheet derived ferm temp from yeast-library `temp_min`/`temp_max` midpoint — wrong for Ben's recipes (e.g. Minatoyama Lager has 18 °C planned ferm temp, W-34/70 midpoint ~13.5 °C). Ben corrected: `BrewDayData.fermTemp` and `pitchTemp` are PLANNED targets, not recorded measurements as Claude Code had assumed from the field names. Fix: rewired `brewDaySheetPrint.ts` to read `brewDay.fermTemp` / `brewDay.pitchTemp` as the primary source, with yeast-lib derivation as fallback. Verified `prepSheetPrint.ts` was already doing this for pitch temp — only the variable name + comment misframed it as "input/actual"; renamed + comment updated. Lesson logged: don't assume a field's name implies its semantic; grep the field first.
+**NTA improvements flagged:**
+- Print selector (done today)
+- Need a dedicated "Submitted Recipes" view accessible from the menu, showing all recipes that have been marked as submitted, sortable by date submitted, with a Print All button — for when the tax office asks for your full submission history
+- The Print Form button should only be available after you have clicked "Mark as Submitted" for the recipe you are checking — right now it is always available even before submitting
 
 ---
 
@@ -90,6 +93,10 @@ Substantial session. Three new print artifacts shipped, the Monthly Packaging Re
 
 ### Feature gaps
 - File menu: 1 placeholder left — Export Selected (context-aware multi-select: recipes / malts / hops / etc. depending on current view; needs design discussion).
+- Brew Day Sheet layout still needs polish — needs to fit on one page, grid alignment pass pending
+- NTA Submitter: dedicated Submitted Recipes view (see NTA improvements above)
+- NTA Submitter: Print Form button should gate on submission status
+- Duplicate recipe bug: Recipe Name (仕込記号) not cleared on duplicate — see bug notes above
 
 ### Calibration
 - BEER_BUFFER_PH_PER_MEQ_L (now editable in Settings → Advanced → Calculation Constants, default 0.04) is a rough estimate. Recalibrate against measured datapoints once production brewing produces real data. Lower priority.
@@ -132,14 +139,15 @@ Substantial session. Three new print artifacts shipped, the Monthly Packaging Re
 - AI-powered recipe analysis tool (claude.ai not API).
 - Sales team upcoming-brews app.
 - Can count reporting tool.
+- Voice-driven Brew Day logging via Claude Project. Workflow: dictate brew day into Apple Notes → paste into a Claude Project with a strict system prompt → Project outputs a structured file matching BrewDayData fields → new "Import Brew Day Notes" button on BrewDayTab parses and fills fields, Ben reviews + saves. Runs on subscription (no API cost), no loop risk, manual review before commit. Build order: (1) design the Project system prompt, (2) add import UI + parser to BrewDayTab.
 
 ---
 
 ## Next Session Focus
 
-1. **Test the new prints in the live app + cross-device sync.** Top priority before more code lands. Prep Sheet, Brew Day Sheet, fixed Monthly Report — plus brewer / extra additions field round-trip across desktop/tablet/mobile. The print smoke tests are listed under Smoke tests pending above; running them is the highest leverage thing to do next.
-2. **If prints look good in practice: Sheet 3 design (Ferm + Packaging combined daily log).** Otherwise: fix what surfaces. Sheet 3 is the next brew-floor print artifact after the current pair.
-3. **Inventory-screen-too-wide bug.** Flagged for investigation — exact symptom unclear yet; first session task is reproduce + identify the offending layout rule.
+1. **Finish Brew Day Sheet layout** — grid pass, fit to one page.
+2. **NTA Submitter improvements** — Submitted Recipes view + print gate.
+3. **User manual review** — Ben to read through workflows doc and flag anything wrong.
 
 ---
 
