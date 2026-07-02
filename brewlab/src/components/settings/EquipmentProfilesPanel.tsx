@@ -145,6 +145,8 @@ export default function EquipmentProfilesPanel() {
                     Kettle {p.kettleVol ?? '—'}L · Batch {p.defaultBatchL ?? '—'}L
                     {' · '}Boil off {p.boilOffRate ?? '—'}L/hr · Trub {p.trubLoss ?? '—'}L
                     {' · '}{p.tunMaterial ?? '—'}
+                    {p.defaultBhEff != null && ` · BH Eff ${p.defaultBhEff}%`}
+                    {p.defaultBoilTime != null && ` · Boil ${p.defaultBoilTime} min`}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -245,6 +247,8 @@ function EquipmentProfileModal({
           <NumField label="Boil Off Rate (L/hr)"  value={profile.boilOffRate}     onChange={v => onChange('boilOffRate',     v)} placeholder="45"   disabled={locked} />
           <NumField label="Trub Loss (L)"         value={profile.trubLoss}        onChange={v => onChange('trubLoss',        v)} placeholder="40"   disabled={locked} />
           <NumField label="Tun Weight (kg)"       value={profile.tunWeightKg}     onChange={v => onChange('tunWeightKg',     v)} placeholder="156"  disabled={locked} />
+          <NumField label="Default BH Eff (%)"   value={profile.defaultBhEff}    onChange={v => onChange('defaultBhEff',    v)} placeholder="72"  disabled={locked} />
+          <NumField label="Default Boil Time (min)" value={profile.defaultBoilTime} onChange={v => onChange('defaultBoilTime', v)} placeholder="60"  disabled={locked} />
           <div className="settings-field">
             <label>Tun Material</label>
             <select

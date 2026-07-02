@@ -338,8 +338,10 @@ export default function Desktop() {
         fgPlato: p.fgPlato,
         // BeerXML no longer supplies EFFICIENCY — the source software's
         // own efficiency assumption doesn't carry over meaningfully, so
-        // new imports use the brewery's own default instead.
-        bhEff: settings.defaultBhEff ?? 72,
+        // new imports use the active equipment profile's default instead.
+        // boilTime is kept as parsed from the file — unlike efficiency,
+        // BOIL_TIME is a real per-recipe process value worth trusting.
+        bhEff: (equipProfiles[0]?.defaultBhEff) ?? 72,
         boilTime: p.boilTime,
         whirlpoolTemp: 85,
         bdFv: '',

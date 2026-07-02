@@ -7,9 +7,10 @@
  * Two tabs:
  *   • Blank Recipe — beer/label name + style picker. Same defaults the
  *     previous inline createNewRecipe() applied (batchL=1050,
- *     boilTime=45, whirlpoolTemp=85, version='1.0', classification='Beer').
- *     bhEff defaults to settings.defaultBhEff (Settings → Advanced →
- *     Calculation Constants), falling back to 67.60 if unset.
+ *     whirlpoolTemp=85, version='1.0', classification='Beer').
+ *     bhEff/boilTime default from the first Equipment Profile's
+ *     defaultBhEff/defaultBoilTime (Settings → Equipment Profiles),
+ *     falling back to 72%/60min if no profile exists yet.
  *   • From Template — recipe name (editable, seeded from the selected
  *     template) + scrollable template list with delete-✕ per row. Confirm
  *     button is disabled until a template is selected and the name is
@@ -52,7 +53,7 @@ type ModalTab = 'new' | 'tpl';
 
 export default function NewRecipeModal({ onClose, onCreated, defaultFolderId }: Props) {
   const recipes = useStore(s => s.recipes);
-  const settings = useStore(s => s.settings);
+  const equipProfiles = useStore(s => s.equipProfiles);
   const addRecipe = useStore(s => s.addRecipe);
   const templates = useStore(s => s.templates);
   const deleteTemplate = useStore(s => s.deleteTemplate);
@@ -143,6 +144,9 @@ export default function NewRecipeModal({ onClose, onCreated, defaultFolderId }: 
   const confirmBlank = () => {
     const id = newRecipeId(recipes.map(r => r.id));
     const trimmed = name.trim();
+    // No per-recipe profile selection exists yet for a brand-new recipe —
+    // use the first equipment profile in the library as "the" default.
+    const activeEquip = equipProfiles[0] ?? null;
     const r: Recipe = {
       id,
       lineageId: id,
@@ -162,8 +166,8 @@ export default function NewRecipeModal({ onClose, onCreated, defaultFolderId }: 
       rating: 0,
       brewAgain: null,
       cost: 0, abv: 0, ibu: 0, ebc: 0, ogPlato: 0, fgPlato: 0,
-      bhEff: settings.defaultBhEff ?? 72,
-      boilTime: 45,
+      bhEff: activeEquip?.defaultBhEff ?? 72,
+      boilTime: activeEquip?.defaultBoilTime ?? 60,
       whirlpoolTemp: 85,
       bdFv: '',
       notes: '',

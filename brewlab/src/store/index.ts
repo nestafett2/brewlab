@@ -108,7 +108,6 @@ const DEFAULT_SETTINGS: BrewSettings = {
   mashHopAdj: -80,
   leafHopAdj: -10,
   largeBatchUtil: 100,
-  defaultBhEff: 72,
 };
 
 const DEFAULT_TAB_VISIBILITY: TabVisibility = {

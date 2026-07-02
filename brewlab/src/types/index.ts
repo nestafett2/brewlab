@@ -697,6 +697,10 @@ export interface EquipmentProfile {
    *  the IBU calc when passed through Settings → Bitterness; per-profile
    *  override is supported here for future per-equipment IBU tuning. */
   largeBatchUtil?: number;
+  /** Default brewhouse efficiency (%) for new recipes using this profile. */
+  defaultBhEff?: number;
+  /** Default boil time (min) for new recipes using this profile. */
+  defaultBoilTime?: number;
   notes?: string;
 }
 
@@ -933,11 +937,6 @@ export interface BrewSettings {
    *  calcDhPhPrediction's residual-acid suggestion. Default 0.04; real beer
    *  ~0.02–0.06 depending on protein, residual extract, CO₂. */
   beerBufferPhPerMeqL?: number;
-  /** Default brewhouse efficiency (%) applied to new recipes (blank-recipe
-   *  path) and BeerXML imports. Default 72. Always present after merging
-   *  with DEFAULT_SETTINGS — unlike the other Advanced-tab constants above,
-   *  which stay undefined until the brewer explicitly sets them. */
-  defaultBhEff: number;
 
   // ── Settings → Styles sub-tab ──
   /** Active style-guide source. KNOWN NO-OP: the unified Style Picker
