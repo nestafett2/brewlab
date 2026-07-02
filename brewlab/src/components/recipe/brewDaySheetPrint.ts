@@ -23,6 +23,7 @@ import type {
 } from '../../types';
 import type { BrewDayTargets } from '../../lib/calculations';
 import { printHtml, escapeHtml } from '../../lib/print';
+import { fmtNum } from '../../lib/format';
 
 export interface BrewDaySheetInputs {
   recipe: Recipe;
@@ -269,7 +270,14 @@ function buildLauterAndSparge(inputs: BrewDaySheetInputs): string {
 }
 
 function buildBoilAndWhirlpool(inputs: BrewDaySheetInputs): string {
-  const { recipe, targets, ingredients } = inputs;
+  const { recipe, targets, ingredients, hopLib } = inputs;
+
+  // AA% lookup for hop rows only — case-insensitive/trimmed name match.
+  const hopAA = (name: string): string => {
+    const libE = hopLib.find(h => (h.name || '').trim().toLowerCase() === name.trim().toLowerCase());
+    const aa = libE ? num(libE.aa) : NaN;
+    return isFinite(aa) ? fmtNum(aa, { dp: 1 }) + '%' : EM_DASH;
+  };
 
   const boilDuration = isNum(recipe.boilTime) && recipe.boilTime > 0
     ? `${recipe.boilTime} min`
@@ -301,17 +309,19 @@ function buildBoilAndWhirlpool(inputs: BrewDaySheetInputs): string {
           ? fmt(ing.unit === 'kg' ? ing.amt : ing.amt / 1000, 3, ' kg')
           : fmt(ing.amt, 1, ` ${ing.unit || ''}`.trimEnd());
         const timeStr = isNum(ing.time) ? `${ing.time} min` : EM_DASH;
+        const aaStr = ing.type === 'hop' ? hopAA(ing.name || '') : '';
         return `
           <tr>
             <td style="width:20px">☐</td>
             <td class="r">${amtStr}</td>
             <td>${escapeHtml(ing.name || '—')}</td>
+            <td class="r">${aaStr}</td>
             <td>${escapeHtml(ing.use || '—')}</td>
             <td class="r">${timeStr}</td>
           </tr>
         `;
       }).join('')
-    : '<tr><td colspan="5" class="muted">No boil/whirlpool additions.</td></tr>';
+    : '<tr><td colspan="6" class="muted">No boil/whirlpool additions.</td></tr>';
 
   return `
     <section class="bds-section">
@@ -326,6 +336,7 @@ function buildBoilAndWhirlpool(inputs: BrewDaySheetInputs): string {
                 <th></th>
                 <th class="r">Amount</th>
                 <th>Name</th>
+                <th class="r">AA%</th>
                 <th>Use</th>
                 <th class="r">Time</th>
               </tr>
