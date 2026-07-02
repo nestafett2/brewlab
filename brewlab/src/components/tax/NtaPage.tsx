@@ -80,6 +80,10 @@ export default function NtaPage() {
   const [checkedRecipeId, setCheckedRecipeId]   = useState<string | null>(null);
   const [basisModalOpen, setBasisModalOpen]     = useState(false);
   const [detailIdx, setDetailIdx]               = useState<number | null>(null);
+  // Print-selection flow — user picks a subset of the register to print
+  // rather than always printing everything.
+  const [printSelecting, setPrintSelecting] = useState(false);
+  const [printSelected, setPrintSelected]   = useState<Set<number>>(new Set());
 
   const handleSelectRecipe = (newId: string) => {
     setSelectedRecipeId(newId);
@@ -155,11 +159,28 @@ export default function NtaPage() {
   };
 
   const handlePrintForm = () => {
-    if (ntaRegister.length === 0) {
-      pushToast({ message: 'No submitted recipes to print.', variant: 'info' });
-      return;
-    }
-    printNtaForm(ntaRegister);
+    const selectedEntries = [...printSelected].sort((a, b) => a - b).map(i => ntaRegister[i]);
+    printNtaForm(selectedEntries);
+    setPrintSelecting(false);
+    setPrintSelected(new Set());
+  };
+
+  const handleSelectAllPrint = () => {
+    setPrintSelected(new Set(ntaRegister.map((_, i) => i)));
+  };
+
+  const handleTogglePrint = (idx: number) => {
+    setPrintSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
+
+  const handleCancelPrintSelect = () => {
+    setPrintSelecting(false);
+    setPrintSelected(new Set());
   };
 
   const handleDelete = (idx: number) => {
@@ -186,7 +207,17 @@ export default function NtaPage() {
           ビール・発泡酒の１仕込製造方法 (CC1-5610-6)
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="btn" onClick={handlePrintForm}>🖨 Print Form</button>
+          {printSelecting ? (
+            <>
+              <button className="btn sm" onClick={handleSelectAllPrint}>Select All</button>
+              <button className="btn primary" disabled={printSelected.size === 0} onClick={handlePrintForm}>Print Selected</button>
+              <button className="btn sm" onClick={handleCancelPrintSelect}>Cancel</button>
+            </>
+          ) : (
+            ntaRegister.length > 0 && (
+              <button className="btn" onClick={() => setPrintSelecting(true)}>🖨 Print Form</button>
+            )
+          )}
         </div>
       </div>
 
@@ -278,6 +309,9 @@ export default function NtaPage() {
           rows={ntaRegister}
           onDelete={handleDelete}
           onShowDetail={i => setDetailIdx(i)}
+          printSelecting={printSelecting}
+          printSelected={printSelected}
+          onTogglePrint={handleTogglePrint}
         />
       </div>
 
@@ -305,11 +339,14 @@ export default function NtaPage() {
 // ═══════════════════════════════════════════════════════════════════
 
 function SubmittedRegister({
-  rows, onDelete, onShowDetail,
+  rows, onDelete, onShowDetail, printSelecting, printSelected, onTogglePrint,
 }: {
   rows: NtaSubmission[];
   onDelete: (idx: number) => void;
   onShowDetail: (idx: number) => void;
+  printSelecting: boolean;
+  printSelected: Set<number>;
+  onTogglePrint: (idx: number) => void;
 }) {
   return (
     <div style={{
@@ -337,6 +374,7 @@ function SubmittedRegister({
         }}>
           <thead>
             <tr style={{ background: 'var(--panel)', borderBottom: '1px solid var(--border2)' }}>
+              {printSelecting && <th style={{ padding: '6px 10px', width: 28 }}></th>}
               {['Recipe','Submitted','Malt (kg)','Wheat (kg)','Oats (kg)','Other (kg)','Hops (kg)','Water (L)','Yeast (kg)','OG (P)','Into FV (L)','Packaged (L)','ABV','Misc',''].map((h, i) => (
                 <th key={i} style={{
                   padding: '6px 10px',
@@ -348,7 +386,7 @@ function SubmittedRegister({
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={15} style={{
+              <tr><td colSpan={printSelecting ? 16 : 15} style={{
                 padding: 20, textAlign: 'center', color: 'var(--text-muted)',
                 fontSize: 9, letterSpacing: 1,
               }}>NO SUBMISSIONS YET</td></tr>
@@ -360,6 +398,15 @@ function SubmittedRegister({
                     background: i % 2 ? 'rgba(255,255,255,0.01)' : undefined,
                   }}
                   title="Double-click for details">
+                {printSelecting && (
+                  <td style={{ padding: '5px 10px' }}>
+                    <input
+                      type="checkbox"
+                      checked={printSelected.has(i)}
+                      onChange={() => onTogglePrint(i)}
+                    />
+                  </td>
+                )}
                 <td style={{ padding: '5px 10px', color: 'var(--amber)', fontWeight: 600 }}>{r.code || '—'}</td>
                 <td style={{ padding: '5px 10px', color: 'var(--text-muted)' }}>{r.date || '—'}</td>
                 <td style={{ padding: '5px 10px', textAlign: 'right' }}>{f1(r.maltKg)}</td>
