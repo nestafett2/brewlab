@@ -884,6 +884,11 @@ function recipeToRow(r: Recipe) {
     // edits round-trip across devices.
     extra_additions: r.extraAdditions || '',
     brewer: r.brewer || '',
+    // bh_eff / boil_time / whirlpool_temp columns added by
+    // migrations/06-recipe-process-fields.sql. See rowToRecipe below.
+    bh_eff: r.bhEff ?? null,
+    boil_time: r.boilTime ?? null,
+    whirlpool_temp: r.whirlpoolTemp ?? null,
     // Vestigial column — see Recipe.archivedAt JSDoc. Always null under
     // the simplified hard-delete-only model; round-tripped so the DB
     // column doesn't drift.
@@ -892,11 +897,10 @@ function recipeToRow(r: Recipe) {
 }
 
 function rowToRecipe(row: Record<string, unknown>): Recipe {
-  // bhEff / boilTime / whirlpoolTemp are local-only (no Supabase columns —
-  // recipeToRow above doesn't write them either). Default to the same values
-  // Desktop.createNewRecipe uses so a hydrated recipe matches a freshly
-  // created one. If a brewer needs these to round-trip, add the columns
-  // here AND in recipeToRow together.
+  // bhEff / boilTime / whirlpoolTemp round-trip via Supabase as of
+  // migrations/06-recipe-process-fields.sql (bh_eff/boil_time/whirlpool_temp
+  // columns). Fallbacks below (67.60/45/85) match Desktop.createNewRecipe's
+  // defaults and cover rows written before the migration.
   return {
     id: row.id as string,
     lineageId: (row.lineage_id as string) ?? '',
@@ -921,9 +925,9 @@ function rowToRecipe(row: Record<string, unknown>): Recipe {
     ebc: (row.ebc as number) ?? 0,
     ogPlato: (row.og_plato as number) ?? 0,
     fgPlato: (row.fg_plato as number) ?? 0,
-    bhEff: 67.60,
-    boilTime: 45,
-    whirlpoolTemp: 85,
+    bhEff: (row.bh_eff as number) ?? 67.60,
+    boilTime: (row.boil_time as number) ?? 45,
+    whirlpoolTemp: (row.whirlpool_temp as number) ?? 85,
     bdFv: (row.bd_fv as string) ?? '',
     notes: (row.notes as string) ?? '',
     // extra_additions / brewer columns added to Supabase 2026-05-12.
