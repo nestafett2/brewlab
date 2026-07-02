@@ -127,8 +127,8 @@ function buildMash(inputs: BrewDaySheetInputs): string {
         <td class="r">${i + 1}</td>
         <td>${escapeHtml(s.type || '—')}</td>
         <td class="r">${chip(fmt(s.temp, 1, ' °C'))}</td>
-        <td class="r">${chip(fmtInt(s.time, ' min'))}</td>
         <td class="r">${blank(70)}</td>
+        <td class="r">${chip(fmtInt(s.time, ' min'))}</td>
         <td class="r">${blank(70)}</td>
       </tr>
     `).join('')
@@ -160,8 +160,8 @@ function buildMash(inputs: BrewDaySheetInputs): string {
             <th class="r" style="width:30px">#</th>
             <th>Step</th>
             <th class="r">Target °C</th>
-            <th class="r">Target min</th>
             <th class="r">Actual °C</th>
+            <th class="r">Target min</th>
             <th class="r">Actual min</th>
           </tr>
         </thead>
@@ -204,13 +204,14 @@ function buildLauterAndSparge(inputs: BrewDaySheetInputs): string {
     { n: 8, label: 'Finish # (= 3 + 6)' },
   ];
 
-  const spargeRows = spargeSteps.map(s => `
-    <tr>
-      <td class="r" style="width:30px">${s.n}</td>
-      <td>${escapeHtml(s.label)}</td>
-      <td class="r" style="width:160px">${blank(140)}</td>
-    </tr>
-  `).join('');
+  // Compact 2-column grid — 2 steps per row, step number small + muted.
+  const spargeCell = (s: { n: number; label: string }) =>
+    `<td style="width:50%"><span class="muted" style="margin-right:6px">${s.n}</span>${escapeHtml(s.label)} ${blank(100)}</td>`;
+  const spargeRows: string[] = [];
+  for (let i = 0; i < spargeSteps.length; i += 2) {
+    spargeRows.push(`<tr>${spargeCell(spargeSteps[i])}${spargeCell(spargeSteps[i + 1])}</tr>`);
+  }
+  const spargeRowsHtml = spargeRows.join('');
 
   return `
     <section class="bds-section">
@@ -218,25 +219,15 @@ function buildLauterAndSparge(inputs: BrewDaySheetInputs): string {
         <span class="bds-section-title">LAUTER &amp; SPARGE</span>
       </div>
       <table class="bds-table">
-        <thead>
-          <tr>
-            <th class="r">#</th>
-            <th>Step</th>
-            <th class="r">Flowmeter reading</th>
-          </tr>
-        </thead>
-        <tbody>${spargeRows}</tbody>
+        <tbody>${spargeRowsHtml}</tbody>
       </table>
-      <div class="bds-subhead">Runnings</div>
-      <table class="bds-table">
-        <thead>
-          <tr><th></th><th class="r">pH</th><th class="r">Gravity</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>First runnings</td><td class="r">${blank(80)}</td><td class="r">${blank(80)}</td></tr>
-          <tr><td>Last runnings</td><td class="r">${blank(80)}</td><td class="r">${blank(80)}</td></tr>
-        </tbody>
-      </table>
+      <div class="bds-row">
+        <div class="bds-row-cell"><label>First runnings pH</label> ${blank(80)}</div>
+        <div class="bds-row-cell"><label>Gravity</label> ${blank(80)}</div>
+        <span class="muted">·</span>
+        <div class="bds-row-cell"><label>Last runnings pH</label> ${blank(80)}</div>
+        <div class="bds-row-cell"><label>Gravity</label> ${blank(80)}</div>
+      </div>
       <div class="bds-subhead">Pre-boil</div>
       <div class="bds-row">
         <div class="bds-row-cell"><label>Target vol</label> ${chip(preBoilVol)}</div>
