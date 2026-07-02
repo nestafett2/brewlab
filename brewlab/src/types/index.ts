@@ -63,6 +63,20 @@ export interface Recipe {
   bdFv: string;                // assigned FV id
   notes: string;
   /**
+   * Free-text "Extra additions" — printed on the Prep Sheet under its own
+   * section when non-empty. Distinct from `notes` (which the brewer uses
+   * as a long-form recipe-design log). Round-trips through Supabase via
+   * the `recipes.extra_additions` column (added 2026-05-12).
+   */
+  extraAdditions: string;
+  /**
+   * Per-recipe brewer name. Surfaced as the "Brewer" field in the Prep
+   * Sheet and Brew Day Sheet header stats; falls back to
+   * settings.breweryName when empty, then to "—". Round-trips through
+   * Supabase via the `recipes.brewer` column (added 2026-05-12).
+   */
+  brewer: string;
+  /**
    * Vestigial column (Supabase `recipes.archived_at`, renamed from
    * `deleted_at` on 2026-05-07 — see migrations/). The two-tier
    * archive/delete model was reverted before shipping; the simplified
@@ -915,6 +929,10 @@ export interface BrewSettings {
   coolingShrinkage?: number;
   /** Default grain temperature for strike-temp calc (°C). HTML default 20. */
   defaultGrainTemp?: number;
+  /** Estimated finished-beer buffer capacity, pH per mEq/L of acid. Used by
+   *  calcDhPhPrediction's residual-acid suggestion. Default 0.04; real beer
+   *  ~0.02–0.06 depending on protein, residual extract, CO₂. */
+  beerBufferPhPerMeqL?: number;
 
   // ── Settings → Styles sub-tab ──
   /** Active style-guide source. KNOWN NO-OP: the unified Style Picker

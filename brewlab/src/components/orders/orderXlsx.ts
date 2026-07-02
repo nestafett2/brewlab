@@ -18,6 +18,7 @@
  */
 
 import { exportWorkbook, type CellValue, type SheetSpec } from '../../lib/excel';
+import { useStore } from '../../store';
 import { fmtKg, INV_UNITS, sectionToIngType } from '../../lib/units';
 import { getLedgerBalance } from '../../lib/ledger';
 import { ingNamesMatch } from '../../lib/ingredient-matcher';
@@ -129,7 +130,10 @@ export function exportOrderPlannerXlsx(args: {
   }
 
   if (!sheets.length) {
-    window.alert('No ingredients from your library are used in any planned brew.');
+    useStore.getState().pushToast({
+      message: 'No ingredients from your library are used in any planned brew.',
+      variant: 'info',
+    });
     return;
   }
   const filename = `${brand(args.breweryName)}_OrderPlanner_${dateToStr(todayDate())}.xlsx`;
@@ -149,7 +153,10 @@ export function exportInventoryCurrentXlsx(args: {
   const unit = INV_UNITS[sec];
   const entries = args.libBySection[sec];
   if (!entries.length) {
-    window.alert(`No ${sec} entries in the library — nothing to export.`);
+    useStore.getState().pushToast({
+      message: `No ${sec} entries in the library — nothing to export.`,
+      variant: 'info',
+    });
     return;
   }
 

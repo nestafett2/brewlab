@@ -23,7 +23,7 @@ export const LIB_HEADERS: Record<LibSection, string[]> = {
   malts: ['Name', 'Maltster', 'Supplier', 'Type', 'EBC', 'Price ¥/kg', 'Notes'],
   hops:  ['Name', 'AA%', 'Beta%', 'Origin', 'Supplier', 'Price ¥/kg', 'Lot #', 'Notes'],
   yeast: ['Name', 'Lab', 'Atten%', 'Temp Min', 'Temp Max', 'Price ¥/pkg', 'Notes'],
-  misc:  ['Name', 'Type', 'Use', 'Happoshu', 'Notes'],
+  misc:  ['Name', 'Type', 'Use', 'Happoshu', 'Price ¥/kg', 'Notes'],
 };
 
 // ── Entry field keys per table column (HTML 16626) ────────────────────
@@ -117,13 +117,13 @@ export const LIB_FIELD_DEFS: Record<LibSection, FieldDef[]> = {
 export const LIB_BULK_FIELD_DEFS: Record<LibSection, FieldDef[]> = {
   malts: [
     { key: 'maltster',  label: 'Maltster',         type: 'text' },
-    { key: 'supplier',  label: 'Local Supplier',   type: 'text' },
+    { key: 'supplier',  label: 'Local Supplier',   type: 'supplier-select' },
     { key: 'malt_type', label: 'Type',             type: 'select', opts: ['Base', 'Crystal', 'Roasted', 'Wheat', 'Oat', 'Rye', 'Adjunct', 'Other'] },
     { key: 'price',     label: 'Price (¥/kg)',     type: 'number' },
     { key: 'max_pct',   label: 'Max in Batch %',   type: 'number' },
   ],
   hops: [
-    { key: 'supplier', label: 'Supplier',     type: 'text' },
+    { key: 'supplier', label: 'Supplier',     type: 'supplier-select' },
     { key: 'price',    label: 'Price (¥/kg)', type: 'number' },
     { key: 'lot_num',  label: 'Lot #',        type: 'text' },
     { key: 'hop_type', label: 'Type',         type: 'select', opts: ['Pellet', 'Cryo', 'Whole', 'Extract'] },
@@ -135,7 +135,7 @@ export const LIB_BULK_FIELD_DEFS: Record<LibSection, FieldDef[]> = {
     { key: 'form',       label: 'Form',         type: 'select', opts: ['Dry', 'Liquid'] },
   ],
   misc: [
-    { key: 'supplier',  label: 'Supplier', type: 'text' },
+    { key: 'supplier',  label: 'Supplier', type: 'supplier-select' },
     { key: 'price',     label: 'Price',    type: 'number' },
     { key: 'misc_type', label: 'Type',     type: 'select', opts: ['Fining', 'Nutrient', 'Acid', 'Enzyme', 'Spice', 'Flavor', 'Other'] },
   ],

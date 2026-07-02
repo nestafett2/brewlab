@@ -15,11 +15,12 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useStore } from '../../store';
+import { fmtNum } from '../../lib/format';
 import {
   WC_IONS, WC_MINERAL_KEYS, WC_ION_RANGES, WC_PRESETS,
   acidMeqPerMl, calcWaterIons, estimateMashPh, solveMashAcidMEqPerL,
   solveMineralsForTargets,
-  findWaterProfile, calcBrewDayTargets,
+  findWaterProfile, calcBrewDayTargets, DEFAULT_MASH_PROFILE,
 } from '../../lib/calculations';
 import type {
   WaterChemData, WaterIon, WaterMineral, WaterProfile,
@@ -103,44 +104,61 @@ export default function WaterTab({ recipeId }: Props) {
   // selections without a tab remount.
   const recipeProfiles = useStore(s => s.recipeProfilesByRecipe[recipeId]);
   const recipeWaterProfileId = recipeProfiles?.water || '';
+  const pushToast = useStore(s => s.pushToast);
 
-  // ── Local state with lazy pre-fill ───────────────────────────────────
-  // Pre-fill empty volume inputs from brew-day targets. Lazy initializer
-  // runs once at mount (component remounts per recipe via key), so this
-  // populates the state without triggering an effect → no
-  // setState-in-effect lint warning, and dirtyRef stays false so the
-  // pre-fill doesn't auto-save (matches HTML wcAutoFillVolumes — DOM
-  // populates, but wcSave only fires on user action).
-  const [wc, setWc] = useState<WaterChemData>(() => {
-    const persisted = getWaterChem(recipeId);
-    if (!recipe) return persisted;
+  // ── Per-recipe mash profile (reactive — same pattern as BrewDayTab) ─
+  // Was passing literal `null` to calcBrewDayTargets, which forced the
+  // water-balance fallback and produced wrong sparge prefills. Now subscribes
+  // to mashByRecipe so the modal saving while this tab is mounted refreshes
+  // the prefill effect below.
+  const mashSaved = useStore(s => s.mashByRecipe[recipeId]);
+  const getMash   = useStore(s => s.getMash);
+  useEffect(() => {
+    if (mashSaved === undefined) getMash(recipeId);
+  }, [recipeId, mashSaved, getMash]);
+  const mashProfile = mashSaved ?? DEFAULT_MASH_PROFILE;
+
+  // ── Local state — initialize from persisted blob only ────────────────
+  // Volume prefill moved into the useEffect below so it can react to
+  // mashProfile / settings changes after mount. The dirtyRef gate keeps
+  // prefill non-persistent: setWaterChem only fires after a user edit.
+  const [wc, setWc] = useState<WaterChemData>(() => getWaterChem(recipeId));
+  const [saveStatus, setStatus] = useState<string>('');
+  // Track whether the user has actually edited anything since mount. The
+  // prefill effect runs only while this is false — once the user touches
+  // a field, prefill stops overwriting their work, and the debounced save
+  // takes over.
+  const dirtyRef = useRef(false);
+
+  // ── Volume prefill (matches HTML wcAutoFillVolumes 12209) ────────────
+  // Re-runs when mashProfile or relevant settings change while the user
+  // hasn't yet edited anything. Only writes to empty slots; never to ones
+  // the user has already filled.
+  useEffect(() => {
+    if (dirtyRef.current) return;
+    if (!recipe) return;
     const activeEquip = equipProfiles[0] ?? null;
-    // grainAbsorb is global (Settings → Advanced) — matches HTML's
-    // wcAutoFillVolumes at line 12209 reading getBrewSettings().grainAbsorb.
-    // coolingShrinkage scales pre-boil volume; sparge falls out of that, so
-    // pass it through to keep the prefilled sparge consistent with BrewDay.
     const targets = calcBrewDayTargets({
       recipe, ingredients, maltLib, hopLib, yeastLib,
-      equip: activeEquip, mashProfile: null,
+      equip: activeEquip, mashProfile,
       grainAbsorbLkg: settings.grainAbsorb && settings.grainAbsorb > 0 ? settings.grainAbsorb : undefined,
       coolingShrinkagePct: typeof settings.coolingShrinkage === 'number' && settings.coolingShrinkage > 0
         ? settings.coolingShrinkage
         : undefined,
     });
-    const out: WaterChemData = { ...persisted };
-    if (!out.mashVol && targets.mashWaterL && targets.mashWaterL > 0) {
-      out.mashVol = targets.mashWaterL.toFixed(1);
-    }
-    if (!out.spargeVol && targets.spargeVolL && targets.spargeVolL > 0) {
-      out.spargeVol = targets.spargeVolL.toFixed(1);
-    }
-    return out;
-  });
-  const [saveStatus, setStatus] = useState<string>('');
-  // Track whether the user has actually edited anything since mount. The
-  // lazy initializer pre-fills volumes but must NOT trigger a save until
-  // the user touches a field or clicks Save. Set true on any user write.
-  const dirtyRef = useRef(false);
+    setWc(prev => {
+      const out: WaterChemData = { ...prev };
+      let changed = false;
+      if (!out.mashVol && targets.mashWaterL && targets.mashWaterL > 0) {
+        out.mashVol = targets.mashWaterL.toFixed(1); changed = true;
+      }
+      if (!out.spargeVol && targets.spargeVolL && targets.spargeVolL > 0) {
+        out.spargeVol = targets.spargeVolL.toFixed(1); changed = true;
+      }
+      return changed ? out : prev;
+    });
+  }, [mashProfile, recipe, ingredients, maltLib, hopLib, yeastLib,
+      equipProfiles, settings.grainAbsorb, settings.coolingShrinkage]);
 
   // The effective source-profile id used for source ion values + dropdown
   // value — pulls from saved blob, then falls back to the recipe's water
@@ -203,7 +221,7 @@ export default function WaterTab({ recipeId }: Props) {
     if (r > 2) { label = '🍺 Hoppy';      color = '#5ab568'; }
     if (r > 4) { label = '🍺 Very Hoppy'; color = '#5ab568'; }
     if (r < 0.5) { label = '🍺 Malty';     color = '#e6a817'; }
-    return { text: `SO₄:Cl = ${r.toFixed(2)} · ${label}`, color };
+    return { text: `SO₄:Cl = ${fmtNum(r, { dp: 2 })} · ${label}`, color };
   }, [resultIons]);
 
   // ── Mash pH estimate + acid math ─────────────────────────────────────
@@ -264,8 +282,8 @@ export default function WaterTab({ recipeId }: Props) {
 
   // ── Calculate Minerals — write all six mineral mash/sparge slots ─────
   const calcMinerals = useCallback(() => {
-    if (!sourceProfile) { alert('Set source water profile and volumes first.'); return; }
-    if (totalVolL === 0) { alert('Set source water profile and volumes first.'); return; }
+    if (!sourceProfile) { pushToast({ message: 'Set source water profile and volumes first.', variant: 'info' }); return; }
+    if (totalVolL === 0) { pushToast({ message: 'Set source water profile and volumes first.', variant: 'info' }); return; }
     const targets: Record<WaterIon, number> = {
       ca:   parseFloat(wc.targets?.ca   ?? '') || 0,
       mg:   parseFloat(wc.targets?.mg   ?? '') || 0,
@@ -287,7 +305,7 @@ export default function WaterTab({ recipeId }: Props) {
     }
     dirtyRef.current = true;
     setWc(prev => ({ ...prev, minerals: newMinerals }));
-  }, [sourceProfile, totalVolL, sourceIons, mashVolL, spargeVolL, wc.targets]);
+  }, [sourceProfile, totalVolL, sourceIons, mashVolL, spargeVolL, wc.targets, pushToast]);
 
   // ── Save / Reset ────────────────────────────────────────────────────
   const saveExplicit = useCallback(() => {
@@ -298,7 +316,7 @@ export default function WaterTab({ recipeId }: Props) {
   }, [recipeId, setWaterChem, wc]);
 
   const reset = useCallback(() => {
-    if (!confirm('Clear all water chemistry inputs for this recipe?')) return;
+    const before = wc;
     dirtyRef.current = true;
     const cleared: WaterChemData = {
       acidType: 'lactic',
@@ -307,13 +325,20 @@ export default function WaterTab({ recipeId }: Props) {
     };
     setWc(cleared);
     setWaterChem(recipeId, cleared);
-  }, [recipeId, setWaterChem]);
+    pushToast({
+      message: 'Cleared water chemistry',
+      undo: () => {
+        setWc(before);
+        setWaterChem(recipeId, before);
+      },
+    });
+  }, [recipeId, setWaterChem, wc, pushToast]);
 
   if (!recipe) return null;
 
   // ── Render helpers ──────────────────────────────────────────────────
   const fmtIon = (n: number | undefined) =>
-    n != null && isFinite(n) && n > 0 ? n.toFixed(1) : '—';
+    n != null && isFinite(n) && n > 0 ? fmtNum(n, { dp: 1 }) : '—';
   const ionRange = (ion: WaterIon) => {
     const r = WC_ION_RANGES[ion];
     return `${r.lo}–${r.hi}`;
@@ -427,7 +452,7 @@ export default function WaterTab({ recipeId }: Props) {
               <div className="wc-vol-row" style={{ borderTop: '1px solid var(--border2)', paddingTop: 6 }}>
                 <label className="wc-vol-label" style={{ color: 'var(--text-dim)' }}>Total (L)</label>
                 <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--amber)', fontWeight: 600 }}>
-                  {totalVolL > 0 ? `${totalVolL.toFixed(1)} L` : '—'}
+                  {totalVolL > 0 ? fmtNum(totalVolL, { dp: 1, suffix: ' L' }) : '—'}
                 </span>
               </div>
             </div>
@@ -500,11 +525,11 @@ export default function WaterTab({ recipeId }: Props) {
                     <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>(ppm)</span>
                   </div>
                   <div className="wc-res-val" style={{ color: val != null ? color : 'var(--text)' }}>
-                    {val != null ? val.toFixed(1) : '—'}
+                    {val != null ? fmtNum(val, { dp: 1 }) : '—'}
                   </div>
                   {showTarget && delta != null && (
                     <div style={{ fontFamily: 'var(--mono)', fontSize: 16, lineHeight: 1.15, marginTop: 2, color: 'var(--text-muted)' }}>
-                      target {target} · <span style={{ color: deltaColor }}>{delta >= 0 ? '+' : ''}{delta.toFixed(0)}</span>
+                      target {target} · <span style={{ color: deltaColor }}>{delta >= 0 ? '+' : ''}{fmtNum(delta, { dp: 0 })}</span>
                     </div>
                   )}
                   <div className="wc-res-bar-wrap" style={{ position: 'relative' }}>
@@ -580,7 +605,7 @@ export default function WaterTab({ recipeId }: Props) {
                   <div className="wc-vol-label" style={{ marginBottom: 2 }}>Suggested mash</div>
                   <div style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 700, color: 'var(--amber)' }}>
                     {phEstimates?.suggestedMashMl != null && phEstimates.suggestedMashMl > 0
-                      ? `${phEstimates.suggestedMashMl.toFixed(1)} mL`
+                      ? fmtNum(phEstimates.suggestedMashMl, { dp: 1, suffix: ' mL' })
                       : (phEstimates && (phEstimates.baseEstPh - targetPh) <= 0 ? 'pH OK' : '— mL')}
                   </div>
                 </div>
@@ -588,7 +613,7 @@ export default function WaterTab({ recipeId }: Props) {
                   <div className="wc-vol-label" style={{ marginBottom: 2 }}>Suggested sparge</div>
                   <div style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 700, color: 'var(--amber)' }}>
                     {phEstimates?.suggestedSpargeMl != null && phEstimates.suggestedSpargeMl > 0
-                      ? `${phEstimates.suggestedSpargeMl.toFixed(1)} mL`
+                      ? fmtNum(phEstimates.suggestedSpargeMl, { dp: 1, suffix: ' mL' })
                       : '—'}
                   </div>
                 </div>
@@ -613,21 +638,21 @@ export default function WaterTab({ recipeId }: Props) {
               <div>
                 <div className="wc-vol-label" style={{ marginBottom: 4 }}>Estimated pH</div>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 700, color: finalPh != null ? phDeltaColor : 'var(--amber)' }}>
-                  {finalPh != null ? finalPh.toFixed(2) : '—'}
+                  {finalPh != null ? fmtNum(finalPh, { dp: 2 }) : '—'}
                 </div>
               </div>
             </div>
             <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: phDeltaColor || 'var(--text-muted)' }}>
-              {finalPh != null ? `vs target: ${finalPh - targetPh >= 0 ? '+' : ''}${(finalPh - targetPh).toFixed(2)}` : ''}
+              {finalPh != null ? `vs target: ${finalPh - targetPh >= 0 ? '+' : ''}${fmtNum(finalPh - targetPh, { dp: 2 })}` : ''}
             </div>
             <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
               {phEstimates
-                ? `Residual Alkalinity: ${phEstimates.ra.mEq.toFixed(2)} mEq/L · ${phEstimates.ra.ppm.toFixed(0)} ppm CaCO₃`
+                ? `Residual Alkalinity: ${fmtNum(phEstimates.ra.mEq, { dp: 2, suffix: ' mEq/L' })} · ${fmtNum(phEstimates.ra.ppm, { dp: 0, suffix: ' ppm CaCO₃' })}`
                 : ''}
             </div>
             <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-muted)', marginTop: 3 }}>
               {phEstimates && phEstimates.acidEffect > 0
-                ? `Acid lowers pH by ${phEstimates.acidEffect.toFixed(2)}`
+                ? `Acid lowers pH by ${fmtNum(phEstimates.acidEffect, { dp: 2 })}`
                 : phEstimates ? 'No acid added' : ''}
             </div>
           </div>

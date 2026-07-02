@@ -254,14 +254,17 @@ One row per harvest or usage event.
 | `entry_date` | date/text | ISO date |
 | `amount_l` | numeric | Litres (`got` for harvests, `used` for usages) |
 | `recipe_id` | text FK | → recipes.id (nullable) |
-| `beer_name` | text | Beer associated with this entry |
-| `brew_num` | text | Brew number |
+| `beer_name` | text | Display name. For harvests = source brew's beer name; for usages = destination brew's beer name |
+| `tax_batch` | text | NTA tax serial (仕込記号). For harvests = source brew's serial; for usages = destination brew's serial. Added by migration `2026-05-07_add_tax_batch_to_harvested_yeast.sql` to split out the brew-number from `beer_name`, which previously held the serial. |
 | `generation` | int | Yeast generation # |
 | `container` | text | Container/storage info |
 | `note` | text | Free-form note |
 
 **Critical rules:**
-- localStorage `bl_harvested_yeast` is an **object keyed by strain**: `{ [strain]: { generation: number, entries: Entry[] } }`. Each `entries[]` item has `{ id, type, date, harvestDate, got, used, beer, brewNum, generation, container, note, recipeId }`. **Not** a flat array.
+- localStorage `bl_harvested_yeast` is an **object keyed by strain**: `{ [strain]: { generation: number, entries: Entry[] } }`. Each `entries[]` item has `{ id, type, date, harvestDate, got, used, beer, taxBatch, harvestedFrom, harvestedFromTaxBatch, generation, container, note, recipeId }`. **Not** a flat array.
+- Field semantics post-migration (2026-05-07):
+  - `beer` / `taxBatch` — destination brew on usage rows (where this yeast was pitched). Joined with `", "` when a row has been pulled into multiple brews; the two are kept index-aligned so the view can zip them into "TAX — Beer" pairs.
+  - `harvestedFrom` / `harvestedFromTaxBatch` — source brew on harvest rows (the brew the yeast came out of). `harvestedFrom` holds the **beer name** post-migration; legacy harvest rows that pre-date this split still hold the tax serial under `harvestedFrom` and lack `harvestedFromTaxBatch`. Display formatter (`lib/yeastDisplay.ts:formatPair`) falls back to whichever single value exists.
 - Desktop dispatch uses delete-all + reinsert (not individual upserts).
 - Always fetch with `&order=entry_date&limit=1000000`.
 

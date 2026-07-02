@@ -1074,6 +1074,10 @@ export function findWaterProfile(
  * 0.02–0.06 pH/(mEq/L) depending on protein content, residual extract, CO₂
  * saturation, and other factors. The residual-acid suggestion built on this
  * is labelled as an estimate in the UI.
+ *
+ * Now user-overridable via Settings → Advanced → Calculation Constants
+ * (`bl_brew_settings.beerBufferPhPerMeqL`). This constant is the fallback
+ * when the setting is unset and is passed in by callers via `calcDhPhPrediction`.
  */
 export const BEER_BUFFER_PH_PER_MEQ_L = 0.04;
 
@@ -1177,17 +1181,19 @@ function totalDryHopGrams(ingredients: Ingredient[], fermMeta: FermMeta): number
 
 /**
  * Compute the residual mL of acid stock needed to drop a beer of `volumeL`
- * by `deltaPh` pH units, using BEER_BUFFER_PH_PER_MEQ_L. Caller chooses
- * the acid type/pct.
+ * by `deltaPh` pH units, using `bufferPhPerMeqL`. Caller chooses the acid
+ * type/pct and supplies the buffer capacity (pH per mEq/L) — typically
+ * `settings.beerBufferPhPerMeqL`, falling back to `BEER_BUFFER_PH_PER_MEQ_L`.
  */
 function acidMlForPhDrop(
   deltaPh: number,
   volumeL: number,
   acidType: 'lactic' | 'phosphoric',
   acidPct: number,
+  bufferPhPerMeqL: number,
 ): number | null {
-  if (deltaPh <= 0 || volumeL <= 0) return null;
-  const acidMEqL    = deltaPh / BEER_BUFFER_PH_PER_MEQ_L;
+  if (deltaPh <= 0 || volumeL <= 0 || bufferPhPerMeqL <= 0) return null;
+  const acidMEqL    = deltaPh / bufferPhPerMeqL;
   const totalMEq    = acidMEqL * volumeL;
   const meqPerMl    = acidMeqPerMl(acidType, acidPct);
   if (meqPerMl <= 0) return null;
@@ -1205,20 +1211,23 @@ function acidMlForPhDrop(
  * Day and sets pitch pH manually.
  */
 export function calcDhPhPrediction(opts: {
-  ingredients:    Ingredient[];
-  fermMeta:       FermMeta;
-  volumeL:        number | null;
-  targetFinalPh:  number;
-  currentPh?:     number | null;
-  acidType:       'lactic' | 'phosphoric';
-  acidPct:        number;
-  dhTempC?:       number;
+  ingredients:         Ingredient[];
+  fermMeta:            FermMeta;
+  volumeL:             number | null;
+  targetFinalPh:       number;
+  currentPh?:          number | null;
+  acidType:            'lactic' | 'phosphoric';
+  acidPct:             number;
+  dhTempC?:            number;
+  /** Beer buffer capacity (pH/(mEq/L)). Defaults to BEER_BUFFER_PH_PER_MEQ_L. */
+  beerBufferPhPerMeqL?: number;
 }): DhPhPrediction {
   const {
     ingredients, fermMeta, volumeL,
     targetFinalPh, currentPh = null,
     acidType, acidPct,
     dhTempC = DH_DEFAULT_TEMP_C,
+    beerBufferPhPerMeqL = BEER_BUFFER_PH_PER_MEQ_L,
   } = opts;
 
   const totalDhG    = totalDryHopGrams(ingredients, fermMeta);
@@ -1231,7 +1240,7 @@ export function calcDhPhPrediction(opts: {
     ? currentPh - targetFinalPh
     : 0;
   const measuredResidualMl = acidMlForPhDrop(
-    measuredResidualPh, volumeL ?? 0, acidType, acidPct,
+    measuredResidualPh, volumeL ?? 0, acidType, acidPct, beerBufferPhPerMeqL,
   );
 
   return {

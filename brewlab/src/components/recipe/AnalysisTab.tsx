@@ -18,6 +18,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useStore } from '../../store';
 import { lsGet } from '../../lib/storage';
+import { fmtNum } from '../../lib/format';
 import {
   platoToSg, calcActualEfficiency,
 } from '../../lib/calculations';
@@ -55,6 +56,7 @@ export default function AnalysisTab({ recipeId }: Props) {
   const getTaxRecord = useStore(s => s.getTaxRecord);
   const getColdSide  = useStore(s => s.getColdSide);
   const setColdSide  = useStore(s => s.setColdSide);
+  const pushToast    = useStore(s => s.pushToast);
 
   // Subscribe so external edits to the cached tax/cold blobs trigger re-render.
   const taxRecordCache = useStore(s => s.taxRecordsByRecipe[recipeId]);
@@ -103,12 +105,12 @@ export default function AnalysisTab({ recipeId }: Props) {
     const brewDate = orDash(rec['date']);
 
     // Stats — recipe object is canonical in React (HTML reads from DOM).
-    const estOG  = recipe.ogPlato ? recipe.ogPlato.toFixed(1) : '—';
-    const estFG  = recipe.fgPlato ? recipe.fgPlato.toFixed(1) : '—';
-    const estABV = recipe.abv     ? recipe.abv.toFixed(2) + '%' : '—';
-    const estIBU = recipe.ibu     ? recipe.ibu.toFixed(0) : '—';
+    const estOG  = recipe.ogPlato ? fmtNum(recipe.ogPlato, { dp: 1 }) : '—';
+    const estFG  = recipe.fgPlato ? fmtNum(recipe.fgPlato, { dp: 1 }) : '—';
+    const estABV = recipe.abv     ? fmtNum(recipe.abv, { dp: 1, suffix: '%' }) : '—';
+    const estIBU = recipe.ibu     ? fmtNum(recipe.ibu, { dp: 0 }) : '—';
     const batchL = recipe.batchL  ? String(recipe.batchL) : '—';
-    const estBhEff = recipe.bhEff ? recipe.bhEff.toFixed(1) + '%' : '—';
+    const estBhEff = recipe.bhEff ? fmtNum(recipe.bhEff, { dp: 1, suffix: '%' }) : '—';
 
     // Measured values from the tax record
     const measOG  = orDash(rec['start-brix']);
@@ -124,7 +126,7 @@ export default function AnalysisTab({ recipeId }: Props) {
     if (isFinite(measOgPlato) && measOgPlato > 0 && recipe.batchL > 0) {
       const measSg = platoToSg(measOgPlato);
       const eff = calcActualEfficiency(ings, measSg, recipe.batchL);
-      if (isFinite(eff) && eff > 0) measBhEff = eff.toFixed(1) + '%';
+      if (isFinite(eff) && eff > 0) measBhEff = fmtNum(eff, { dp: 1, suffix: '%' });
     }
 
     // Attenuation — real (from measured OG/FG) and plan (from recipe stats)
@@ -132,10 +134,10 @@ export default function AnalysisTab({ recipeId }: Props) {
     const startP = parseFloat(String(rec['start-brix'] ?? ''));
     const finP   = parseFloat(String(rec['finish-brix'] ?? ''));
     if (isFinite(startP) && isFinite(finP) && startP > 0) {
-      attenReal = ((startP - finP) / startP * 100).toFixed(0);
+      attenReal = fmtNum((startP - finP) / startP * 100, { dp: 0 });
     }
     if (recipe.ogPlato > 0 && recipe.fgPlato >= 0) {
-      attenPlan = ((recipe.ogPlato - recipe.fgPlato) / recipe.ogPlato * 100).toFixed(0);
+      attenPlan = fmtNum((recipe.ogPlato - recipe.fgPlato) / recipe.ogPlato * 100, { dp: 0 });
     }
 
     // ── Cost breakdown (HTML lines 11157–11186) ──
@@ -188,7 +190,7 @@ export default function AnalysisTab({ recipeId }: Props) {
     const canSize = cold['cs-can-size'] || '350';
     const cansN  = parseFloat(String(cold['cs-cans']));
     const sizeN  = parseFloat(String(canSize));
-    const canL   = isFinite(cansN) && isFinite(sizeN) ? (cansN * sizeN / 1000).toFixed(1) : '—';
+    const canL   = isFinite(cansN) && isFinite(sizeN) ? fmtNum(cansN * sizeN / 1000, { dp: 1 }) : '—';
 
     // Yeast info
     const yeastIng = ings.find(i => i.type === 'yeast');
@@ -240,12 +242,12 @@ export default function AnalysisTab({ recipeId }: Props) {
   // ── Print handler ────────────────────────────────────────────────────
   const handlePrint = useCallback(() => {
     if (!view) {
-      window.alert('No analysis data to print.');
+      pushToast({ message: 'No analysis data to print.', variant: 'info' });
       return;
     }
     const node = document.getElementById('analysis-printable');
     if (!node) {
-      window.alert('No analysis data to print.');
+      pushToast({ message: 'No analysis data to print.', variant: 'info' });
       return;
     }
     printHtml(node.outerHTML, {
@@ -257,7 +259,7 @@ export default function AnalysisTab({ recipeId }: Props) {
         h1, h2 { font-size: 14px; }
       `,
     });
-  }, [view]);
+  }, [view, pushToast]);
 
   if (!recipe) return <div className="empty">Select a recipe.</div>;
   if (!view) return null;

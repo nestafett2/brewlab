@@ -47,6 +47,7 @@ export default function TanksPanel() {
   const setTankCalib = useStore(s => s.setTankCalib);
   const plannerBrews = useStore(s => s.plannerBrews);
   const setPlannerBrews = useStore(s => s.setPlannerBrews);
+  const pushToast    = useStore(s => s.pushToast);
 
   // Seed defaults on first mount if calib is empty (matches HTML
   // first-render behaviour at line 18704–18707, but persisted).
@@ -84,18 +85,23 @@ export default function TanksPanel() {
   };
 
   const deleteTank = (id: string) => {
+    const beforeCalib   = tankCalib;
+    const beforePlanner = plannerBrews;
+    const target = tankCalib[id];
     const inUse = plannerBrews.some(b => b.vessel === id);
     if (inUse) {
-      if (!window.confirm(
-        'This tank is used in scheduled brews. Delete anyway? Those brews will become unassigned.'
-      )) return;
       setPlannerBrews(plannerBrews.map(b => b.vessel === id ? { ...b, vessel: 'unassigned' } : b));
-    } else {
-      if (!window.confirm('Delete this tank?')) return;
     }
     const next = { ...tankCalib };
     delete next[id];
     setTankCalib(next);
+    pushToast({
+      message: target ? `Deleted tank "${target.name}"` : 'Deleted tank',
+      undo: () => {
+        setTankCalib(beforeCalib);
+        if (inUse) setPlannerBrews(beforePlanner);
+      },
+    });
   };
 
   return (

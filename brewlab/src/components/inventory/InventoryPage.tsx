@@ -79,7 +79,6 @@ export default function InventoryPage() {
     setEditEntry({ section, entry });
   };
   const handleDelete = (entry: LibEntry) => {
-    if (!window.confirm(`Delete "${entry.name}" from library?`)) return;
     // Snapshot only sectionData. Pre-existing behaviour: this delete
     // does NOT touch inventoryStock or ledgerData (potential orphan
     // stock entries are out of scope for this retrofit). Undo restores

@@ -22,6 +22,14 @@
   --mono: 'IBM Plex Mono', monospace;
   --sans: -apple-system, 'Helvetica Neue', sans-serif;
   --display: 'Bebas Neue', sans-serif;
+
+  /* Libraries-tab scoped typography. Bumped above the rest of the
+     app's table fonts; deferred global typography pass will revisit. */
+  --lib-fs-header: 11px;
+  --lib-fs-row: 12.5px;
+  --lib-fs-detail-title: 18px;
+  --lib-fs-detail-label: 10.5px;
+  --lib-fs-detail-value: 13px;
 }
 
 /* Light mode overrides */

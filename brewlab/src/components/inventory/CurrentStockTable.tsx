@@ -21,6 +21,7 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store';
 import { fmtKg, INV_SECTION_LABELS, INV_UNITS } from '../../lib/units';
+import { fmtNum } from '../../lib/format';
 import { getLedgerBalance } from '../../lib/ledger';
 import {
   INV_COL_DEFS, getInvColVisibility, getOrderedVisibleCols,
@@ -273,8 +274,7 @@ export default function CurrentStockTable({ section, inStockOnly, onEditEntry, o
                   let v = (entry as unknown as Record<string, unknown>)[key];
                   let display = v == null || v === '' ? '—' : String(v);
                   if ((key === 'aa' || key === 'beta') && display !== '—') {
-                    const n = parseFloat(display);
-                    if (isFinite(n)) display = n.toFixed(1).replace(/\.0$/, '');
+                    display = fmtNum(parseFloat(display), { fallback: display });
                   }
                   if (typeof v === 'boolean') display = v ? '✓' : '—';
                   return <td key={key} style={cellStyle}>{display}</td>;

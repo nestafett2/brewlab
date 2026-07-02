@@ -18,11 +18,22 @@
  *   • From Template: createRecipeFromTemplate() then openRecipe(newId).
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store';
 import { newRecipeId, today } from '../../lib/utils';
+import { BJCP_2021 } from '../../lib/styles';
 import type { Recipe } from '../../types';
 import StylePickerDropdown from './StylePickerDropdown';
+
+const UNSTYLED = '__unstyled__';
+
+/** Parse a BJCP styleKey like '3A' or '21B' into [catNum, letter] for sort.
+ *  Non-numeric prefixes (legacy / typo'd keys) sort to the end. */
+function styleKeySortTuple(key: string): [number, string] {
+  const m = /^(\d+)([A-Za-z]*)$/.exec(key.trim());
+  if (!m) return [Number.MAX_SAFE_INTEGER, key];
+  return [parseInt(m[1], 10), m[2].toUpperCase()];
+}
 
 interface Props {
   onClose: () => void;
@@ -42,6 +53,8 @@ export default function NewRecipeModal({ onClose, onCreated, defaultFolderId }: 
   const addRecipe = useStore(s => s.addRecipe);
   const templates = useStore(s => s.templates);
   const deleteTemplate = useStore(s => s.deleteTemplate);
+  const setTemplates = useStore(s => s.setTemplates);
+  const pushToast = useStore(s => s.pushToast);
   const createRecipeFromTemplate = useStore(s => s.createRecipeFromTemplate);
 
   const [tab, setTab] = useState<ModalTab>('new');
@@ -57,6 +70,57 @@ export default function NewRecipeModal({ onClose, onCreated, defaultFolderId }: 
   const [tplId, setTplId] = useState<string | null>(null);
   const [tplName, setTplName] = useState('');
   const tplNameRef = useRef<HTMLInputElement>(null);
+  const [tplStyleFilter, setTplStyleFilter] = useState<string>(''); // '' = all
+  const [tplSearch, setTplSearch] = useState('');
+
+  // Distinct style options derived from saved templates (not the full BJCP
+  // list — keeps the dropdown short and reflective of real data). Includes
+  // an "Unstyled" option only if at least one template has no styleKey.
+  const tplStyleOptions = useMemo(() => {
+    const keys = new Set<string>();
+    let hasUnstyled = false;
+    for (const t of templates) {
+      const k = (t.styleKey || '').trim();
+      if (k) keys.add(k);
+      else   hasUnstyled = true;
+    }
+    const opts: { value: string; label: string }[] = [];
+    Array.from(keys)
+      .sort((a, b) => {
+        const [an, al] = styleKeySortTuple(a);
+        const [bn, bl] = styleKeySortTuple(b);
+        return an - bn || al.localeCompare(bl);
+      })
+      .forEach(k => {
+        // Prefer BJCP_2021 name; fall back to the template's own `style`
+        // label; fall back to bare key (legacy/custom/typo).
+        const bjcpName = BJCP_2021[k]?.name;
+        const tplLabel = templates.find(t => t.styleKey === k)?.style;
+        const label = bjcpName ? `${k} — ${bjcpName}` : (tplLabel ? `${k} — ${tplLabel}` : k);
+        opts.push({ value: k, label });
+      });
+    if (hasUnstyled) opts.push({ value: UNSTYLED, label: 'Unstyled' });
+    return opts;
+  }, [templates]);
+
+  const filteredTemplates = useMemo(() => {
+    const q = tplSearch.trim().toLowerCase();
+    return templates.filter(t => {
+      // Style filter
+      if (tplStyleFilter === UNSTYLED) {
+        if ((t.styleKey || '').trim() !== '') return false;
+      } else if (tplStyleFilter !== '') {
+        if (t.styleKey !== tplStyleFilter) return false;
+      }
+      // Text search (name OR styleKey)
+      if (q !== '') {
+        const name = (t.name || '').toLowerCase();
+        const key  = (t.styleKey || '').toLowerCase();
+        if (!name.includes(q) && !key.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [templates, tplStyleFilter, tplSearch]);
 
   useEffect(() => {
     setTimeout(() => {
@@ -100,6 +164,8 @@ export default function NewRecipeModal({ onClose, onCreated, defaultFolderId }: 
       whirlpoolTemp: 85,
       bdFv: '',
       notes: '',
+      extraAdditions: '',
+      brewer: '',
       archivedAt: null,
     };
     addRecipe(r);
@@ -128,12 +194,17 @@ export default function NewRecipeModal({ onClose, onCreated, defaultFolderId }: 
 
   const handleDeleteTpl = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm('Delete this template?')) return;
+    const before = templates;
+    const target = templates.find(t => t.id === id);
     deleteTemplate(id);
     if (tplId === id) {
       setTplId(null);
       setTplName('');
     }
+    pushToast({
+      message: target ? `Deleted template "${target.name}"` : 'Deleted template',
+      undo: () => setTemplates(before),
+    });
   };
 
   const tplConfirmDisabled = !tplId || !tplName.trim();
@@ -223,6 +294,28 @@ export default function NewRecipeModal({ onClose, onCreated, defaultFolderId }: 
               </div>
               <div>
                 <label style={tplListLabelStyle}>Choose Template</label>
+                {templates.length > 0 && (
+                  <div style={tplFilterRowStyle}>
+                    <select
+                      value={tplStyleFilter}
+                      onChange={e => setTplStyleFilter(e.target.value)}
+                      style={tplFilterSelectStyle}
+                      title="Filter templates by BJCP style"
+                    >
+                      <option value="">All styles</option>
+                      {tplStyleOptions.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      value={tplSearch}
+                      onChange={e => setTplSearch(e.target.value)}
+                      placeholder="Search name or style…"
+                      style={tplFilterSearchStyle}
+                    />
+                  </div>
+                )}
                 <div style={tplListStyle}>
                   {templates.length === 0 ? (
                     <div style={tplEmptyStyle}>
@@ -230,8 +323,12 @@ export default function NewRecipeModal({ onClose, onCreated, defaultFolderId }: 
                       Open a recipe and choose<br />
                       <span style={{ color: 'var(--amber)' }}>☆ Save as Template</span> from the File menu.
                     </div>
+                  ) : filteredTemplates.length === 0 ? (
+                    <div style={tplEmptyStyle}>
+                      No templates match this filter.
+                    </div>
                   ) : (
-                    templates.map(t => {
+                    filteredTemplates.map(t => {
                       const ingCount = (t.ingredients || []).length;
                       const isSelected = tplId === t.id;
                       return (
@@ -326,6 +423,37 @@ const tplListLabelStyle: React.CSSProperties = {
   color: 'var(--text-muted)',
   display: 'block',
   marginBottom: 6,
+};
+
+const tplFilterRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: 6,
+  marginBottom: 6,
+};
+
+const tplFilterSelectStyle: React.CSSProperties = {
+  flex: '0 0 50%',
+  fontFamily: 'var(--mono)',
+  fontSize: 10,
+  padding: '4px 6px',
+  background: 'var(--panel2)',
+  color: 'var(--text)',
+  border: '1px solid var(--border2)',
+  borderRadius: 3,
+  cursor: 'pointer',
+  minWidth: 0,
+};
+
+const tplFilterSearchStyle: React.CSSProperties = {
+  flex: 1,
+  fontFamily: 'var(--mono)',
+  fontSize: 10,
+  padding: '4px 6px',
+  background: 'var(--panel2)',
+  color: 'var(--text)',
+  border: '1px solid var(--border2)',
+  borderRadius: 3,
+  minWidth: 0,
 };
 
 const tplListStyle: React.CSSProperties = {

@@ -29,6 +29,7 @@ export default function ReservationsTab({ year, data }: Props) {
   const setTariff = useStore(s => s.setTariff);
   const maltLib = useStore(s => s.maltLib);
   const suppliers = useStore(s => s.suppliers);
+  const pushToast = useStore(s => s.pushToast);
 
   const reservations = data.reservations ?? [];
   const maltedLib = maltLib.filter(isMalted);
@@ -53,8 +54,12 @@ export default function ReservationsTab({ year, data }: Props) {
   };
 
   const removeReservation = (ri: number) => {
-    if (!confirm('Remove this reservation?')) return;
+    const beforeData = data;
     saveData({ ...data, reservations: reservations.filter((_, i) => i !== ri) });
+    pushToast({
+      message: 'Removed reservation',
+      undo: () => saveData(beforeData),
+    });
   };
 
   const updateReservation = <K extends keyof TariffReservation>(

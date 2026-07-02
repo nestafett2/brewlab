@@ -141,21 +141,36 @@ Salts and acids (phosphoric, lactic, gypsum, CaCl2, etc.) are water adjustments.
 - Tax Master committed declarations
 - Auto-classification's "is this a Happoshu trigger?" pass
 
-The HTML enforces this with **two filters applied together** at every tax-build point. Port both verbatim — partial matching breaks downstream.
+**HTML reference**: enforces this with **two filters applied together** at every tax-build point — name regex OR `use === 'water chemistry'`, either match excludes.
+
+**React (current behavior — diverges from HTML, intentional)**: explicit `use` field is decisive when set; the regex is fallback for legacy entries with no use selected. The single canonical helper lives at `brewlab/src/lib/waterChem.ts:isWaterChem`.
+
+**React precedence:**
+1. `use === 'water chemistry'` (case-insensitive, trimmed) → water-chem.
+2. Else if `use` is any other non-empty value (`'Boil'`, `'Mash'`, etc.) → NOT water-chem. Explicit user choice wins.
+3. Else (`use` empty/null) → fall through to name regex.
+
+**Why diverged**: the both-filters-together rule produces false positives on names that incidentally match the regex (e.g. "Kaffir Lime" — the regex matches "lime"). Such items, when explicitly tagged with a real `use` like "Boil", were silently excluded from tax misc totals. The new precedence trusts the brewer's explicit `use` selection.
 
 **Filter 1 — `use` field (case-insensitive):**
 ```js
-const use = (m.use || '').toLowerCase();
-if (use === 'water chemistry') return; // exclude
+const use = (m.use || '').trim().toLowerCase();
+if (use === 'water chemistry') return; // exclude (water-chem)
+if (use !== '')                return; // KEEP — explicit non-WC use, NOT water-chem (React only)
+// (HTML reference: skip the second check — falls through to regex)
 ```
 
-**Filter 2 — name regex:**
+**Filter 2 — name regex (used only when `use` is empty in React):**
 ```js
 const waterChemKw = /gypsum|calcium.*sulfate|calcium.*chloride|magnesium|lactic.*acid|phosphoric.*acid|hydrochloric.*acid|sulfuric.*acid|chalk|lime|bicarbonate|calcium.*carbonate|epsom|baking.*soda|sodium.*bicarbonate|potassium.*metabisulfite|campden|salts|nacl|cacl|caso4|mgso4|cacl2|table.*salt|sodium.*chloride/i;
 if (waterChemKw.test(name)) return; // exclude
 ```
 
-**Filter 3 (implicit) — `type='water'` rows are NEVER iterated for tax totals.** Tax loops only walk `type='grain'` and `type='misc'`. The water type bypasses the misc bucket entirely.
+The regex itself is unchanged from HTML.
+
+**Filter 3 (implicit) — `type='water'` rows are NEVER iterated for tax totals.** Tax loops only walk `type='grain'` and `type='misc'`. The water type bypasses the misc bucket entirely. Lives in `iterTaxIngredients` in `lib/waterChem.ts`, unchanged.
+
+**Snap-* unaffected**: `buildSnapshot` (`lib/tax.ts`) reads from `ColdSideData` and the existing `TaxRecord` only — does not call `isWaterChem` or `iterTaxIngredients`. Already-filed tax records preserve their captured values from filing time. Only live recompute and displays shift for affected recipes.
 
 **HTML reference locations (all must match in React):**
 
@@ -258,6 +273,22 @@ Full details in SYNC.md.
 | settings | WRITE | read | bl_brewery_notes only |
 | tax_records / tax_master | WRITE | NEVER | NEVER |
 | harvested_yeast | WRITE | delete+reinsert | NEVER |
+
+---
+
+## Profile Locking (May 2026)
+
+Equipment, Mash, and Pitch profiles auto-lock when any recipe pointing at them has `brew_day.measOg > 0`. This prevents retroactive shifts in historical brew-day display targets and on-the-fly efficiency numbers — brew_day stores raw user inputs verbatim but recomputes derived targets live from the current profile every render, so profile edits otherwise corrupt historical displays even though tax_records snap_* fields stay immutable.
+
+Implementation: `src/lib/profileLock.ts` exports `computeLockedProfileIds(recipes, cache, kind: 'equip'|'mash'|'pitch'): Map<string, number>` (returns id → usage count) and `nextCloneName(name, existingNames): string`. Each profile panel (EquipmentProfilesPanel, MashProfilesPanel, PitchProfilesPanel) wraps the helper in a useMemo over (recipes, recipeProfilesByRecipe).
+
+UI rule: locked profiles show 🔒 in the row + "🔒 LOCKED" badge in the modal; "✕ Delete" → "⎘ Clone & Edit"; **value fields lock, metadata stays editable** (name + notes). Mash steps array locks in entirety (including the + Add Step button) — adding/removing steps changes the program shape, same reproducibility concern as numeric edits.
+
+Clone & Edit: makes a new profile via makeId() + nextCloneName, inserts at end, switches editingId to the clone, toasts. Does NOT auto-switch any recipe to the new clone — existing recipes continue to reference the locked original (preserves their reproducibility); user re-points individual recipes manually via the per-recipe Profiles dropdown.
+
+Reactivity caveat: useMemo only re-runs when recipes or recipeProfilesByRecipe change. Saving a brew_day in another tab while Settings is open won't refresh the lock state until the panel re-renders. Settings unmounts on tab switch so reopening always recomputes. Acceptable v1 trade-off; not building a brewDayHasRecord slice.
+
+Water Profiles deferred indefinitely. Different architecture: the values that retroactively shift on edit live in per-recipe water_chem blobs, not in the profile itself. Source water profile changes are extremely rare in practice. Revisit only if real-world friction emerges.
 
 ---
 

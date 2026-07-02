@@ -33,6 +33,7 @@ export default function InventoryCorrectionModal({ section, onClose }: Props) {
   const inventoryStock = useStore(s => s.inventoryStock);
   const ledgerData     = useStore(s => s.ledgerData);
   const setLedgerData  = useStore(s => s.setLedgerData);
+  const pushToast      = useStore(s => s.pushToast);
 
   const data =
     section === 'malts' ? maltLib :
@@ -86,10 +87,16 @@ export default function InventoryCorrectionModal({ section, onClose }: Props) {
     }
     if (corrected > 0) {
       setLedgerData(next);
-      window.alert(`${corrected} correction(s) applied and written to the tax ledger.`);
+      pushToast({
+        message: `${corrected} correction(s) applied and written to the tax ledger.`,
+        variant: 'success',
+      });
       onClose();
     } else {
-      window.alert('No changes — all physical counts match digital, or no counts were entered.');
+      pushToast({
+        message: 'No changes — all physical counts match digital, or no counts were entered.',
+        variant: 'info',
+      });
     }
   };
 

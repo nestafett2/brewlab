@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { useStore, type RecipeDeleteSnapshot } from '../store';
 import RecipeTab from '../components/recipe/RecipeTab';
 import BrewDayTab from '../components/recipe/BrewDayTab';
@@ -24,12 +24,34 @@ import TariffReductionPage from '../components/tariff/TariffReductionPage';
 import BreweryOverviewPanel from '../components/recipe/BreweryOverviewPanel';
 import RecipeExplorerPanel from '../components/recipe/RecipeExplorerPanel';
 import RecipePreview from '../components/recipe/RecipePreview';
+import RecipePreviewPopover from '../components/recipe/RecipePreviewPopover';
 import FolderPreview from '../components/recipe/FolderPreview';
 import FolderTree from '../components/recipe/FolderTree';
 import BeerGlassIcon from '../components/recipe/BeerGlassIcon';
 import { ebcToHex } from '../lib/ebcColor';
+import {
+  exportAllData,
+  parseBackupFile,
+  restoreBackup,
+  countCurrentBrewLabKeys,
+  readCurrentSupabaseUrl,
+  readBackupSupabaseUrl,
+  BackupParseError,
+  type BackupFile,
+} from '../lib/dataBackup';
 import UndoButton from '../components/shared/UndoButton';
-import type { Folder } from '../types';
+import type { Folder, Ingredient, Recipe } from '../types';
+import { parseRecipeXML, type ParsedRecipe } from '../components/recipe/recipeImport';
+import {
+  recipeToBeerXML,
+  wrapRecipesDocument,
+  buildExportFilename,
+  downloadXmlFile,
+} from '../lib/recipeExport';
+import { newRecipeId, today } from '../lib/utils';
+import { fmtNum } from '../lib/format';
+import { lsSet } from '../lib/storage';
+import { isWaterChem } from '../lib/waterChem';
 
 export type RecipeSubTab = 'ingredients' | 'brewday' | 'ferm' | 'cold' | 'tax'
   | 'taxsummary' | 'analysis' | 'water' | 'history' | 'checklist';
@@ -60,10 +82,77 @@ export default function Desktop() {
   const setRecipes      = useStore(s => s.setRecipes);
   const setFolders      = useStore(s => s.setFolders);
   const pushToast       = useStore(s => s.pushToast);
+  const addRecipe       = useStore(s => s.addRecipe);
+  const setIngredients  = useStore(s => s.setIngredients);
+  const getIngredients  = useStore(s => s.getIngredients);
+  const getMash         = useStore(s => s.getMash);
   // (effectiveTrubLossL + its store subscriptions moved into RecipeTab
   // when the equipment-derived pill strip moved out of the meta bar.)
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // ── Floating recipe-preview popover (sidebar single-click) ─────────
+  // Stays on the current tab; doesn't update `preview` (which still
+  // drives the embedded folder-preview pane on the Recipes tab).
+  // Anchored to the right edge of the recipe-browser sidebar, measured
+  // at open time via [data-recipe-sidebar].
+  const [popoverRecipeId, setPopoverRecipeId] = useState<string | null>(null);
+  const [popoverPos, setPopoverPos] = useState<{ left: number; top: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!popoverRecipeId) { setPopoverPos(null); return; }
+    const el = document.querySelector('[data-recipe-sidebar]');
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    setPopoverPos({ left: rect.right + 12, top: rect.top });
+  }, [popoverRecipeId]);
+
+  // Outside-mousedown / Escape close. Sidebar clicks are exempt — the
+  // sidebar's setPreview wrapper handles toggle/replace explicitly.
+  // Deferred attach matches the recipeCtxMenu pattern below.
+  useEffect(() => {
+    if (!popoverRecipeId) return;
+    const onMouse = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      if (t.closest('[data-recipe-popover]')) return;
+      if (t.closest('[data-recipe-sidebar]')) return;
+      setPopoverRecipeId(null);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPopoverRecipeId(null); };
+    const id = setTimeout(() => document.addEventListener('mousedown', onMouse), 0);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener('mousedown', onMouse);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [popoverRecipeId]);
+
+  // Clear popover if the underlying recipe is deleted while open.
+  useEffect(() => {
+    if (popoverRecipeId && !recipes.some(r => r.id === popoverRecipeId)) {
+      setPopoverRecipeId(null);
+    }
+  }, [popoverRecipeId, recipes]);
+
+  // ── Recipe XML import (File menu → Import Recipe (BeerXML)) ─────────
+  // Hidden file input triggered by the menu item; on change, parse and
+  // pop the preview modal so the user can confirm before any state
+  // changes. Mirrors HTML brewlab-desktop.html:17232 (handleRecipeXML)
+  // + 17323 (confirmRecipeImport), with the BSMX path intentionally
+  // omitted (HTML's importBSMX is library-only — see recipeImport.ts).
+  const recipeImportInputRef = useRef<HTMLInputElement>(null);
+  const [pendingImports, setPendingImports] = useState<ParsedRecipe[] | null>(null);
+
+  // ── Backup import (File menu → Import Backup) ───────────────────────
+  // Hidden file input triggered by the menu item; on change, parse via
+  // dataBackup.parseBackupFile and pop the BackupImportConfirm modal.
+  // Restore is gated by a two-stage button confirm inside the modal —
+  // commit calls restoreBackup + reloads. See lib/dataBackup.ts header
+  // for the disconnect-on-restore rationale.
+  const backupImportInputRef = useRef<HTMLInputElement>(null);
+  const [pendingBackup, setPendingBackup] = useState<BackupFile | null>(null);
 
   // Track which recipes have open tabs (like the HTML app's recipe-tabs-container)
   const [openRecipeTabs, setOpenRecipeTabs] = useState<string[]>([]);
@@ -118,6 +207,212 @@ export default function Desktop() {
     setOpenMenu(openMenu === menu ? null : menu);
   };
   const closeMenus = () => setOpenMenu(null);
+
+  // ── Recipe XML file → preview ────────────────────────────────────────
+  // Mirrors HTML brewlab-desktop.html:17232. Reads the file, parses,
+  // shows the preview modal. BSMX files are rejected with an explanatory
+  // toast — that's a separate task once a sample .bsmx recipe file exists.
+  const handleRecipeImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset so picking the same file twice still fires onChange.
+    e.target.value = '';
+    if (file.name.toLowerCase().endsWith('.bsmx')) {
+      pushToast({
+        message: 'BSMX recipe import not yet supported. Please use BeerXML (.xml/.beerxml).',
+        variant: 'error',
+      });
+      return;
+    }
+    let text: string;
+    try {
+      text = await file.text();
+    } catch (err) {
+      pushToast({ message: 'Could not read file: ' + (err as Error).message, variant: 'error' });
+      return;
+    }
+    try {
+      const parsed = parseRecipeXML(text);
+      if (parsed.length === 0) {
+        pushToast({ message: 'No <RECIPE> found in this file.', variant: 'error' });
+        return;
+      }
+      setPendingImports(parsed);
+    } catch (err) {
+      pushToast({ message: 'Error parsing XML: ' + (err as Error).message, variant: 'error' });
+    }
+  };
+
+  // ── Confirm import → materialize through store ───────────────────────
+  // Mirrors HTML confirmRecipeImport (17323). Allocates IDs in-loop
+  // (each iteration's allocation feeds the next), creates the Recipe
+  // row, writes ingredients with `${recipeId}_${idx}` IDs, persists the
+  // mash blob via lsSet so it picks up the bl_mash_<id> sync prefix
+  // (supabase.ts:185–195). Opens the FIRST imported recipe per spec.
+  const confirmRecipeImport = () => {
+    if (!pendingImports || pendingImports.length === 0) {
+      setPendingImports(null);
+      return;
+    }
+    const allocatedIds: string[] = [];
+    let firstId: string | null = null;
+    const defaultFolder = folders[0]?.id || '';
+
+    for (const p of pendingImports) {
+      const newId = newRecipeId([...recipes.map(r => r.id), ...allocatedIds]);
+      allocatedIds.push(newId);
+      if (!firstId) firstId = newId;
+
+      const rec: Recipe = {
+        id: newId,
+        lineageId: newId,
+        name: '',                                   // tax serial — brewer fills in
+        beerName: p.name,
+        style: p.styleName,
+        styleKey: p.styleKey,
+        folder: defaultFolder,
+        batchL: p.batchL,
+        classification: 'Beer',
+        brewDate: today(),
+        taxBatch: '',
+        brewNumber: 1,
+        version: '1.0',
+        versionNote: '',
+        locked: false,
+        rating: 0,
+        brewAgain: null,
+        cost: 0,
+        abv: 0,
+        ibu: 0,
+        ebc: 0,
+        ogPlato: p.ogPlato,
+        fgPlato: p.fgPlato,
+        bhEff: p.bhEff,
+        boilTime: p.boilTime,
+        whirlpoolTemp: 85,
+        bdFv: '',
+        notes: p.notes,
+        extraAdditions: '',
+        brewer: '',
+        archivedAt: null,
+      };
+      addRecipe(rec);
+
+      // Assign per-CLAUDE.md ingredient ID rule — `${recipeId}_${idx}`
+      // (NOT sequential integers — would collide on Supabase PK).
+      const ings: Ingredient[] = p.ingredients.map((ing, idx) => ({
+        ...ing,
+        id: `${newId}_${idx}`,
+      }));
+      setIngredients(newId, ings);
+
+      // Mash profile blob — only persist if the BeerXML had MASH steps.
+      // lsSet routes through the bl_mash_<id> Supabase prefix.
+      if (p.mashProfile) {
+        lsSet(`bl_mash_${newId}`, p.mashProfile);
+      }
+    }
+
+    const count = pendingImports.length;
+    pushToast({
+      message: count === 1 ? `Imported "${pendingImports[0].name}"` : `Imported ${count} recipes`,
+      variant: 'success',
+    });
+    setPendingImports(null);
+    if (firstId) openRecipe(firstId);
+  };
+
+  // ── Recipe XML export (File menu → Export Recipe (BeerXML)) ──────────
+  // Symmetric to the import path above. Resolves the active recipe +
+  // its ingredients + per-recipe mash profile, serialises to BeerXML
+  // 1.0, triggers a browser download. Mirrors HTML
+  // brewlab-desktop.html:5245 (`exportCurrentRecipe`) but uses SI units
+  // and writes MASH/FG so a round-trip through the React importer
+  // preserves the mash schedule and final-gravity target.
+  const handleExportCurrentRecipe = () => {
+    if (!activeRecipeId) {
+      pushToast({ message: 'No recipe open.', variant: 'error' });
+      return;
+    }
+    const recipe = recipes.find(r => r.id === activeRecipeId);
+    if (!recipe) {
+      pushToast({ message: 'No recipe open.', variant: 'error' });
+      return;
+    }
+    try {
+      const ings = getIngredients(activeRecipeId);
+      const mash = getMash(activeRecipeId);
+      const xml = wrapRecipesDocument([recipeToBeerXML(recipe, ings, mash)]);
+      downloadXmlFile(xml, buildExportFilename(recipe));
+      pushToast({
+        message: `Exported "${recipe.beerName || recipe.name || 'recipe'}"`,
+        variant: 'success',
+      });
+    } catch (err) {
+      pushToast({
+        message: 'Error exporting recipe: ' + (err as Error).message,
+        variant: 'error',
+      });
+    }
+  };
+
+  // ── Backup file → preview ───────────────────────────────────────────
+  const handleBackupImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    if (!file.name.toLowerCase().endsWith('.json')) {
+      pushToast({
+        message: 'Backup files must be .json (created by Export All Data).',
+        variant: 'error',
+      });
+      return;
+    }
+    let text: string;
+    try {
+      text = await file.text();
+    } catch (err) {
+      pushToast({ message: 'Could not read file: ' + (err as Error).message, variant: 'error' });
+      return;
+    }
+    try {
+      const backup = parseBackupFile(text);
+      setPendingBackup(backup);
+    } catch (err) {
+      // BackupParseError carries a code; surface its message verbatim.
+      // Other errors are unexpected — same message path.
+      const msg = err instanceof BackupParseError
+        ? err.message
+        : 'Could not parse backup: ' + (err as Error).message;
+      pushToast({ message: msg, variant: 'error' });
+    }
+  };
+
+  // ── Confirm backup restore — wipe + write + reload ──────────────────
+  // Reload mirrors the existing Reset All Data path
+  // (ConnectionPanel.tsx:52). Defer ~250ms so the success toast renders
+  // before the page tears down.
+  const confirmBackupRestore = () => {
+    if (!pendingBackup) return;
+    try {
+      const summary = restoreBackup(pendingBackup);
+      pushToast({
+        message: `Restored ${summary.written} keys (cleared ${summary.cleared}). ` +
+                 (summary.credentialsCleared
+                   ? 'Supabase disconnected — reconnect in Settings → Connection.'
+                   : 'Reloading…'),
+        variant: 'success',
+        duration: 6000,
+      });
+      setPendingBackup(null);
+      setTimeout(() => location.reload(), 250);
+    } catch (err) {
+      pushToast({
+        message: 'Restore failed: ' + (err as Error).message,
+        variant: 'error',
+      });
+    }
+  };
 
   // Modal state for New Recipe + Save as Template flows.
   // Modal state carries the optional folder context: null = closed,
@@ -289,7 +584,7 @@ export default function Desktop() {
 
   const handleBulkMove = (ids: string[]) => {
     if (folders.length === 0) {
-      window.alert('No folders defined yet.');
+      pushToast({ message: 'No folders defined yet.', variant: 'info' });
       return;
     }
     const list = folders.map((f, i) => `${i + 1}: ${f.name}`).join('\n');
@@ -350,7 +645,6 @@ export default function Desktop() {
   const folderCtxDelete = (folderId: string) => {
     const folder = folders.find(f => f.id === folderId);
     if (!folder) return;
-    if (!window.confirm(`Delete folder "${folder.name}"? Recipes inside will become unfiled.`)) return;
     // Snapshot for undo — restores folders + recipes (cascade reversal).
     const beforeFolders = folders;
     const beforeRecipes = recipes;
@@ -394,7 +688,7 @@ export default function Desktop() {
 
   const rbCtxMove = (recipeId: string) => {
     if (folders.length === 0) {
-      alert('No folders defined yet.');
+      pushToast({ message: 'No folders defined yet.', variant: 'info' });
       return;
     }
     const list = folders.map((f, i) => `${i + 1}: ${f.name}`).join('\n');
@@ -461,29 +755,71 @@ export default function Desktop() {
         <div className={`menu-item ${openMenu === 'file' ? 'open' : ''}`} onClick={() => toggleMenu('file')}>
           File
           <div className={`menu-dropdown ${openMenu === 'file' ? 'open' : ''}`}>
-            <div className="menu-dd-item" onClick={closeMenus}>Import Recipe (BeerXML)</div>
-            <div className="menu-dd-sep" />
-            <div className="menu-dd-item" onClick={closeMenus}>Save Recipe</div>
-            <div className="menu-dd-sep" />
-            <div className="menu-dd-item" onClick={closeMenus}>Export Recipe (BeerXML)</div>
-            <div className="menu-dd-item" onClick={closeMenus}>Export Selected...</div>
-            <div className="menu-dd-sep" />
-            <div className="menu-dd-item" onClick={closeMenus}>Save as New Version</div>
             <div
               className="menu-dd-item"
               onClick={() => {
                 closeMenus();
-                if (!activeRecipeId) { alert('No recipe open.'); return; }
+                recipeImportInputRef.current?.click();
+              }}
+            >Import Recipe (BeerXML)</div>
+            <input
+              ref={recipeImportInputRef}
+              type="file"
+              accept=".xml,.beerxml,.bsmx"
+              style={{ display: 'none' }}
+              onChange={handleRecipeImportFile}
+            />
+            <div className="menu-dd-sep" />
+            <div
+              className="menu-dd-item"
+              onClick={() => {
+                closeMenus();
+                handleExportCurrentRecipe();
+              }}
+            >Export Recipe (BeerXML)</div>
+            <div className="menu-dd-item" onClick={closeMenus}>Export Selected...</div>
+            <div className="menu-dd-sep" />
+            <div
+              className="menu-dd-item"
+              onClick={() => {
+                closeMenus();
+                if (!activeRecipeId) { pushToast({ message: 'No recipe open.', variant: 'info' }); return; }
                 setSaveTemplateModalOpen(true);
               }}
             >Save as Template</div>
-            <div className="menu-dd-item" onClick={closeMenus}>Version...</div>
-            <div className="menu-dd-item" onClick={closeMenus}>Lock Recipe</div>
             <div className="menu-dd-sep" />
-            <div className="menu-dd-item" onClick={closeMenus}>Export All Data (backup)</div>
-            <div className="menu-dd-item" onClick={closeMenus}>Import Backup</div>
-            <div className="menu-dd-sep" />
-            <div className="menu-dd-item" onClick={closeMenus}>Export for Sharing...</div>
+            <div
+              className="menu-dd-item"
+              onClick={() => {
+                closeMenus();
+                try {
+                  const { keyCount, filename } = exportAllData();
+                  pushToast({
+                    message: `Exported ${keyCount} keys to ${filename}. File contains Supabase URL/anon key — don't share without review.`,
+                    duration: 8000,
+                  });
+                } catch (err) {
+                  pushToast({
+                    message: `Backup failed: ${err instanceof Error ? err.message : String(err)}`,
+                    variant: 'error',
+                  });
+                }
+              }}
+            >Export All Data (backup)</div>
+            <div
+              className="menu-dd-item"
+              onClick={() => {
+                closeMenus();
+                backupImportInputRef.current?.click();
+              }}
+            >Import Backup</div>
+            <input
+              ref={backupImportInputRef}
+              type="file"
+              accept=".json,application/json"
+              style={{ display: 'none' }}
+              onChange={handleBackupImportFile}
+            />
           </div>
         </div>
         <div className={`menu-item ${openMenu === 'view' ? 'open' : ''}`} onClick={() => toggleMenu('view')}>
@@ -665,9 +1001,18 @@ export default function Desktop() {
         <UndoButton />
       </nav>
 
-      {/* ═══ Recipe Meta Bar — shown only when a recipe tab is active ═══ */}
+      {/* ═══ Recipe Meta Bar — shown only when a recipe tab is active ═══
+           Layout: title left, metadata pills + beer glass right (marginLeft
+           auto). On the Ingredients sub-tab the bar is left-padded by the
+           sidebar width so the title aligns with the content column below;
+           other sub-tabs use the default 20 px from the CSS class. */}
       {isRecipeOpen && selectedRecipeForMeta && (
-        <div className="recipe-meta-bar">
+        <div
+          className="recipe-meta-bar"
+          style={recipeSubTab === 'ingredients'
+            ? { paddingLeft: 236, paddingRight: 20 }
+            : undefined}
+        >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0, minWidth: 120 }}>
             <input
               type="text"
@@ -687,16 +1032,10 @@ export default function Desktop() {
               />
             </div>
           </div>
-          {/* Classification + Equipment moved to ActionStack's Setup
-              section (Ingredients sub-tab only). The Tax tab and NTA
-              Submitter still surface their own classification pickers,
-              all routed through the canonical setRecipeClassification
-              action — so cross-tab consistency is preserved. */}
+          {/* Metadata pills + beer glass — pushed right via marginLeft auto */}
           <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', alignItems: 'center' }}>
-            {/* Tax Batch # — first in the right-aligned group, before
-                Brew Date. Editable text input; brewery-wide unique
-                constraint enforced on the Supabase side (see recipeToRow
-                tax_batch comment). */}
+            {/* Tax Batch # — brewery-wide unique constraint enforced on
+                the Supabase side (see recipeToRow tax_batch comment). */}
             <div className="meta-pill" style={{ minWidth: 64, flexShrink: 0 }}>
               <div className="meta-pill-label">Tax Batch #</div>
               <input
@@ -723,24 +1062,22 @@ export default function Desktop() {
               <div className="meta-pill-label">Version</div>
               <div className="meta-pill-val" style={{ fontSize: 12 }}>{selectedRecipeForMeta.version || '1.0'}</div>
             </div>
-            {/* Brew # — read-only display of the per-lineage counter.
-                Set automatically by createNextRecipeFromCurrent (next-in-
-                lineage) or by the from-scratch creation paths (=1 for a
-                fresh lineage). No user typing — value is monotonic. Em-dash
-                only when brewNumber is null (legacy rows pre-recompute). */}
+            {/* Brew # — read-only per-lineage counter. Set automatically
+                by createNextRecipeFromCurrent or the from-scratch creation
+                paths. Em-dash only when brewNumber is null (legacy rows). */}
             <div className="meta-pill" style={{ minWidth: 56 }} title="Per-lineage brew counter. Set automatically when a new brew is created.">
               <div className="meta-pill-label">Brew #</div>
               <div className="meta-pill-val" style={{ fontSize: 12 }}>
                 {selectedRecipeForMeta.brewNumber != null ? `#${selectedRecipeForMeta.brewNumber}` : '—'}
               </div>
             </div>
-            {/* Beer-glass icon — flat fill from current EBC. Empty/zero
-                EBC falls back to the lightest ramp endpoint per ebcToHex.
-                Size bump (~50 px) — meta-bar focal element. */}
+            {/* Beer-glass icon — rightmost element of the metadata cluster.
+                Aligns with the right edge of Checklist tab below (both end at
+                the same paddingRight on Ingredients sub-tab). */}
             <BeerGlassIcon
               size={50}
               fill={ebcToHex(selectedRecipeForMeta.ebc)}
-              title={`Color: ${selectedRecipeForMeta.ebc > 0 ? selectedRecipeForMeta.ebc.toFixed(1) + ' EBC' : '—'}`}
+              title={`Color: ${selectedRecipeForMeta.ebc > 0 ? fmtNum(selectedRecipeForMeta.ebc, { suffix: ' EBC' }) : '—'}`}
             />
           </div>
         </div>
@@ -753,7 +1090,20 @@ export default function Desktop() {
            nav reads as a section divider rather than chrome above the
            recipe being edited. */}
       {isRecipeOpen && (
-        <div className="tabbar" style={{ background: 'var(--bg)', borderTop: '1px solid var(--border)', padding: '0 16px', justifyContent: 'center' }}>
+        <div
+          className="tabbar"
+          style={{
+            background: 'var(--bg)',
+            borderTop: '1px solid var(--border)',
+            // On Ingredients: align left edge with content-column edge
+            // (sidebar width + 16) and right edge with beer glass (20).
+            // Tabs flex-grow so Brew History / Checklist land at known
+            // fractional positions of the row.
+            paddingLeft: recipeSubTab === 'ingredients' ? 236 : 16,
+            paddingRight: 20,
+            justifyContent: 'flex-start',
+          }}
+        >
           {([
             ['ingredients', 'Ingredients'],
             ['brewday',     'Brew Day'],
@@ -770,6 +1120,7 @@ export default function Desktop() {
               key={key}
               className={`sub-tab${recipeSubTab === key ? ' active' : ''}`}
               onClick={() => setRecipeSubTab(key)}
+              style={{ flex: 1, justifyContent: 'center' }}
             >
               {label}
             </div>
@@ -796,7 +1147,7 @@ export default function Desktop() {
               scope for the layout redesign. */}
           {(() => {
             const renderRecipeBrowserSidebar = () => (
-              <div style={{ width: 220, background: 'var(--panel)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+              <div data-recipe-sidebar style={{ width: 220, background: 'var(--panel)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
                 <div style={{ background: 'var(--panel2)', borderBottom: '1px solid var(--border)', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontFamily: 'var(--display)', fontSize: 16, letterSpacing: 2, color: 'var(--amber)' }}>RECIPES</span>
                   <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
@@ -823,13 +1174,25 @@ export default function Desktop() {
                     folders={folders}
                     recipes={recipes}
                     preview={preview}
+                    popoverId={popoverRecipeId}
                     setPreview={(sel) => {
-                      if (sel && sidebarTab === 'explorer') setSidebarTab('overview');
+                      // Sidebar recipe single-click → toggle the floating
+                      // popover. Doesn't navigate, doesn't update
+                      // `preview`. Same recipe re-clicked closes;
+                      // different recipe replaces the open popover.
+                      if (sel?.kind === 'recipe') {
+                        setPopoverRecipeId(prev => prev === sel.id ? null : sel.id);
+                        return;
+                      }
+                      // Folder click (or null deselect) — close any open
+                      // popover and update preview state for the
+                      // embedded folder-preview pane on the Recipes tab.
+                      setPopoverRecipeId(null);
                       setPreview(sel);
                     }}
                     setFolders={setFolders}
                     setRecipes={setRecipes}
-                    openRecipe={(id) => { setPreview(null); openRecipe(id); }}
+                    openRecipe={(id) => { setPopoverRecipeId(null); setPreview(null); openRecipe(id); }}
                     onRecipeContext={handleRecipeContext}
                     onFolderContext={handleFolderContext}
                     onBulkContext={handleBulkContext}
@@ -966,6 +1329,47 @@ export default function Desktop() {
         />
       )}
 
+      {/* Floating recipe-preview popover. Opens on sidebar single-click,
+          stays on the current tab. Replaces the previous "navigate to
+          Recipes/Overview" sidebar-click behavior. Anchored to the
+          sidebar's right edge via popoverPos, measured at open time. */}
+      {popoverRecipeId && popoverPos && (() => {
+        const r = recipes.find(x => x.id === popoverRecipeId);
+        if (!r) return null;
+        return (
+          <RecipePreviewPopover
+            recipe={r}
+            pos={popoverPos}
+            onOpen={() => { setPopoverRecipeId(null); openRecipe(r.id); }}
+          />
+        );
+      })()}
+
+      {/* Recipe BeerXML import preview (HTML recipeImportOverlay
+          line ~17317). Single-recipe variant shows full ingredient summary;
+          multi-recipe variant shows a list. Confirm materializes through
+          the store; cancel discards. */}
+      {pendingImports && (
+        <RecipeImportPreview
+          recipes={pendingImports}
+          onConfirm={confirmRecipeImport}
+          onCancel={() => setPendingImports(null)}
+        />
+      )}
+
+      {/* Backup restore preview — two-stage button gate. The dataBackup
+          parser already validated the file shape; this modal surfaces
+          metadata + warnings and locks commit behind a second click.
+          See lib/dataBackup.ts header for the disconnect-on-restore
+          rationale. */}
+      {pendingBackup && (
+        <BackupImportConfirm
+          backup={pendingBackup}
+          onConfirm={confirmBackupRestore}
+          onCancel={() => setPendingBackup(null)}
+        />
+      )}
+
       {/* Recipe browser right-click context menu (HTML rbCtxMenu, line 3958). */}
       {recipeCtxMenu && (
         <div
@@ -1073,3 +1477,369 @@ export default function Desktop() {
 
 // ProfileSelect was inlined into components/recipe/ActionStack.tsx
 // (Setup section). Removed here — no other call sites.
+
+/**
+ * BeerXML import preview modal. Shows what will be created before any
+ * state changes, mirroring the HTML overlay at brewlab-desktop.html:17302.
+ * Single-recipe variant lists every ingredient; multi-recipe variant
+ * collapses to one line per recipe.
+ */
+function RecipeImportPreview({
+  recipes, onConfirm, onCancel,
+}: {
+  recipes: ParsedRecipe[];
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  // Close on Escape — same UX as other modals.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
+  const single = recipes.length === 1 ? recipes[0] : null;
+
+  const labelStyle: React.CSSProperties = {
+    fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: 1,
+    textTransform: 'uppercase', color: 'var(--text-muted)',
+  };
+  const valueStyle: React.CSSProperties = {
+    fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text)',
+  };
+
+  return (
+    <div className="modal-overlay open" onClick={onCancel}>
+      <div
+        className="modal"
+        style={{ width: 560, maxWidth: '96vw', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <span className="modal-title">IMPORT BEERXML</span>
+          <button className="modal-close" onClick={onCancel}>&times;</button>
+        </div>
+
+        <div className="modal-body" style={{ padding: '14px 18px', overflowY: 'auto' }}>
+          {single ? (
+            <SingleRecipePreview recipe={single} labelStyle={labelStyle} valueStyle={valueStyle} />
+          ) : (
+            <>
+              <div style={{ fontFamily: 'var(--display)', fontSize: 16, letterSpacing: 2, color: 'var(--amber)', marginBottom: 8 }}>
+                {recipes.length} RECIPES FOUND
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+                {recipes.map((r, i) => (
+                  <div key={i} style={valueStyle}>
+                    <span style={{ color: 'var(--text-muted)' }}>{i + 1}.</span>{' '}
+                    <strong style={{ color: 'var(--text)' }}>{r.name}</strong>
+                    {' — '}
+                    {fmtNum(r.batchL, { suffix: ' L' })}, {r.ingredients.length} ingredients
+                    {r.styleName && (
+                      <span style={{ color: 'var(--text-muted)' }}> · {r.styleName}{r.styleKey && ` (${r.styleKey})`}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>
+                All recipes will be imported as new entries. The first will open after import.
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button className="btn primary" onClick={onConfirm}>
+            {recipes.length === 1 ? 'Import Recipe' : `Import ${recipes.length} Recipes`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SingleRecipePreview({
+  recipe, labelStyle, valueStyle,
+}: {
+  recipe: ParsedRecipe;
+  labelStyle: React.CSSProperties;
+  valueStyle: React.CSSProperties;
+}) {
+  const grains    = recipe.ingredients.filter(i => i.type === 'grain');
+  const hops      = recipe.ingredients.filter(i => i.type === 'hop');
+  const yeasts    = recipe.ingredients.filter(i => i.type === 'yeast');
+  const miscAll   = recipe.ingredients.filter(i => i.type === 'misc');
+  const waterChem = miscAll.filter(isWaterChem);
+  const miscs     = miscAll.filter(i => !isWaterChem(i));
+
+  const Section = ({ title, items, format }: {
+    title: string;
+    items: Omit<Ingredient, 'id'>[];
+    format: (i: Omit<Ingredient, 'id'>) => string;
+  }) => items.length === 0 ? null : (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ ...labelStyle, marginBottom: 3 }}>{title} ({items.length})</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {items.map((ing, i) => (
+          <div key={i} style={{ ...valueStyle, color: 'var(--text-dim)' }}>{format(ing)}</div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Title + style row */}
+      <div style={{ fontFamily: 'var(--display)', fontSize: 18, letterSpacing: 2, color: 'var(--amber)' }}>
+        {recipe.name}
+      </div>
+      {recipe.styleName && (
+        <div style={{ ...valueStyle, color: 'var(--text-muted)', marginTop: 2 }}>
+          {recipe.styleName}{recipe.styleKey && ` · ${recipe.styleKey}`}
+        </div>
+      )}
+
+      {/* Top stats grid */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10,
+        marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)',
+      }}>
+        <div>
+          <div style={labelStyle}>Batch</div>
+          <div style={valueStyle}>{fmtNum(recipe.batchL, { suffix: ' L' })}</div>
+        </div>
+        <div>
+          <div style={labelStyle}>Boil</div>
+          <div style={valueStyle}>{recipe.boilTime} min</div>
+        </div>
+        <div>
+          <div style={labelStyle}>Eff</div>
+          <div style={valueStyle}>{fmtNum(recipe.bhEff, { suffix: '%' })}</div>
+        </div>
+        <div>
+          <div style={labelStyle}>OG / FG</div>
+          <div style={valueStyle}>
+            {fmtNum(recipe.ogPlato, { suffix: '°P' })}{recipe.fgPlato > 0 && ` / ${fmtNum(recipe.fgPlato, { suffix: '°P' })}`}
+          </div>
+        </div>
+      </div>
+
+      {/* Ingredient lists */}
+      <Section
+        title="Fermentables"
+        items={grains}
+        format={i => `${fmtNum(i.amt, { suffix: ' kg' })} · ${i.name}${i.extra ? ` · EBC ${i.extra}` : ''}`}
+      />
+      <Section
+        title="Hops"
+        items={hops}
+        format={i => `${fmtNum(i.amt, { suffix: ' g' })} · ${i.name}${i.extra ? ` · ${i.extra}% AA` : ''}${i.time ? ` · ${i.time} min` : ''} · ${i.use}`}
+      />
+      <Section
+        title="Yeast"
+        items={yeasts}
+        format={i => `${fmtNum(i.amt, { suffix: ' ' + i.unit })} · ${i.name}${i.extra ? ` · ${i.extra}% atten` : ''}`}
+      />
+      <Section
+        title="Water Chemistry"
+        items={waterChem}
+        format={i => `${fmtNum(i.amt, { suffix: ' ' + i.unit })} · ${i.name}${i.time ? ` · ${i.time} min` : ''} · ${i.use}`}
+      />
+      <Section
+        title="Misc"
+        items={miscs}
+        format={i => `${fmtNum(i.amt, { suffix: ' ' + i.unit })} · ${i.name}${i.time ? ` · ${i.time} min` : ''} · ${i.use}`}
+      />
+
+      {recipe.mashProfile && recipe.mashProfile.steps.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ ...labelStyle, marginBottom: 3 }}>Mash schedule ({recipe.mashProfile.steps.length} steps)</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {recipe.mashProfile.steps.map((s, i) => (
+              <div key={i} style={{ ...valueStyle, color: 'var(--text-dim)' }}>
+                {s.type} · {s.temp}°C · {s.time} min
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {recipe.notes && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ ...labelStyle, marginBottom: 3 }}>Notes</div>
+          <div style={{ ...valueStyle, color: 'var(--text-dim)', whiteSpace: 'pre-wrap' }}>
+            {recipe.notes}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * Backup restore confirmation modal. Surfaces backup metadata + cross-
+ * brewery + empty-payload warnings, gates the destructive commit
+ * behind a two-stage button click (no typed confirmation, but no
+ * single-click path either). On confirm, calls the parent's
+ * confirmBackupRestore which calls restoreBackup + reloads.
+ */
+function BackupImportConfirm({
+  backup, onConfirm, onCancel,
+}: {
+  backup: BackupFile;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const [armed, setArmed] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
+  const backupKeyCount  = Object.keys(backup.data).length;
+  const currentKeyCount = countCurrentBrewLabKeys();
+  const backupSbUrl     = readBackupSupabaseUrl(backup);
+  const currentSbUrl    = readCurrentSupabaseUrl();
+  // Different-brewery flag: both sides have a URL and they differ. If
+  // either side is empty the warning would be noisy (fresh install,
+  // backup taken while disconnected, etc.) — skip in that case.
+  const differentBrewery =
+    backupSbUrl !== '' && currentSbUrl !== '' && backupSbUrl !== currentSbUrl;
+  const empty = backupKeyCount === 0;
+
+  // Pretty exportedAt + age. Falls back to raw string when unparseable
+  // so a malformed-but-valid-shape date doesn't blow up the modal.
+  let exportedDisplay = backup.exportedAt;
+  try {
+    const d = new Date(backup.exportedAt);
+    if (!isNaN(d.getTime())) {
+      const ageMs = Date.now() - d.getTime();
+      const days  = Math.floor(ageMs / 86400000);
+      const ageLabel = days <= 0 ? 'today'
+        : days === 1 ? '1 day ago'
+        : days < 30 ? `${days} days ago`
+        : `${Math.floor(days / 30)} mo ago`;
+      exportedDisplay = `${d.toLocaleString()} (${ageLabel})`;
+    }
+  } catch { /* keep raw */ }
+
+  const labelStyle: React.CSSProperties = {
+    fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: 1,
+    textTransform: 'uppercase', color: 'var(--text-muted)',
+  };
+  const valueStyle: React.CSSProperties = {
+    fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text)',
+  };
+  const rowStyle: React.CSSProperties = {
+    display: 'grid', gridTemplateColumns: '120px 1fr',
+    columnGap: 12, rowGap: 4, alignItems: 'baseline',
+  };
+
+  return (
+    <div className="modal-overlay open" onClick={onCancel}>
+      <div
+        className="modal"
+        style={{ width: 540, maxWidth: '96vw', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <span className="modal-title">IMPORT BACKUP</span>
+          <button className="modal-close" onClick={onCancel}>&times;</button>
+        </div>
+
+        <div className="modal-body" style={{ padding: '14px 18px', overflowY: 'auto' }}>
+          <div style={rowStyle}>
+            <div style={labelStyle}>Exported</div>
+            <div style={valueStyle}>{exportedDisplay}</div>
+            <div style={labelStyle}>Format</div>
+            <div style={valueStyle}>v{backup.version}</div>
+            <div style={labelStyle}>App Version</div>
+            <div style={valueStyle}>{backup.appVersion ?? '(none recorded)'}</div>
+            <div style={labelStyle}>Backup Keys</div>
+            <div style={valueStyle}>{backupKeyCount}</div>
+            <div style={labelStyle}>Current Keys</div>
+            <div style={valueStyle}>{currentKeyCount}</div>
+            <div style={labelStyle}>Supabase URL</div>
+            <div style={{ ...valueStyle, wordBreak: 'break-all' }}>
+              {backupSbUrl || <span style={{ color: 'var(--text-muted)' }}>(none in backup)</span>}
+            </div>
+          </div>
+
+          {differentBrewery && (
+            <div style={{
+              marginTop: 14,
+              background: 'rgba(255,176,0,0.08)',
+              border: '1px solid rgba(255,176,0,0.4)',
+              padding: '8px 10px',
+              fontFamily: 'var(--mono)', fontSize: 10,
+              color: 'var(--amber)',
+              lineHeight: 1.5,
+            }}>
+              ⚠ Backup is from <b style={{ wordBreak: 'break-all' }}>{backupSbUrl}</b><br />
+              You are currently using <b style={{ wordBreak: 'break-all' }}>{currentSbUrl}</b>.<br />
+              This looks like a different brewery's backup.
+            </div>
+          )}
+
+          {empty && (
+            <div style={{
+              marginTop: 14,
+              background: 'rgba(255,176,0,0.08)',
+              border: '1px solid rgba(255,176,0,0.4)',
+              padding: '8px 10px',
+              fontFamily: 'var(--mono)', fontSize: 10,
+              color: 'var(--amber)',
+              lineHeight: 1.5,
+            }}>
+              ⚠ Backup contains 0 keys. Restoring will wipe your data and
+              leave the app empty.
+            </div>
+          )}
+
+          <div style={{
+            marginTop: 14,
+            background: 'rgba(229,62,62,0.08)',
+            border: '1px solid rgba(229,62,62,0.5)',
+            padding: '10px 12px',
+            fontFamily: 'var(--mono)', fontSize: 11,
+            color: 'var(--red)',
+            lineHeight: 1.5,
+          }}>
+            ⚠ THIS WILL REPLACE ALL CURRENT BREWLAB DATA on this device.<br />
+            <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>
+              Supabase credentials will be cleared so the restored data stays
+              local until you reconnect from Settings → Connection. Other
+              devices syncing to the same Supabase project are not affected
+              until you Push.
+            </span>
+          </div>
+        </div>
+
+        <div className="modal-footer">
+          {!armed ? (
+            <>
+              <button className="btn" onClick={onCancel}>Cancel</button>
+              <button
+                className="btn primary"
+                onClick={() => setArmed(true)}
+                style={{ borderColor: 'var(--red)', color: 'var(--red)' }}
+              >Restore…</button>
+            </>
+          ) : (
+            <>
+              <button className="btn" onClick={() => setArmed(false)}>Back</button>
+              <button
+                className="btn primary"
+                onClick={onConfirm}
+                style={{ background: 'var(--red)', borderColor: 'var(--red)', color: 'var(--bg)' }}
+              >Confirm — Wipe &amp; Replace</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

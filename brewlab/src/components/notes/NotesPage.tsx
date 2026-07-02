@@ -51,7 +51,6 @@ export default function NotesPage() {
   };
 
   const remove = (id: string) => {
-    if (!window.confirm('Delete this note?')) return;
     // Snapshot the full breweryNotes array so undo restores order +
     // any sibling notes (deleteBreweryNote does an array filter; the
     // restore needs the pre-filter array).

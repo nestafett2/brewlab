@@ -24,6 +24,7 @@ import { profileSharedStyles as ss } from './EquipmentProfilesPanel';
 export default function WaterProfilesPanel() {
   const profiles    = useStore(s => s.waterProfiles);
   const setProfiles = useStore(s => s.setWaterProfiles);
+  const pushToast   = useStore(s => s.pushToast);
   const [search, setSearch]       = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -53,9 +54,14 @@ export default function WaterProfilesPanel() {
   };
 
   const deleteProfile = (id: string) => {
-    if (!window.confirm('Delete this water profile?')) return;
+    const before = profiles;
+    const target = profiles.find(p => p.id === id);
     setProfiles(profiles.filter(p => p.id !== id));
     if (editingId === id) setEditingId(null);
+    pushToast({
+      message: target ? `Deleted water profile "${target.name}"` : 'Deleted water profile',
+      undo: () => setProfiles(before),
+    });
   };
 
   return (

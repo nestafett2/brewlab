@@ -16,6 +16,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useStore } from '../../store';
+import { fmtNum } from '../../lib/format';
 import type { FermLogEntry, FermMeta } from '../../types';
 import {
   fvVolume,
@@ -39,6 +40,8 @@ export default function FermTab({ recipeId }: Props) {
   const setFermMeta  = useStore(s => s.setFermMeta);
   const tankCalib    = useStore(s => s.tankCalib);
   const getWaterChem = useStore(s => s.getWaterChem);
+  const pushToast    = useStore(s => s.pushToast);
+  const settings     = useStore(s => s.settings);
 
   // ── Local state ───────────────────────────────────────────────────────
   // Entries kept locally for reactive UI; mutations go through the store
@@ -71,8 +74,14 @@ export default function FermTab({ recipeId }: Props) {
   }, [entries, persistEntries]);
 
   const handleDeleteEntry = useCallback((id: string) => {
+    const before = entries;
+    const target = entries.find(e => e.id === id);
     persistEntries(entries.filter(e => e.id !== id));
-  }, [entries, persistEntries]);
+    pushToast({
+      message: target ? `Deleted reading ${target.date}` : 'Deleted reading',
+      undo: () => persistEntries(before),
+    });
+  }, [entries, persistEntries, pushToast]);
 
   // ── Meta updates with 400ms debounce ──────────────────────────────────
   const update = useCallback((patch: Partial<FermMeta>) => {
@@ -97,6 +106,7 @@ export default function FermTab({ recipeId }: Props) {
   const handleDhDelete = useCallback((slot: 1 | 2 | 3) => {
     const k = `dh${slot}` as 'dh1' | 'dh2' | 'dh3';
     setMetaLocal(prev => {
+      const before = prev;
       const next: FermMeta = { ...prev };
       delete next[`${k}-date`        as keyof FermMeta];
       delete next[`${k}-temp`        as keyof FermMeta];
@@ -106,9 +116,16 @@ export default function FermTab({ recipeId }: Props) {
       delete next[`${k}-extra-hops`  as keyof FermMeta];
       delete next[`${k}-adjuncts`    as keyof FermMeta];
       setFermMeta(recipeId, next);
+      pushToast({
+        message: `Deleted Dry Hop ${slot}`,
+        undo: () => {
+          setMetaLocal(before);
+          setFermMeta(recipeId, before);
+        },
+      });
       return next;
     });
-  }, [recipeId, setFermMeta]);
+  }, [recipeId, setFermMeta, pushToast]);
 
   // ── DH summaries (date — for the button labels) ───────────────────────
   const dhSummary = (n: 1 | 2 | 3) => {
@@ -188,7 +205,8 @@ export default function FermTab({ recipeId }: Props) {
     acidType:      dhAcidType,
     acidPct:       dhAcidPct,
     dhTempC:       dhTempInput,
-  }), [ingredients, meta, dhPredVolumeL, targetFinalPh, currentPhInput, dhAcidType, dhAcidPct, dhTempInput]);
+    beerBufferPhPerMeqL: settings.beerBufferPhPerMeqL,
+  }), [ingredients, meta, dhPredVolumeL, targetFinalPh, currentPhInput, dhAcidType, dhAcidPct, dhTempInput, settings.beerBufferPhPerMeqL]);
 
   // ── Yeast harvest pre-fill ────────────────────────────────────────────
   // Parent generation for the new harvest:
@@ -244,9 +262,9 @@ export default function FermTab({ recipeId }: Props) {
             ) : (
               sortedEntries.map(e => {
                 const dateDisp = e.date.length >= 10 ? e.date.slice(5) : e.date;  // MM-DD
-                const plato = e.plato != null ? e.plato.toFixed(1) : '—';
-                const ph    = e.ph    != null ? e.ph.toFixed(1)    : '—';
-                const temp  = e.temp  != null ? `${e.temp.toFixed(1)}°` : '—';
+                const plato = e.plato != null ? fmtNum(e.plato, { dp: 1 }) : '—';
+                const ph    = e.ph    != null ? fmtNum(e.ph,    { dp: 1 }) : '—';
+                const temp  = e.temp  != null ? fmtNum(e.temp,  { dp: 1, suffix: '°' }) : '—';
                 return (
                   <div key={e.id} className="ferm-log-row">
                     <span className="ferm-cell" style={{ width: 72 }}>{dateDisp}</span>
@@ -312,9 +330,9 @@ export default function FermTab({ recipeId }: Props) {
 
                 {/* Totals row — grams + g/L + temp-aware predicted rise */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text-muted)' }}>
-                  <span>{dhPred.totalDhG.toFixed(0)} g{dhPred.gPerL != null ? ` · ${dhPred.gPerL.toFixed(2)} g/L` : ''}</span>
-                  <span title={`Coefficient ${dhPred.coefficient.toFixed(4)} pH/(g/L) at ${dhPred.dhTempC.toFixed(0)} °C`}>
-                    Δ pH {dhPred.predictedRise != null ? `+${dhPred.predictedRise.toFixed(2)}` : '—'}
+                  <span>{fmtNum(dhPred.totalDhG, { dp: 0, suffix: ' g' })}{dhPred.gPerL != null ? ` · ${fmtNum(dhPred.gPerL, { dp: 2, suffix: ' g/L' })}` : ''}</span>
+                  <span title={`Coefficient ${fmtNum(dhPred.coefficient, { dp: 4 })} pH/(g/L) at ${fmtNum(dhPred.dhTempC, { dp: 0 })} °C`}>
+                    Δ pH {dhPred.predictedRise != null ? `+${fmtNum(dhPred.predictedRise, { dp: 2 })}` : '—'}
                   </span>
                 </div>
 
@@ -379,7 +397,7 @@ export default function FermTab({ recipeId }: Props) {
                     title="Estimate based on a finished-beer buffer of ~0.04 pH/(mEq/L). Real beer buffer varies — taste and re-measure before adding."
                   >
                     <span>To hit target ⓘ</span>
-                    <span>~{dhPred.measuredResidualMl.toFixed(1)} mL · −{dhPred.measuredResidualPh.toFixed(2)} pH</span>
+                    <span>~{fmtNum(dhPred.measuredResidualMl, { dp: 1, suffix: ' mL' })} · −{fmtNum(dhPred.measuredResidualPh, { dp: 2, suffix: ' pH' })}</span>
                   </div>
                 )}
 

@@ -24,6 +24,8 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useStore } from '../../store';
 import { lsGet } from '../../lib/storage';
 import { fmtAmt, asNum } from '../../lib/utils';
+import { fmtNum } from '../../lib/format';
+import { formatPair } from '../../lib/yeastDisplay';
 import {
   calcOG, calcFG, calcABV, calcTotalIBU, calcEBC, sgToPlato,
 } from '../../lib/calculations';
@@ -83,17 +85,12 @@ function defaultsFor(t: IngredientType) {
 }
 
 // ── Harvested yeast lookup (mirrors HTML getAvailableHarvestedYeast) ────────
-//
-// localStorage `bl_harvested_yeast` SHOULD be a strain-keyed object per
-// SCHEMA.md: { [strain]: { generation, entries: [...] } }. If hydration is
-// still dumping a raw row array (TODO at supabase.ts:140), we degrade to
-// "no stock" — no crash. Once hydration is fixed this function picks up
-// the data automatically.
 
 interface HarvestEntry {
   id?: string;
   generation?: number;
   harvestedFrom?: string;
+  harvestedFromTaxBatch?: string;
   harvestDate?: string;
   got?: number | string;
   used?: number | string;
@@ -103,7 +100,9 @@ interface AvailableStock {
   idx: number;
   avail: number;
   generation: number;
-  harvestedFrom: string;
+  /** Pre-formatted "TAX — Beer" pair (or whichever single value exists)
+   *  for display in the picker label and the "From Brew" input. */
+  harvestedFromLabel: string;
   harvestDate: string;
   label: string;
 }
@@ -121,13 +120,14 @@ function getAvailableHarvestedYeast(strain: string): AvailableStock[] {
     const avail = got - used;
     if (avail > 0) {
       const gen = e.generation ?? sd.generation ?? 1;
+      const fromLabel = formatPair(e.harvestedFromTaxBatch, e.harvestedFrom);
       out.push({
         idx: i,
         avail,
         generation: gen,
-        harvestedFrom: e.harvestedFrom || '',
+        harvestedFromLabel: fromLabel,
         harvestDate: e.harvestDate || '',
-        label: `${avail.toFixed(1)}L — Gen ${gen} (from #${e.harvestedFrom || '?'}, ${e.harvestDate || '?'})`,
+        label: `${fmtNum(avail, { dp: 1, suffix: 'L' })} — Gen ${gen} (from ${fromLabel}, ${e.harvestDate || '?'})`,
       });
     }
   });
@@ -146,8 +146,8 @@ function validateAtten(raw: unknown): number | null {
 // ── Cells billions formatter (matches HTML fmtB) ────────────────────────────
 function fmtB(v: number): string {
   if (!isFinite(v)) return '—';
-  if (v >= 1000) return `${(v / 1000).toFixed(2)} T`;
-  return `${v.toFixed(1)} B`;
+  if (v >= 1000) return fmtNum(v / 1000, { dp: 2, suffix: ' T' });
+  return fmtNum(v, { dp: 1, suffix: ' B' });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -162,6 +162,7 @@ export default function AddIngredientModal({ recipeId, type: initialType, substi
   const settings = useStore(s => s.settings);
   const ingredientsByRecipe = useStore(s => s.ingredientsByRecipe);
   const addIngredientToStore = useStore(s => s.addIngredient);
+  const pushToast = useStore(s => s.pushToast);
 
   const recipe = recipes.find(r => r.id === recipeId);
   // Stable reference — `?? []` would otherwise mint a new array on every
@@ -310,7 +311,7 @@ export default function AddIngredientModal({ recipeId, type: initialType, substi
     const idx = parseInt(idxStr, 10);
     if (!isFinite(idx) || !availableHarvest[idx]) return;
     const entry = availableHarvest[idx];
-    setYeastBatch(entry.harvestedFrom || '');
+    setYeastBatch(entry.harvestedFromLabel || '');
     setYeastGen(String(entry.generation || 1));
     setSlurryL(entry.avail.toFixed(1));
   }, [availableHarvest]);
@@ -407,10 +408,10 @@ export default function AddIngredientModal({ recipeId, type: initialType, substi
     if (isDry) {
       const neededG = 0.75 * batchL; // g
       const availG = isFinite(amtVal) ? amtVal : NaN;
-      needed = `${neededG.toFixed(0)} g (≈${fmtB(neededG * 10)})`;
-      available = isFinite(availG) ? `${availG.toFixed(0)} g (≈${fmtB(availG * 10)})` : '—';
+      needed = `${fmtNum(neededG, { dp: 0, suffix: ' g' })} (≈${fmtB(neededG * 10)})`;
+      available = isFinite(availG) ? `${fmtNum(availG, { dp: 0, suffix: ' g' })} (≈${fmtB(availG * 10)})` : '—';
       const diff = isFinite(availG) ? availG - neededG : NaN;
-      delta = isFinite(diff) ? `${diff >= 0 ? '+' : ''}${diff.toFixed(0)} g` : '—';
+      delta = isFinite(diff) ? `${diff >= 0 ? '+' : ''}${fmtNum(diff, { dp: 0, suffix: ' g' })}` : '—';
       deltaColor = isFinite(diff) ? (diff >= 0 ? 'var(--amber-bright)' : '#c03030') : '';
     } else {
       // Liquid — needed in billions of cells. Use the live preview ogPlato
@@ -446,7 +447,7 @@ export default function AddIngredientModal({ recipeId, type: initialType, substi
   const buildIngredient = useCallback((): Ingredient | null => {
     const trimmedName = name.trim();
     if (!trimmedName) {
-      alert('Enter a name.');
+      pushToast({ message: 'Enter a name.', variant: 'error' });
       return null;
     }
     const parsedAmt = parseFloat(amt) || 0;
@@ -526,6 +527,7 @@ export default function AddIngredientModal({ recipeId, type: initialType, substi
     name, amt, unit, use, time, coldDays, extra, atten, cost, notes, currentType,
     yeastForm, yeastSource, yeastBatch, yeastGen, mantissa, exponent, slurryL,
     pitchTemp, pitchPh, pitchO2, selectedLibId, allIngredients, recipeId, maltLib,
+    pushToast,
   ]);
 
   const handleAddAndClose = useCallback(() => {
@@ -592,13 +594,13 @@ export default function AddIngredientModal({ recipeId, type: initialType, substi
         {/* ═══ LEFT: stats sidebar + ingredient list ═══ */}
         <div style={{ width: 175, flexShrink: 0, background: 'var(--panel2)', borderRight: '1px solid var(--border)', padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 6, overflow: 'hidden' }}>
           <div style={{ fontFamily: 'var(--mono)', fontSize: 8, letterSpacing: 1, textTransform: 'uppercase' as const, color: 'var(--amber-dim)', marginBottom: 2 }}>Recipe Stats</div>
-          <div className="ie-stat-row"><span className="ie-stat-lbl">OG</span>   <span className="ie-stat-val" style={{ color: 'var(--amber)' }}>{draftStats?.ogPlato ? `${draftStats.ogPlato.toFixed(2)} °P` : '—'}</span></div>
-          <div className="ie-stat-row"><span className="ie-stat-lbl">FG</span>   <span className="ie-stat-val">{draftStats?.fgPlato ? `${draftStats.fgPlato.toFixed(2)} °P` : '—'}</span></div>
-          <div className="ie-stat-row"><span className="ie-stat-lbl">ABV</span>  <span className="ie-stat-val" style={{ color: 'var(--green)' }}>{draftStats?.abv ? `${draftStats.abv.toFixed(1)}%` : '—'}</span></div>
-          <div className="ie-stat-row"><span className="ie-stat-lbl">IBU</span>  <span className="ie-stat-val">{draftStats?.ibu ? draftStats.ibu.toFixed(1) : '—'}</span></div>
-          <div className="ie-stat-row"><span className="ie-stat-lbl">EBC</span>  <span className="ie-stat-val">{draftStats?.ebc ? draftStats.ebc.toFixed(1) : '—'}</span></div>
-          <div className="ie-stat-row"><span className="ie-stat-lbl">Grain</span><span className="ie-stat-val">{draftStats?.totalGrainKg ? `${draftStats.totalGrainKg.toFixed(2)} kg` : '—'}</span></div>
-          <div className="ie-stat-row" style={{ borderBottom: 'none' }}><span className="ie-stat-lbl">Hops</span><span className="ie-stat-val">{draftStats?.totalHopG ? `${draftStats.totalHopG.toFixed(0)} g` : '—'}</span></div>
+          <div className="ie-stat-row"><span className="ie-stat-lbl">OG</span>   <span className="ie-stat-val" style={{ color: 'var(--amber)' }}>{draftStats?.ogPlato ? fmtNum(draftStats.ogPlato, { dp: 2, suffix: ' °P' }) : '—'}</span></div>
+          <div className="ie-stat-row"><span className="ie-stat-lbl">FG</span>   <span className="ie-stat-val">{draftStats?.fgPlato ? fmtNum(draftStats.fgPlato, { dp: 2, suffix: ' °P' }) : '—'}</span></div>
+          <div className="ie-stat-row"><span className="ie-stat-lbl">ABV</span>  <span className="ie-stat-val" style={{ color: 'var(--green)' }}>{draftStats?.abv ? fmtNum(draftStats.abv, { dp: 1, suffix: '%' }) : '—'}</span></div>
+          <div className="ie-stat-row"><span className="ie-stat-lbl">IBU</span>  <span className="ie-stat-val">{draftStats?.ibu ? fmtNum(draftStats.ibu, { dp: 1 }) : '—'}</span></div>
+          <div className="ie-stat-row"><span className="ie-stat-lbl">EBC</span>  <span className="ie-stat-val">{draftStats?.ebc ? fmtNum(draftStats.ebc, { dp: 1 }) : '—'}</span></div>
+          <div className="ie-stat-row"><span className="ie-stat-lbl">Grain</span><span className="ie-stat-val">{draftStats?.totalGrainKg ? fmtNum(draftStats.totalGrainKg, { dp: 2, suffix: ' kg' }) : '—'}</span></div>
+          <div className="ie-stat-row" style={{ borderBottom: 'none' }}><span className="ie-stat-lbl">Hops</span><span className="ie-stat-val">{draftStats?.totalHopG ? fmtNum(draftStats.totalHopG, { dp: 0, suffix: ' g' }) : '—'}</span></div>
 
           <div style={{ fontStyle: 'italic', fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 6 }}>Updates live as you add ingredients</div>
 
@@ -687,9 +689,9 @@ export default function AddIngredientModal({ recipeId, type: initialType, substi
                             let num = parseFloat(val);
                             if (col === 'atten') {
                               if (num < 2) num = num * 100;
-                              val = (num >= 50 && num <= 100) ? num.toFixed(1) : '—';
+                              val = (num >= 50 && num <= 100) ? fmtNum(num, { dp: 1 }) : '—';
                             } else {
-                              val = num.toFixed(1);
+                              val = fmtNum(num, { dp: 1 });
                             }
                           }
                           return <div key={col} className={isName ? 'picker-name' : 'picker-sub'}>{val || '—'}</div>;
@@ -843,7 +845,7 @@ export default function AddIngredientModal({ recipeId, type: initialType, substi
                       </div>
                       <div className="form-row">
                         <div className="form-group">
-                          <label>From Brew #</label>
+                          <label>From Brew</label>
                           <input type="text" value={yeastBatch} onChange={e => setYeastBatch(e.target.value)} placeholder="—" />
                         </div>
                         <div className="form-group">
@@ -856,7 +858,7 @@ export default function AddIngredientModal({ recipeId, type: initialType, substi
                           const total = availableHarvest.reduce((s, e) => s + e.avail, 0);
                           if (!name.trim()) return 'Enter strain name above to see available stock';
                           return total > 0
-                            ? `${total.toFixed(1)}L available for ${name.trim()}`
+                            ? `${fmtNum(total, { dp: 1, suffix: 'L' })} available for ${name.trim()}`
                             : `No harvested stock for ${name.trim()} — log a harvest first`;
                         })()}
                       </div>

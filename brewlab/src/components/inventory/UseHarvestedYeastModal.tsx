@@ -20,6 +20,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store';
 import { dateToStr, todayDate } from '../../lib/dates';
+import { fmtNum } from '../../lib/format';
 import type { HarvestedYeast } from '../../types';
 
 interface Props {
@@ -32,6 +33,7 @@ export default function UseHarvestedYeastModal({ strain, onClose }: Props) {
   const setHarvestedYeast = useStore(s => s.setHarvestedYeast);
   const selectedRecipeId  = useStore(s => s.selectedRecipeId);
   const recipes           = useStore(s => s.recipes);
+  const pushToast         = useStore(s => s.pushToast);
   // Active recipe → silently pre-fills both the visible tax batch input
   // AND the hidden beer name. Only the tax batch is editable; the beer
   // name follows the recipe (no extra field added to the form).
@@ -65,12 +67,12 @@ export default function UseHarvestedYeastModal({ strain, onClose }: Props) {
   const save = () => {
     const amt = parseFloat(amount);
     if (!isFinite(amt) || amt <= 0) {
-      window.alert('Please enter a valid amount.');
+      pushToast({ message: 'Please enter a valid amount.', variant: 'error' });
       return;
     }
     if (amt > balance) {
       if (!window.confirm(
-        `Requested ${amt.toFixed(1)} L but only ${balance.toFixed(1)} L available. Continue?`)) return;
+        `Requested ${fmtNum(amt, { dp: 1, suffix: ' L' })} but only ${fmtNum(balance, { dp: 1, suffix: ' L' })} available. Continue?`)) return;
     }
     const next: HarvestedYeast = { ...harvestedYeast };
     const sd = next[strain];
@@ -130,7 +132,7 @@ export default function UseHarvestedYeastModal({ strain, onClose }: Props) {
         <div style={balanceStyle}>
           Current:&nbsp;
           <span style={{ color: balance > 0 ? 'var(--amber)' : 'var(--red)' }}>
-            {balance.toFixed(1)} L
+            {fmtNum(balance, { dp: 1, suffix: ' L' })}
           </span>
           &nbsp;of&nbsp;<b>{strain}</b>&nbsp;Gen {currentGen}
         </div>

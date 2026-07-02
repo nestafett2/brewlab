@@ -878,6 +878,12 @@ function recipeToRow(r: Recipe) {
     fg_plato: r.fgPlato,
     bd_fv: r.bdFv,
     notes: r.notes,
+    // extra_additions and brewer columns added to Supabase schema
+    // 2026-05-12. Read side has been live since these fields landed in
+    // the Recipe interface; write side flipped on the same date so
+    // edits round-trip across devices.
+    extra_additions: r.extraAdditions || '',
+    brewer: r.brewer || '',
     // Vestigial column — see Recipe.archivedAt JSDoc. Always null under
     // the simplified hard-delete-only model; round-tripped so the DB
     // column doesn't drift.
@@ -920,6 +926,11 @@ function rowToRecipe(row: Record<string, unknown>): Recipe {
     whirlpoolTemp: 85,
     bdFv: (row.bd_fv as string) ?? '',
     notes: (row.notes as string) ?? '',
+    // extra_additions / brewer columns added to Supabase 2026-05-12.
+    // Empty-string fallback covers rows written before the migration
+    // (Postgres column has DEFAULT '' so this is belt-and-braces).
+    extraAdditions: (row.extra_additions as string) ?? '',
+    brewer: (row.brewer as string) ?? '',
     archivedAt: (row.archived_at as string | null) ?? null,
   };
 }
@@ -945,23 +956,16 @@ function ingToRow(recipeId: string, ing: Ingredient, idx: number) {
   let rawId = String(ing.id ?? idx);
   while (rawId.startsWith(recipeId + '_')) rawId = rawId.slice(recipeId.length + 1);
   // ────────────────────────────────────────────────────────────────────
-  // `malted` is local-only — same pattern as `libId`. The column is not
-  // part of the documented `recipe_ingredients` schema (SCHEMA.md), and
-  // many live databases don't have it yet. Writing it unconditionally
-  // produced PGRST204 ("column not found in schema cache") on every
-  // ingredient insert.
-  //
-  // The ingredient flag is used by:
-  //   - pullIngredientTotals (lib/tax.ts) — splits malt vs wheat/oats/other
+  // `malted` round-trips per-row malted/unmalted overrides across devices.
+  // Used by:
+  //   - pullIngredientTotals (lib/tax.ts) — malt vs wheat/oats/other split
   //   - ntaNormalise (lib/nta.ts) — same bucketing for the NTA submitter
-  // Both run in-process against the cached ingredient list, so the field
-  // not round-tripping through Supabase is acceptable: when a recipe is
-  // pulled from another device the cached `MaltLib.malted` flag drives the
-  // bucketing instead (via add-from-library at recipe-edit time).
-  //
-  // If you need this to round-trip across devices in the future, run
-  // `migrations/2026-05-04_add_malted_column.sql` and re-add the field
-  // to the row payload below.
+  // Requires migrations/2026-05-04_add_malted_column.sql (column has
+  // DEFAULT true, so existing rows backfill automatically). `undefined`
+  // on the in-memory ingredient (the typical case — pulled from MaltLib
+  // at add-time) maps to NULL so the column DEFAULT applies on insert.
+  // rowToIng below returns NULL → undefined, so consumers fall through
+  // to `MaltLib.malted` exactly as before for legacy rows.
   // ────────────────────────────────────────────────────────────────────
 
   // ────────────────────────────────────────────────────────────────────
@@ -1004,6 +1008,7 @@ function ingToRow(recipeId: string, ing: Ingredient, idx: number) {
     pct:          parseFloat(String(ing.pct))     || null,
     cost:         parseFloat(String(ing.cost))    || null,
     sort_order:   idx,
+    malted:       ing.malted === undefined ? null : ing.malted,
     yeast_source: yeastSource,
     yeast_gen:    yeastGen,
   };

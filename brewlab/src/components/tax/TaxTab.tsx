@@ -38,6 +38,7 @@ export default function TaxTab({ recipeId }: Props) {
   const setTaxRecordField   = useStore(s => s.setTaxRecordField);
   const updateTaxFromRecipe = useStore(s => s.updateTaxFromRecipe);
   const recordToTaxMaster   = useStore(s => s.recordToTaxMaster);
+  const pushToast           = useStore(s => s.pushToast);
   // Subscribe so this component re-renders when loadTaxRecord/etc. mutate
   // the cache for this recipe — without this the table input values stay
   // pinned to the initial render's snapshot.
@@ -97,7 +98,10 @@ export default function TaxTab({ recipeId }: Props) {
       ),
     });
     if (result.applied && result.blanks.length > 0) {
-      window.alert('Updated. The following fields are still blank:\n\n• ' + result.blanks.join('\n• '));
+      pushToast({
+        message: `Updated. Still blank: ${result.blanks.join(', ')}`,
+        variant: 'info',
+      });
     }
   };
 
@@ -113,7 +117,7 @@ export default function TaxTab({ recipeId }: Props) {
         ),
     });
     if (result.recorded) {
-      window.alert('Recorded to Tax Master ✓');
+      pushToast({ message: 'Recorded to Tax Master', variant: 'success' });
     }
   };
 
@@ -127,7 +131,7 @@ export default function TaxTab({ recipeId }: Props) {
     flushNow();
     const rec = useStore.getState().taxRecordsByRecipe[recipeId] ?? local;
     if (!rec || Object.keys(rec).length === 0) {
-      window.alert('No tax data yet — use ↻ Update from Recipe first.');
+      pushToast({ message: 'No tax data yet — use ↻ Update from Recipe first.', variant: 'info' });
       return;
     }
     exportTaxRecordToExcel(rec);

@@ -11,12 +11,19 @@
  * during the port.
  *
  * "Active profile" selection is per-recipe (`bl_recipe_profiles_<id>.equip`),
- * not a flag on the profile itself. This panel is pure CRUD.
+ * not a flag on the profile itself.
+ *
+ * LOCK RULE (net-new, no HTML reference): a profile is locked when at least
+ * one recipe selected it AND that recipe's brew_day blob has measOg > 0
+ * (post-boil OG recorded). Locked profiles: rename + notes still editable;
+ * numerics/material/SHC/largeBatchUtil read-only; Delete replaced with
+ * Clone & Edit. See lib/equipmentProfileLock.ts.
  */
 
 import { useState, useMemo } from 'react';
 import { useStore } from '../../store';
 import { makeId } from '../../lib/utils';
+import { computeLockedProfileIds, nextCloneName } from '../../lib/profileLock';
 import type { EquipmentProfile, TunMaterial } from '../../types';
 
 // Tun specific heat capacity by material (cal/g·°C). Verbatim port of
@@ -32,8 +39,20 @@ const TUN_MATERIALS: TunMaterial[] = ['Stainless Steel', 'Copper', 'Aluminium', 
 export default function EquipmentProfilesPanel() {
   const profiles      = useStore(s => s.equipProfiles);
   const setProfiles   = useStore(s => s.setEquipProfiles);
+  const recipes       = useStore(s => s.recipes);
+  const recipeProfilesByRecipe = useStore(s => s.recipeProfilesByRecipe);
+  const pushToast     = useStore(s => s.pushToast);
   const [search, setSearch]     = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Derived lock state. Re-runs when recipes or the per-recipe profile cache
+  // change. A simultaneous brew_day save in another tab won't refresh this
+  // until something else re-renders the panel — acceptable v1 trade-off
+  // (Settings tab unmounts on tab switch, so reopen recomputes fresh).
+  const lockedEquipIds = useMemo(
+    () => computeLockedProfileIds(recipes, recipeProfilesByRecipe, 'equip'),
+    [recipes, recipeProfilesByRecipe],
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -43,6 +62,8 @@ export default function EquipmentProfilesPanel() {
   }, [profiles, search]);
 
   const editing = editingId ? profiles.find(p => p.id === editingId) ?? null : null;
+  const editingLocked = editing ? lockedEquipIds.has(editing.id) : false;
+  const editingUsageCount = editing ? lockedEquipIds.get(editing.id) ?? 0 : 0;
 
   const addProfile = () => {
     const id = makeId();
@@ -63,9 +84,30 @@ export default function EquipmentProfilesPanel() {
   };
 
   const deleteProfile = (id: string) => {
-    if (!window.confirm('Delete this equipment profile?')) return;
+    const before = profiles;
+    const target = profiles.find(p => p.id === id);
     setProfiles(profiles.filter(p => p.id !== id));
     if (editingId === id) setEditingId(null);
+    pushToast({
+      message: target ? `Deleted equipment profile "${target.name}"` : 'Deleted equipment profile',
+      undo: () => setProfiles(before),
+    });
+  };
+
+  // Clone a locked profile, switch the modal to the new (unlocked) clone.
+  // Existing recipes keep their reference to the original — clone is purely
+  // a new library entry the user can pick on a new recipe. No auto-switch.
+  const cloneAndEdit = (id: string) => {
+    const src = profiles.find(p => p.id === id);
+    if (!src) return;
+    const newId = makeId();
+    const newName = nextCloneName(src.name ?? '', profiles.map(p => p.name ?? ''));
+    const clone: EquipmentProfile = { ...src, id: newId, name: newName };
+    setProfiles([...profiles, clone]);
+    setEditingId(newId);
+    pushToast({
+      message: `Cloned "${src.name}" → "${newName}". Edit the new profile.`,
+    });
   };
 
   return (
@@ -92,28 +134,45 @@ export default function EquipmentProfilesPanel() {
             <div style={emptyStyle}>
               No profiles yet. Click + New Profile.
             </div>
-          ) : filtered.map(p => (
-            <div key={p.id} style={rowStyle} onClick={() => setEditingId(p.id)}>
-              <div>
-                <div style={rowTitleStyle}>{p.name}</div>
-                <div style={rowMetaStyle}>
-                  Kettle {p.kettleVol ?? '—'}L · Batch {p.defaultBatchL ?? '—'}L
-                  {' · '}Boil off {p.boilOffRate ?? '—'}L/hr · Trub {p.trubLoss ?? '—'}L
-                  {' · '}{p.tunMaterial ?? '—'}
+          ) : filtered.map(p => {
+            const usage = lockedEquipIds.get(p.id) ?? 0;
+            const isLocked = usage > 0;
+            return (
+              <div key={p.id} style={rowStyle} onClick={() => setEditingId(p.id)}>
+                <div>
+                  <div style={rowTitleStyle}>{p.name}</div>
+                  <div style={rowMetaStyle}>
+                    Kettle {p.kettleVol ?? '—'}L · Batch {p.defaultBatchL ?? '—'}L
+                    {' · '}Boil off {p.boilOffRate ?? '—'}L/hr · Trub {p.trubLoss ?? '—'}L
+                    {' · '}{p.tunMaterial ?? '—'}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {isLocked && (
+                    <span
+                      style={lockBadgeStyle}
+                      title={`Locked — used in ${usage} saved brew${usage === 1 ? '' : 's'}. Clone to edit.`}
+                    >
+                      🔒
+                    </span>
+                  )}
+                  <span style={chevronStyle}>›</span>
                 </div>
               </div>
-              <span style={chevronStyle}>›</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       {editing && (
         <EquipmentProfileModal
           profile={editing}
+          locked={editingLocked}
+          usageCount={editingUsageCount}
           onChange={(field, value) => updateField(editing.id, field, value)}
           onClose={() => setEditingId(null)}
           onDelete={() => deleteProfile(editing.id)}
+          onCloneAndEdit={() => cloneAndEdit(editing.id)}
         />
       )}
     </>
@@ -125,12 +184,15 @@ export default function EquipmentProfilesPanel() {
 // ═══════════════════════════════════════════════════════════════════
 
 function EquipmentProfileModal({
-  profile, onChange, onClose, onDelete,
+  profile, locked, usageCount, onChange, onClose, onDelete, onCloneAndEdit,
 }: {
   profile: EquipmentProfile;
+  locked: boolean;
+  usageCount: number;
   onChange: <K extends keyof EquipmentProfile>(field: K, value: EquipmentProfile[K]) => void;
   onClose: () => void;
   onDelete: () => void;
+  onCloneAndEdit: () => void;
 }) {
   const numOrUndef = (s: string): number | undefined => {
     if (s.trim() === '') return undefined;
@@ -152,28 +214,43 @@ function EquipmentProfileModal({
   return (
     <div style={modalBackdropStyle} onClick={onClose}>
       <div style={modalPanelStyle} onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <input
-            type="text"
-            placeholder="Profile Name"
-            value={profile.name ?? ''}
-            onChange={e => onChange('name', e.target.value)}
-            style={profileNameInputStyle}
-          />
-          <button className="btn sm" style={deleteBtnStyle} onClick={onDelete}>✕ Delete</button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+            <input
+              type="text"
+              placeholder="Profile Name"
+              value={profile.name ?? ''}
+              onChange={e => onChange('name', e.target.value)}
+              style={profileNameInputStyle}
+            />
+            {locked && (
+              <span
+                style={lockBadgeStyle}
+                title={`Locked — used in ${usageCount} saved brew${usageCount === 1 ? '' : 's'}. Numerics are read-only; clone to edit them.`}
+              >
+                🔒 LOCKED
+              </span>
+            )}
+          </div>
+          {locked ? (
+            <button className="btn sm" onClick={onCloneAndEdit}>⎘ Clone &amp; Edit</button>
+          ) : (
+            <button className="btn sm" style={deleteBtnStyle} onClick={onDelete}>✕ Delete</button>
+          )}
         </div>
         <div className="settings-grid">
-          <NumField label="Kettle Vol (L)"        value={profile.kettleVol}       onChange={v => onChange('kettleVol',       v)} placeholder="1100" />
-          <NumField label="Mash Tun Vol (L)"      value={profile.mashTunVol}      onChange={v => onChange('mashTunVol',      v)} placeholder="1200" />
-          <NumField label="Default Batch Size (L)" value={profile.defaultBatchL}  onChange={v => onChange('defaultBatchL',   v)} placeholder="1000" />
-          <NumField label="Boil Off Rate (L/hr)"  value={profile.boilOffRate}     onChange={v => onChange('boilOffRate',     v)} placeholder="45"   />
-          <NumField label="Trub Loss (L)"         value={profile.trubLoss}        onChange={v => onChange('trubLoss',        v)} placeholder="40"   />
-          <NumField label="Tun Weight (kg)"       value={profile.tunWeightKg}     onChange={v => onChange('tunWeightKg',     v)} placeholder="156"  />
+          <NumField label="Kettle Vol (L)"        value={profile.kettleVol}       onChange={v => onChange('kettleVol',       v)} placeholder="1100" disabled={locked} />
+          <NumField label="Mash Tun Vol (L)"      value={profile.mashTunVol}      onChange={v => onChange('mashTunVol',      v)} placeholder="1200" disabled={locked} />
+          <NumField label="Default Batch Size (L)" value={profile.defaultBatchL}  onChange={v => onChange('defaultBatchL',   v)} placeholder="1000" disabled={locked} />
+          <NumField label="Boil Off Rate (L/hr)"  value={profile.boilOffRate}     onChange={v => onChange('boilOffRate',     v)} placeholder="45"   disabled={locked} />
+          <NumField label="Trub Loss (L)"         value={profile.trubLoss}        onChange={v => onChange('trubLoss',        v)} placeholder="40"   disabled={locked} />
+          <NumField label="Tun Weight (kg)"       value={profile.tunWeightKg}     onChange={v => onChange('tunWeightKg',     v)} placeholder="156"  disabled={locked} />
           <div className="settings-field">
             <label>Tun Material</label>
             <select
               value={profile.tunMaterial ?? 'Stainless Steel'}
               onChange={e => onMaterialChange(e.target.value as TunMaterial)}
+              disabled={locked}
             >
               {TUN_MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
@@ -187,6 +264,7 @@ function EquipmentProfileModal({
                 placeholder="0.11"
                 value={profile.tunShc ?? ''}
                 onChange={e => onChange('tunShc', numOrUndef(e.target.value))}
+                disabled={locked}
               />
             </div>
           )}
@@ -199,6 +277,7 @@ function EquipmentProfileModal({
                 placeholder="100"
                 value={profile.largeBatchUtil ?? ''}
                 onChange={e => onChange('largeBatchUtil', numOrUndef(e.target.value))}
+                disabled={locked}
               />
               <span style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--text-muted)' }}>
                 100% = no adjustment
@@ -224,11 +303,12 @@ function EquipmentProfileModal({
   );
 }
 
-function NumField({ label, value, onChange, placeholder }: {
+function NumField({ label, value, onChange, placeholder, disabled }: {
   label: string;
   value: number | undefined;
   onChange: (v: number | undefined) => void;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   return (
     <div className="settings-field">
@@ -237,6 +317,7 @@ function NumField({ label, value, onChange, placeholder }: {
         type="number"
         placeholder={placeholder}
         value={value ?? ''}
+        disabled={disabled}
         onChange={e => {
           const s = e.target.value;
           if (s.trim() === '') return onChange(undefined);
@@ -307,6 +388,11 @@ const deleteBtnStyle: React.CSSProperties = {
   color: 'var(--red)', borderColor: 'var(--red)',
 };
 
+const lockBadgeStyle: React.CSSProperties = {
+  fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)',
+  letterSpacing: 0.5, whiteSpace: 'nowrap',
+};
+
 // Re-export the shared styles for the other two panels.
 export const profileSharedStyles = {
   searchInput:    searchInputStyle,
@@ -320,4 +406,5 @@ export const profileSharedStyles = {
   modalPanel:     modalPanelStyle,
   profileNameInput: profileNameInputStyle,
   deleteBtn:      deleteBtnStyle,
+  lockBadge:      lockBadgeStyle,
 };

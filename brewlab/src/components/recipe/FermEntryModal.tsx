@@ -8,6 +8,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { useStore } from '../../store';
 import type { FermLogEntry } from '../../types';
 import { today } from '../../lib/utils';
 
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export default function FermEntryModal({ onSave, onClose }: Props) {
+  const pushToast = useStore(s => s.pushToast);
   const [date, setDate]   = useState(today());
   const [plato, setPlato] = useState('');
   const [ph, setPh]       = useState('');
@@ -35,7 +37,7 @@ export default function FermEntryModal({ onSave, onClose }: Props) {
 
   const handleSave = () => {
     const trimmed = date.trim();
-    if (!trimmed) { alert('Date is required'); return; }
+    if (!trimmed) { pushToast({ message: 'Date is required', variant: 'error' }); return; }
     const entry: FermLogEntry = {
       id: crypto.randomUUID(),
       date: trimmed,

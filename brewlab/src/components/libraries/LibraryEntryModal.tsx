@@ -25,6 +25,8 @@ import {
   type FieldDef,
   type LibEntry,
 } from './libraryShared';
+import { renderLibFieldInput } from './libraryFieldInput';
+import { fmtNum } from '../../lib/format';
 
 interface Props {
   section: LibSection;
@@ -129,7 +131,7 @@ export default function LibraryEntryModal({ section, entry, onSave, onClose }: P
           ON HAND ({unit})
         </div>
         <div style={{ fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 700, color: 'var(--amber)', padding: '4px 0' }}>
-          {fmtKg(onHandKg)}
+          {fmtNum(onHandKg, { fallback: '0' })}
         </div>
         <div style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--text-muted)' }}>
           Derived from tax ledger
@@ -256,53 +258,8 @@ function renderInput(
   form: FormState,
   update: (k: string, v: string | boolean) => void,
 ): React.ReactNode {
-  const v = form[d.key];
-  if (d.type === 'text') {
-    return <input type="text" value={String(v ?? '')} onChange={e => update(d.key, e.target.value)} style={inputStyle} />;
-  }
-  if (d.type === 'number') {
-    return <input type="number" value={String(v ?? '')} onChange={e => update(d.key, e.target.value)} style={inputStyle} />;
-  }
-  if (d.type === 'select') {
-    return (
-      <select value={String(v ?? (d.opts?.[0] ?? ''))} onChange={e => update(d.key, e.target.value)} style={inputStyle}>
-        {(d.opts || []).map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
-    );
-  }
-  if (d.type === 'supplier-select') {
-    return <SupplierSelect value={String(v ?? '')} onChange={s => update(d.key, s)} />;
-  }
-  if (d.type === 'checkbox') {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', padding: '5px 0' }}>
-        <input
-          type="checkbox"
-          checked={!!v}
-          onChange={e => update(d.key, e.target.checked)}
-          style={{ width: 14, height: 14, cursor: 'pointer', accentColor: 'var(--amber)' }}
-        />
-      </div>
-    );
-  }
-  return null;
-}
-
-function SupplierSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const suppliers = useStore(s => s.suppliers);
-  return (
-    <select value={value} onChange={e => onChange(e.target.value)} style={inputStyle}>
-      <option value="">— None —</option>
-      {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
-    </select>
-  );
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────
-
-function fmtKg(v: number): string {
-  if (!isFinite(v) || v === 0) return '0';
-  return v.toFixed(2).replace(/\.?0+$/, '');
+  // Delegates to the shared renderer so the bulk-edit modal can't drift.
+  return renderLibFieldInput(d, form[d.key] ?? '', v => update(d.key, v));
 }
 
 // ─── Styles ──────────────────────────────────────────────────────────

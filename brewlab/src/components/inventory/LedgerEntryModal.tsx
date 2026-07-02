@@ -85,7 +85,6 @@ export default function LedgerEntryModal({ ledgerKey, editIdx, onClose }: Props)
 
   const remove = () => {
     if (!isEdit || editIdx == null) return;
-    if (!window.confirm('Delete this ledger entry?')) return;
     // Snapshot the FULL ledgerData blob — undo restores the entry at
     // its exact original index. (deleteLedgerEntry uses index-based
     // removal; restoring via setLedgerData with the pre-delete blob

@@ -20,6 +20,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useStore } from '../../store';
 import { lsGet } from '../../lib/storage';
+import { fmtNum } from '../../lib/format';
 import { fvVolume, platoToSg } from '../../lib/calculations';
 import type {
   ColdSideData, ColdKegRow, BrewAgain, BrewDayData, FermMeta,
@@ -225,7 +226,7 @@ export default function PackagingTab({ recipeId }: Props) {
 
   // ── Render helpers ──────────────────────────────────────────────────
   const fmt1 = (n: number | null | undefined, suffix = '') =>
-    n != null && isFinite(n) && n >= 0 ? `${n.toFixed(1)}${suffix}` : '—';
+    n != null && isFinite(n) && n >= 0 ? fmtNum(n, { dp: 1, suffix }) : '—';
 
   const sectionTitle: React.CSSProperties = {
     fontSize: 13, fontWeight: 700, letterSpacing: '0.05em',
@@ -250,7 +251,7 @@ export default function PackagingTab({ recipeId }: Props) {
           <div style={sectionTitle}>Fermentation</div>
           <div className="bd-section">
             <div className="bd-field"><label>FV #</label><div className="bd-calc">{fvDisplay}</div></div>
-            <div className="bd-field"><label>OG (P)</label><div className="bd-calc">{ogP != null ? `${ogP.toFixed(2)} P` : '—'}</div></div>
+            <div className="bd-field"><label>OG (P)</label><div className="bd-calc">{ogP != null ? fmtNum(ogP, { dp: 2, suffix: ' P' }) : '—'}</div></div>
             <div className="bd-field"><label>Liters in FV</label><div className="bd-calc">{fmt1(litersInFV)}</div></div>
           </div>
 
@@ -317,7 +318,7 @@ export default function PackagingTab({ recipeId }: Props) {
                 value={cs['cs-fg'] ?? ''}
                 onChange={e => update({ 'cs-fg': e.target.value })} />
             </div>
-            <div className="bd-field"><label>ABV</label><div className="bd-calc">{abvPct != null ? `${abvPct.toFixed(2)} %` : '—'}</div></div>
+            <div className="bd-field"><label>ABV</label><div className="bd-calc">{abvPct != null ? fmtNum(abvPct, { dp: 1, suffix: '%' }) : '—'}</div></div>
             <div className="bd-field">
               <label>pH</label>
               <input className="bd-input" placeholder="—"

@@ -137,9 +137,8 @@ export interface RecipeDeleteSnapshot {
   coldSide: ColdSideData;
   waterChem: WaterChemData;
   recipeProfiles: RecipeProfileSelections;
-  // bl_mash_<id> blob — typed loosely (MashProfile | null) since the on-disk
-  // shape is the user's saved profile object.
-  mash: unknown;
+  // bl_mash_<id> blob. `null` when the user has no saved profile.
+  mash: MashProfile | null;
   fermLog: FermLogEntry[];
   // bl_checklist_<id> — local-only state, restored for completeness.
   checklist: unknown;
@@ -204,6 +203,13 @@ export interface BrewLabState {
   // recipe-level Profiles bar dropdowns and BrewDayTab/WaterTab consumers
   // recompute live when the user picks a profile.
   recipeProfilesByRecipe: Record<string, RecipeProfileSelections>;
+
+  // Per-recipe MASH profile blob (`bl_mash_<recipeId>`). Reactive cache so
+  // BrewDayTab + WaterTab refresh when MashProfileModal saves while they're
+  // mounted (they're cross-component readers; MashProfileModal is the
+  // writer). `undefined` = not yet loaded into cache; `null` = loaded but
+  // user has no saved profile (consumers fall back to DEFAULT_MASH_PROFILE).
+  mashByRecipe: Record<string, MashProfile | null>;
 
   // Tax records — per-recipe working blob, lazy-loaded like ingredientsByRecipe
   taxRecordsByRecipe: Record<string, TaxRecord>;
@@ -377,6 +383,8 @@ export interface BrewLabState {
   setColdSide: (recipeId: string, data: ColdSideData) => void;
   getWaterChem: (recipeId: string) => WaterChemData;
   setWaterChem: (recipeId: string, data: WaterChemData) => void;
+  getMash: (recipeId: string) => MashProfile | null;
+  setMash: (recipeId: string, profile: MashProfile | null) => void;
 
   // Actions — libraries
   setMaltLib: (lib: MaltLib[]) => void;
@@ -470,6 +478,9 @@ export interface BrewLabState {
   // Actions — NTA register
   addNtaSubmission: (entry: NtaSubmission) => void;
   deleteNtaSubmission: (idx: number) => void;
+  /** Replace the full register — used by toast undo paths to restore a
+   *  pre-delete snapshot at exactly the same indices. */
+  setNtaRegister: (entries: NtaSubmission[]) => void;
   setNtaBasisDefault: (basis: string) => void;
   setNtaBasisCurrent: (basis: string) => void;
 
@@ -551,6 +562,7 @@ export const useStore = create<BrewLabState>((set, get) => ({
 
   ingredientsByRecipe: {},
   recipeProfilesByRecipe: {},
+  mashByRecipe: {},
   taxRecordsByRecipe: {},
   taxManualOverrides: {},
   taxMaster: lsGet<TaxMasterRow[]>('bl_tax_master', []),
@@ -637,6 +649,8 @@ export const useStore = create<BrewLabState>((set, get) => ({
     void _ings;
     const { [id]: _profs, ...remainingProfs } = state.recipeProfilesByRecipe;
     void _profs;
+    const { [id]: _mash, ...remainingMash } = state.mashByRecipe;
+    void _mash;
     const { [id]: _tax, ...remainingTax } = state.taxRecordsByRecipe;
     void _tax;
     const { [id]: _ovr, ...remainingOvr } = state.taxManualOverrides;
@@ -645,6 +659,7 @@ export const useStore = create<BrewLabState>((set, get) => ({
       recipes,
       ingredientsByRecipe: remainingIngs,
       recipeProfilesByRecipe: remainingProfs,
+      mashByRecipe: remainingMash,
       taxRecordsByRecipe: remainingTax,
       taxManualOverrides: remainingOvr,
       ...(yeastChanged ? { harvestedYeast: nextYeast } : {}),
@@ -666,7 +681,8 @@ export const useStore = create<BrewLabState>((set, get) => ({
       waterChem:      lsGet<WaterChemData>(`bl_water_chem_${id}`,   {}),
       recipeProfiles: state.recipeProfilesByRecipe[id]
         ?? lsGet<RecipeProfileSelections>(`bl_recipe_profiles_${id}`, {}),
-      mash:           lsGet<unknown>(`bl_mash_${id}`,                null),
+      mash:           state.mashByRecipe[id]
+        ?? lsGet<MashProfile | null>(`bl_mash_${id}`,                 null),
       fermLog:        lsGet<FermLogEntry[]>(`bl_ferm_log_${id}`,    []),
       checklist:      lsGet<unknown>(`bl_checklist_${id}`,           null),
     };
@@ -694,11 +710,13 @@ export const useStore = create<BrewLabState>((set, get) => ({
     //    Supabase dispatch (fire-and-forget; failures log to console).
     const ingsNext: Record<string, Ingredient[]> = { ...get().ingredientsByRecipe };
     const profsNext: Record<string, RecipeProfileSelections> = { ...get().recipeProfilesByRecipe };
+    const mashNext: Record<string, MashProfile | null> = { ...get().mashByRecipe };
     const childPromises: Promise<unknown>[] = [];
     for (const s of snapshots) {
       const id = s.recipe.id;
       ingsNext[id] = s.ingredients;
       profsNext[id] = s.recipeProfiles;
+      mashNext[id] = s.mash;
 
       // Each child write: lsLocal (sync) + sbDispatch (collected for await).
       lsLocal(`bl_recipe_ings_${id}`,      s.ingredients);
@@ -737,6 +755,7 @@ export const useStore = create<BrewLabState>((set, get) => ({
     set({
       ingredientsByRecipe: ingsNext,
       recipeProfilesByRecipe: profsNext,
+      mashByRecipe: mashNext,
     });
 
     // 3. Global writes. Harvested yeast uses delete-all+reinsert internally
@@ -1005,6 +1024,8 @@ export const useStore = create<BrewLabState>((set, get) => ({
       whirlpoolTemp: 85,
       bdFv: '',
       notes: '',
+      extraAdditions: '',
+      brewer: '',
       archivedAt: null,
     };
     // Deep-copy ingredients with fresh React-format ids
@@ -1124,6 +1145,31 @@ export const useStore = create<BrewLabState>((set, get) => ({
   getWaterChem: (recipeId) => lsGet<WaterChemData>(`bl_water_chem_${recipeId}`, {}),
   setWaterChem: (recipeId, data) => {
     lsSet(`bl_water_chem_${recipeId}`, data);
+  },
+  // Per-recipe MASH profile blob. Reactive map keyed by recipeId — needed
+  // because the writer (MashProfileModal) is decoupled from the readers
+  // (BrewDayTab + WaterTab + RecipePreview). Same lazy-cache pattern as
+  // recipeProfilesByRecipe: getter populates the map via setTimeout to
+  // avoid set-during-render; setter writes lsSet + updates the map so
+  // every subscriber re-renders.
+  getMash: (recipeId) => {
+    const cached = get().mashByRecipe[recipeId];
+    if (cached !== undefined) return cached;
+    const fromLs = lsGet<MashProfile | null>(`bl_mash_${recipeId}`, null);
+    setTimeout(() => {
+      if (get().mashByRecipe[recipeId] === undefined) {
+        set({
+          mashByRecipe: { ...get().mashByRecipe, [recipeId]: fromLs },
+        });
+      }
+    }, 0);
+    return fromLs;
+  },
+  setMash: (recipeId, profile) => {
+    lsSet(`bl_mash_${recipeId}`, profile);
+    set({
+      mashByRecipe: { ...get().mashByRecipe, [recipeId]: profile },
+    });
   },
 
   // --- Libraries ---
@@ -1476,6 +1522,10 @@ export const useStore = create<BrewLabState>((set, get) => ({
     lsSet('bl_nta_register', next);
     set({ ntaRegister: next });
   },
+  setNtaRegister: (entries) => {
+    lsSet('bl_nta_register', entries);
+    set({ ntaRegister: entries });
+  },
   setNtaBasisDefault: (basis) => {
     // Mirrors HTML ntaSaveBasisDefault (line 11925) — writes BOTH default
     // and current so the modal opens with the same value next time.
@@ -1670,6 +1720,7 @@ export const useStore = create<BrewLabState>((set, get) => ({
         tabVisibility: { ...DEFAULT_TAB_VISIBILITY, ...lsGet<Partial<TabVisibility>>('bl_tab_visibility', {}) },
         ingredientsByRecipe: {},      // ← clear cache so ingredients reload from hydrated localStorage
         recipeProfilesByRecipe: {},   // ← clear cache so per-recipe profile selections reload
+        mashByRecipe: {},             // ← clear cache so per-recipe mash blobs reload
         taxRecordsByRecipe: {},   // ← clear cache so tax records reload from hydrated localStorage
         taxManualOverrides: {},   // ← override flags are local-only; reset on hydrate
         taxMaster: lsGet<TaxMasterRow[]>('bl_tax_master', []),

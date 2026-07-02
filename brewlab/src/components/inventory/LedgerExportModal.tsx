@@ -40,6 +40,7 @@ export default function LedgerExportModal({ defaultSection, onClose }: Props) {
   const miscLib    = useStore(s => s.miscLib);
   const inventoryStock = useStore(s => s.inventoryStock);
   const ledgerData     = useStore(s => s.ledgerData);
+  const pushToast      = useStore(s => s.pushToast);
 
   const now = new Date();
   const y = now.getFullYear();
@@ -122,7 +123,7 @@ export default function LedgerExportModal({ defaultSection, onClose }: Props) {
     }
 
     if (!sheets.length) {
-      window.alert('No ledger entries in that date range.');
+      pushToast({ message: 'No ledger entries in that date range.', variant: 'info' });
       return;
     }
     const brand = (settings.breweryName?.trim() || 'BrewLab').replace(/[\s/\\?*[\]:]/g, '_');

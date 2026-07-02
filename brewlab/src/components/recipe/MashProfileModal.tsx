@@ -20,8 +20,8 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useStore } from '../../store';
-import { lsGet, lsSet } from '../../lib/storage';
 import { calcBrewDayTargets, DEFAULT_MASH_PROFILE } from '../../lib/calculations';
+import { fmtNum } from '../../lib/format';
 import { makeId } from '../../lib/utils';
 import type {
   Recipe, Ingredient, MashProfile, MashStep, MashStepType,
@@ -49,6 +49,9 @@ export default function MashProfileModal({ recipeId, recipe, ingredients, onClos
   const yeastLib      = useStore(s => s.yeastLib);
   const mashProfiles  = useStore(s => s.mashProfiles);
   const setMashProfiles = useStore(s => s.setMashProfiles);
+  const getMash         = useStore(s => s.getMash);
+  const setMash         = useStore(s => s.setMash);
+  const pushToast       = useStore(s => s.pushToast);
   const recipeProfileSelections = useStore(s => s.recipeProfilesByRecipe[recipeId]);
 
   // Active equip profile — same lookup used by BrewDayTab. Read for the
@@ -60,10 +63,11 @@ export default function MashProfileModal({ recipeId, recipe, ingredients, onClos
   }, [equipProfiles, recipeProfileSelections?.equip]);
 
   // ── Local form state ─────────────────────────────────────────────────
+  // Source the persisted blob from the reactive store (also seeds the
+  // mashByRecipe cache for any subscriber that opens after the modal).
   const initial = useMemo(() => {
-    const persisted = lsGet<MashProfile | null>(`bl_mash_${recipeId}`, null);
-    return persisted ?? DEFAULT_MASH_PROFILE;
-  }, [recipeId]);
+    return getMash(recipeId) ?? DEFAULT_MASH_PROFILE;
+  }, [recipeId, getMash]);
 
   const [ratio, setRatio] = useState<string>(
     initial.ratio != null ? String(initial.ratio) : '3.0',
@@ -103,7 +107,7 @@ export default function MashProfileModal({ recipeId, recipe, ingredients, onClos
   const strikeTempC  = targets.strikeTempC ?? null;
   const totalWaterIn = mashWaterL + spargeVolL;
 
-  const f1 = (n: number): string => n.toFixed(1);
+  const f1 = (n: number): string => fmtNum(n, { dp: 1 });
 
   const mashWaterDisplay = totalGrainKg > 0
     ? `Mash: ${f1(mashWaterL)} L` + (strikeTempC != null ? ` · Strike: ${f1(strikeTempC)}°C` : '')
@@ -129,15 +133,29 @@ export default function MashProfileModal({ recipeId, recipe, ingredients, onClos
   };
 
   const handleSave = () => {
-    lsSet(`bl_mash_${recipeId}`, buildProfileBlob());
+    // setMash writes localStorage + dispatches to Supabase + updates the
+    // reactive mashByRecipe map so BrewDayTab/WaterTab refresh immediately.
+    setMash(recipeId, buildProfileBlob());
     onClose();
   };
 
   const handleReset = () => {
-    if (!window.confirm('Reset mash profile to defaults?')) return;
+    // Form-state reset only — blob isn't touched until Save. Snapshot the
+    // current form so the brewer can recover their unsaved schedule.
+    const beforeRatio = ratio;
+    const beforeSteps = steps;
+    const beforeNotes = notes;
     setRatio(String(DEFAULT_MASH_PROFILE.ratio));
     setSteps(DEFAULT_MASH_PROFILE.steps);
     setNotes(DEFAULT_MASH_PROFILE.notes ?? '');
+    pushToast({
+      message: 'Reset mash profile',
+      undo: () => {
+        setRatio(beforeRatio);
+        setSteps(beforeSteps);
+        setNotes(beforeNotes);
+      },
+    });
   };
 
   const handleLoadFromLib = (id: string) => {
@@ -161,7 +179,7 @@ export default function MashProfileModal({ recipeId, recipe, ingredients, onClos
       notes,
     };
     setMashProfiles([...mashProfiles, next]);
-    window.alert('Mash profile saved ✓');
+    pushToast({ message: `Saved profile "${next.name}"`, variant: 'success' });
   };
 
   return (

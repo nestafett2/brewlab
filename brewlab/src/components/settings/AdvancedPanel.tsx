@@ -103,6 +103,24 @@ export default function AdvancedPanel() {
               onChange={e => setSettings({ coolingShrinkage: numOrZero(e.target.value) })}
             />
           </div>
+
+          <div className="settings-field">
+            <label>Beer Buffer Capacity</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="number"
+                min={0.01} max={0.10} step={0.005}
+                style={{ width: 80 }}
+                value={settings.beerBufferPhPerMeqL ?? 0.04}
+                onChange={e => setSettings({ beerBufferPhPerMeqL: numOrZero(e.target.value) })}
+                title="Estimated finished-beer buffer capacity, in pH units per mEq/L of acid. Drives the Ferm tab's residual-acid suggestion when measured pH exceeds target. Real beer typically 0.02–0.06; default 0.04."
+              />
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-dim)' }}>pH/(mEq/L)</span>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--text-muted)', marginLeft: 4 }}>
+                default 0.04 — real beer 0.02–0.06
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </>

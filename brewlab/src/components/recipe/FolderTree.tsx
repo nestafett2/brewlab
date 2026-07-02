@@ -124,11 +124,16 @@ interface Props {
    *  Desktop shows the "+ New Folder" blank-area menu. Optional; when
    *  omitted the wrapper falls back to the browser's default menu. */
   onBlankContext?: (e: React.MouseEvent) => void;
+  /** Recipe id whose floating preview popover is currently open. Drives
+   *  an additional row-highlight tier so the user can see which row the
+   *  open popover corresponds to. */
+  popoverId?: string | null;
 }
 
 export default function FolderTree({
   folders, recipes, preview, setPreview, setFolders, setRecipes,
   openRecipe, onRecipeContext, onFolderContext, onBulkContext, onBlankContext,
+  popoverId,
 }: Props) {
   // ── Multi-select state (PART 4) ─────────────────────────────────────
   // selectedIds is the set of recipe ids that are checked. anchorId is
@@ -620,7 +625,7 @@ export default function FolderTree({
                 key={r.id}
                 recipe={r}
                 indentPx={(depth + 1) * 12}
-                selected={preview?.kind === 'recipe' && preview.id === r.id}
+                selected={(preview?.kind === 'recipe' && preview.id === r.id) || r.id === popoverId}
                 multiSelected={selectedIds.has(r.id)}
                 dropMode={dropTarget?.kind === 'recipe' && dropTarget.id === r.id ? dropTarget.mode : null}
                 onClick={e => handleRecipeClick(r.id, e)}
@@ -672,7 +677,7 @@ export default function FolderTree({
               key={r.id}
               recipe={r}
               indentPx={12}
-              selected={preview?.kind === 'recipe' && preview.id === r.id}
+              selected={(preview?.kind === 'recipe' && preview.id === r.id) || r.id === popoverId}
               multiSelected={selectedIds.has(r.id)}
               dropMode={dropTarget?.kind === 'recipe' && dropTarget.id === r.id ? dropTarget.mode : null}
               onClick={e => handleRecipeClick(r.id, e)}

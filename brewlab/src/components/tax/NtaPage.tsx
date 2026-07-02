@@ -67,6 +67,8 @@ export default function NtaPage() {
   const ntaBasisDefault = useStore(s => s.ntaBasisDefault);
   const addNtaSubmission = useStore(s => s.addNtaSubmission);
   const deleteNtaSubmission = useStore(s => s.deleteNtaSubmission);
+  const setNtaRegister      = useStore(s => s.setNtaRegister);
+  const pushToast           = useStore(s => s.pushToast);
   const setNtaBasisDefault  = useStore(s => s.setNtaBasisDefault);
   const setNtaBasisCurrent  = useStore(s => s.setNtaBasisCurrent);
 
@@ -86,7 +88,7 @@ export default function NtaPage() {
 
   const handleCheck = () => {
     if (!selectedRecipeId) {
-      window.alert('Select a beer first.');
+      pushToast({ message: 'Select a beer first.', variant: 'info' });
       return;
     }
     setCheckedRecipeId(selectedRecipeId);
@@ -156,15 +158,19 @@ export default function NtaPage() {
 
   const handlePrintForm = () => {
     if (ntaRegister.length === 0) {
-      window.alert('No submitted recipes to print.');
+      pushToast({ message: 'No submitted recipes to print.', variant: 'info' });
       return;
     }
     printNtaForm(ntaRegister);
   };
 
   const handleDelete = (idx: number) => {
-    if (!window.confirm('Remove this submission from the register?')) return;
+    const before = ntaRegister;
     deleteNtaSubmission(idx);
+    pushToast({
+      message: 'Removed submission',
+      undo: () => setNtaRegister(before),
+    });
   };
 
   // ── Render ────────────────────────────────────────────────────────────

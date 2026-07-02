@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../store';
 import { getUnifiedStyle } from '../../lib/styles';
 import { sgToPlato } from '../../lib/calculations';
+import { fmtNum } from '../../lib/format';
 import type { CustomStyle, Recipe, StyleOverlay } from '../../types';
 import StylePickerDropdown from './StylePickerDropdown';
 
@@ -113,15 +114,15 @@ export default function StyleGuideModal({ recipe, stats, onClose }: Props) {
     {
       label: 'Est OG',
       val: stats.ogPlato,
-      fmt: v => `${v.toFixed(2)} °P`,
+      fmt: v => fmtNum(v, { dp: 2, suffix: ' °P' }),
       min: style?.og ? sgToPlato(style.og[0]) : 0,
       max: style?.og ? sgToPlato(style.og[1]) : 0,
-      rangeStr: style?.og ? `${sgToPlato(style.og[0]).toFixed(2)} – ${sgToPlato(style.og[1]).toFixed(2)} °P` : '',
+      rangeStr: style?.og ? `${fmtNum(sgToPlato(style.og[0]), { dp: 2 })} – ${fmtNum(sgToPlato(style.og[1]), { dp: 2, suffix: ' °P' })}` : '',
     },
     {
       label: 'Bitterness',
       val: stats.ibu,
-      fmt: v => `${v.toFixed(1)} IBU`,
+      fmt: v => fmtNum(v, { dp: 1, suffix: ' IBU' }),
       min: style?.ibu ? style.ibu[0] : 0,
       max: style?.ibu ? style.ibu[1] : 0,
       rangeStr: style?.ibu ? `${style.ibu[0]} – ${style.ibu[1]} IBU` : '',
@@ -129,18 +130,18 @@ export default function StyleGuideModal({ recipe, stats, onClose }: Props) {
     {
       label: 'Color',
       val: stats.ebc,
-      fmt: v => `${v.toFixed(1)} EBC`,
+      fmt: v => fmtNum(v, { dp: 1, suffix: ' EBC' }),
       min: style?.srm ? style.srm[0] * 1.97 : 0,
       max: style?.srm ? style.srm[1] * 1.97 : 0,
-      rangeStr: style?.srm ? `${(style.srm[0] * 1.97).toFixed(1)} – ${(style.srm[1] * 1.97).toFixed(1)} EBC` : '',
+      rangeStr: style?.srm ? `${fmtNum(style.srm[0] * 1.97, { dp: 1 })} – ${fmtNum(style.srm[1] * 1.97, { dp: 1, suffix: ' EBC' })}` : '',
     },
     {
       label: 'Est ABV',
       val: stats.abv,
-      fmt: v => `${v.toFixed(1)}%`,
+      fmt: v => fmtNum(v, { dp: 1, suffix: '%' }),
       min: style?.abv ? style.abv[0] : 0,
       max: style?.abv ? style.abv[1] : 0,
-      rangeStr: style?.abv ? `${style.abv[0].toFixed(1)} – ${style.abv[1].toFixed(1)}%` : '',
+      rangeStr: style?.abv ? `${fmtNum(style.abv[0], { dp: 1 })} – ${fmtNum(style.abv[1], { dp: 1, suffix: '%' })}` : '',
     },
   ];
 
@@ -260,7 +261,7 @@ function DescriptiveSection({ style, onChange }: DescriptiveProps) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {style.carb && (
-            <ViewRow label="Carbonation">{style.carb[0].toFixed(1)} – {style.carb[1].toFixed(1)} vols</ViewRow>
+            <ViewRow label="Carbonation">{fmtNum(style.carb[0], { dp: 1 })} – {fmtNum(style.carb[1], { dp: 1, suffix: ' vols' })}</ViewRow>
           )}
           {style.notes       && <ViewRow label="Notes" multiline>{style.notes}</ViewRow>}
           {style.description && <ViewRow label="Description" multiline>{style.description}</ViewRow>}

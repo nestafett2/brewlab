@@ -8,7 +8,7 @@
  *       Left  — read-only Mash card (live targets), Steps, Sparge inputs, Notes
  *       Mid   — Boil section (est/meas pre & post-boil volumes, OG, eff)
  *       Right — Pitch & Oxygen + Fermenter (FV select + mm → L)
- *   - Bottom strip: "Mark Brew Day complete" (visual only — TODO checklist)
+ *   - Bottom strip: "Mark Brew Day complete"
  *
  * Persistence: 400ms-debounced write of the full blob (user inputs + cached
  * computed targets) through `setBrewDay → lsSet → sbDispatch → brew_day`
@@ -17,7 +17,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useStore } from '../../store';
-import { lsGet } from '../../lib/storage';
+import { fmtNum } from '../../lib/format';
 import {
   calcBrewDayTargets,
   calcBhEfficiencyFromMeasOG,
@@ -27,9 +27,10 @@ import {
   L_PER_BBL,
   DEFAULT_MASH_PROFILE,
 } from '../../lib/calculations';
-import type { BrewDayData, MashReadingCol, MashProfile } from '../../types';
+import type { BrewDayData, MashReadingCol } from '../../types';
 import ChecklistStrip from './ChecklistStrip';
 import RecordUsageModal from '../inventory/RecordUsageModal';
+import { printBrewDaySheet } from './brewDaySheetPrint';
 
 interface Props { recipeId: string }
 
@@ -53,6 +54,8 @@ export default function BrewDayTab({ recipeId }: Props) {
   const getBrewDay    = useStore(s => s.getBrewDay);
   const setBrewDay    = useStore(s => s.setBrewDay);
   const getFermMeta   = useStore(s => s.getFermMeta);
+  // Snapshot-only — printBrewDaySheet reads water-chem at click time.
+  const getWaterChem  = useStore(s => s.getWaterChem);
 
   // ── Local state ─────────────────────────────────────────────────────────
   const [bd, setBd] = useState<BrewDayData>(() => getBrewDay(recipeId));
@@ -95,16 +98,20 @@ export default function BrewDayTab({ recipeId }: Props) {
     return byId ?? equipProfiles[0] ?? null;
   }, [equipProfiles, recipeProfiles?.equip]);
 
-  // ── Per-recipe mash profile (not in store yet — read direct from LS) ─────
-  // Fall back to DEFAULT_MASH_PROFILE when nothing is saved so this tab
-  // computes against the same baseline (ratio 3.0, std steps) the Mash
-  // Profile modal renders before the user explicitly clicks Save.
-  // Without this fallback, calcBrewDayTargets takes its water-balance
-  // path and produces TOTAL water as "Mash Water" with sparge ≈ 0.
-  const mashProfile = useMemo(
-    () => lsGet<MashProfile | null>(`bl_mash_${recipeId}`, null) ?? DEFAULT_MASH_PROFILE,
-    [recipeId],
-  );
+  // ── Per-recipe mash profile (reactive — see store.mashByRecipe) ─────────
+  // Subscribe to the reactive map so the modal saving while this tab is
+  // mounted refreshes targets immediately. Fall back to DEFAULT_MASH_PROFILE
+  // when nothing is saved (matches HTML default ratio 3.0, std steps);
+  // without it calcBrewDayTargets takes its water-balance path and produces
+  // TOTAL water as "Mash Water" with sparge ≈ 0.
+  // `undefined` from the selector = not yet cached; `null` = cached, no
+  // saved profile. Both fall through to the default via `??`.
+  const mashSaved = useStore(s => s.mashByRecipe[recipeId]);
+  const getMash   = useStore(s => s.getMash);
+  useEffect(() => {
+    if (mashSaved === undefined) getMash(recipeId);
+  }, [recipeId, mashSaved, getMash]);
+  const mashProfile = mashSaved ?? DEFAULT_MASH_PROFILE;
 
   // ── Live targets ─────────────────────────────────────────────────────────
   // Three Settings → Advanced values flow through here:
@@ -190,8 +197,9 @@ export default function BrewDayTab({ recipeId }: Props) {
       acidType:      'lactic',   // unused for predictedRise; placeholder
       acidPct:       88,         // unused for predictedRise; placeholder
       dhTempC:       isFinite(tempNum) ? tempNum : undefined,
+      beerBufferPhPerMeqL: settings.beerBufferPhPerMeqL,
     });
-  }, [recipe, recipeId, ingredients, dhPredVolumeL, getFermMeta]);
+  }, [recipe, recipeId, ingredients, dhPredVolumeL, getFermMeta, settings.beerBufferPhPerMeqL]);
 
   // ── Debounced persistence ────────────────────────────────────────────────
   // Save user inputs + cached computed targets so tablet/mobile can show
@@ -204,9 +212,9 @@ export default function BrewDayTab({ recipeId }: Props) {
       // Cache target strings exactly the way the live UI shows them so
       // tablet/mobile see the same numbers without recomputing.
       const fmt1 = (n: number | null | undefined, suffix: string) =>
-        n != null && isFinite(n) && n >= 0 ? `${n.toFixed(1)}${suffix}` : '';
+        n != null && isFinite(n) && n >= 0 ? fmtNum(n, { dp: 1, suffix }) : '';
       const fmt2 = (n: number | null | undefined, suffix: string) =>
-        n != null && isFinite(n) && n >= 0 ? `${n.toFixed(2)}${suffix}` : '';
+        n != null && isFinite(n) && n >= 0 ? fmtNum(n, { dp: 2, suffix }) : '';
       const cached: BrewDayData = {
         ...bd,
         mashWaterL:       fmt1(targets?.mashWaterL,       ' L'),
@@ -294,9 +302,9 @@ export default function BrewDayTab({ recipeId }: Props) {
   // enough to hit the pre-boil target) render as "0.0 L" so the user can
   // see the calc actually ran.
   const r1 = (n: number | null | undefined, suffix = '') =>
-    n != null && isFinite(n) && n >= 0 ? `${n.toFixed(1)}${suffix}` : '—';
+    n != null && isFinite(n) && n >= 0 ? fmtNum(n, { dp: 1, suffix }) : '—';
   const r2 = (n: number | null | undefined, suffix = '') =>
-    n != null && isFinite(n) && n >= 0 ? `${n.toFixed(2)}${suffix}` : '—';
+    n != null && isFinite(n) && n >= 0 ? fmtNum(n, { dp: 2, suffix }) : '—';
 
   // ── JSX ──────────────────────────────────────────────────────────────────
   return (
@@ -435,7 +443,7 @@ export default function BrewDayTab({ recipeId }: Props) {
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 14, color: 'var(--text)' }}>{r1(targets?.preBoilVolL, ' L')}</span>
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-muted)' }}>·</span>
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text-dim)' }}>
-                    {targets?.preBoilVolL != null ? (targets.preBoilVolL / L_PER_BBL).toFixed(2) + ' bbl' : '—'}
+                    {targets?.preBoilVolL != null ? fmtNum(targets.preBoilVolL / L_PER_BBL, { dp: 2, suffix: ' bbl' }) : '—'}
                   </span>
                 </div>
               </div>
@@ -463,7 +471,7 @@ export default function BrewDayTab({ recipeId }: Props) {
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--amber-bright)' }}>{r1(targets?.postBoilVolL, ' L')}</span>
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>·</span>
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-dim)' }}>
-                    {targets?.postBoilVolL != null ? (targets.postBoilVolL / L_PER_BBL).toFixed(2) + ' bbl' : '—'}
+                    {targets?.postBoilVolL != null ? fmtNum(targets.postBoilVolL / L_PER_BBL, { dp: 2, suffix: ' bbl' }) : '—'}
                   </span>
                 </div>
               </div>
@@ -491,7 +499,7 @@ export default function BrewDayTab({ recipeId }: Props) {
                   {r1(targets?.trubLossL)}
                   {targets && targets.hopAbsorptionL > 0 ? (
                     <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: 11 }}>
-                      {' '}({targets.hopAbsorptionL.toFixed(1)} hop)
+                      {' '}({fmtNum(targets.hopAbsorptionL, { dp: 1 })} hop)
                     </span>
                   ) : null}
                 </div>
@@ -499,12 +507,12 @@ export default function BrewDayTab({ recipeId }: Props) {
 
               <div className="bd-field" title="Measured post-boil vol − batch size (into FV)">
                 <label>Kettle Waste (L)</label>
-                <div className="bd-calc">{kettleWasteL != null ? `${kettleWasteL.toFixed(1)} L` : '—'}</div>
+                <div className="bd-calc">{r1(kettleWasteL, ' L')}</div>
               </div>
 
-              <div className="bd-field"><label>Est Mash Eff %</label><div className="bd-calc">{targets?.estMashEffPct != null ? `${targets.estMashEffPct.toFixed(1)} %` : '—'}</div></div>
-              <div className="bd-field"><label>Meas Mash Eff %</label><div className="bd-calc">{measMashEff != null ? `${measMashEff.toFixed(1)} %` : '—'}</div></div>
-              <div className="bd-field"><label>Meas BH Eff %</label><div className="bd-calc">{measBhEff != null ? `${measBhEff.toFixed(1)} %` : '—'}</div></div>
+              <div className="bd-field"><label>Est Mash Eff %</label><div className="bd-calc">{r1(targets?.estMashEffPct, ' %')}</div></div>
+              <div className="bd-field"><label>Meas Mash Eff %</label><div className="bd-calc">{r1(measMashEff, ' %')}</div></div>
+              <div className="bd-field"><label>Meas BH Eff %</label><div className="bd-calc">{r1(measBhEff, ' %')}</div></div>
             </div>
           </div>
 
@@ -528,7 +536,7 @@ export default function BrewDayTab({ recipeId }: Props) {
               </div>
 
               <div className="bd-field"><label>Pitch Temp (°C)</label><input className="bd-input" placeholder="—" value={bd.pitchTemp ?? ''} onChange={e => update({ pitchTemp: e.target.value })} /></div>
-              <div className="bd-field"><label>Target Pitch Temp</label><div className="bd-calc">{targets?.targetPitchTempC != null ? `${targets.targetPitchTempC.toFixed(1)} °C` : '—'}</div></div>
+              <div className="bd-field"><label>Target Pitch Temp</label><div className="bd-calc">{r1(targets?.targetPitchTempC, ' °C')}</div></div>
               <div className="bd-field"><label>Ferm Temp (°C)</label><input className="bd-input" placeholder="—" value={bd.fermTemp ?? ''} onChange={e => update({ fermTemp: e.target.value })} /></div>
               <div className="bd-field"><label>Pitch pH</label><input className="bd-input" placeholder="—" value={bd.pitchPh ?? ''} onChange={e => update({ pitchPh: e.target.value })} /></div>
               <div className="bd-field"><label>Target Pitch pH</label><div className="bd-calc">5.10</div></div>
@@ -543,10 +551,10 @@ export default function BrewDayTab({ recipeId }: Props) {
                     display: 'flex',
                     justifyContent: 'space-between',
                   }}
-                  title={`Based on ${dhPredictedRise.totalDhG.toFixed(0)} g dry hops${dhPredictedRise.gPerL != null ? ` (${dhPredictedRise.gPerL.toFixed(2)} g/L)` : ''} at ${dhPredictedRise.dhTempC.toFixed(0)} °C. Lower pitch pH by this much to land at your target final pH after dry-hop rise.`}
+                  title={`Based on ${fmtNum(dhPredictedRise.totalDhG, { dp: 0 })} g dry hops${dhPredictedRise.gPerL != null ? ` (${fmtNum(dhPredictedRise.gPerL, { dp: 2 })} g/L)` : ''} at ${fmtNum(dhPredictedRise.dhTempC, { dp: 0 })} °C. Lower pitch pH by this much to land at your target final pH after dry-hop rise.`}
                 >
                   <span>Predicted DH rise</span>
-                  <span style={{ color: 'var(--amber)' }}>+{dhPredictedRise.predictedRise.toFixed(2)} pH</span>
+                  <span style={{ color: 'var(--amber)' }}>+{fmtNum(dhPredictedRise.predictedRise, { dp: 2, suffix: ' pH' })}</span>
                 </div>
               )}
               <div className="bd-field"><label>O₂ LPM</label><input className="bd-input" placeholder="—" value={bd.o2Lpm ?? ''} onChange={e => update({ o2Lpm: e.target.value })} /></div>
@@ -588,7 +596,7 @@ export default function BrewDayTab({ recipeId }: Props) {
                   <input className="bd-input" placeholder="—" style={{ width: 70 }} value={bd.fvCm ?? ''} onChange={e => update({ fvCm: e.target.value })} />
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-dim)' }}>mm</span>
                   <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--amber)', minWidth: 60 }}>
-                    {fvVolL != null ? `${fvVolL.toFixed(0)} L` : ''}
+                    {fvVolL != null ? fmtNum(fvVolL, { dp: 0, suffix: ' L' }) : ''}
                   </span>
                 </div>
               </div>
@@ -612,6 +620,29 @@ export default function BrewDayTab({ recipeId }: Props) {
               : `Linked to brew: ${linkedBrew.name}`
             : 'No planner brew is linked to this recipe yet.'}
         </span>
+        <button
+          className="btn sm"
+          disabled={!targets}
+          onClick={() => {
+            if (!targets) return;
+            const tankName = recipe.bdFv ? (tankCalib[recipe.bdFv]?.name ?? recipe.bdFv) : '';
+            // Use `mashProfile` (the resolved value, mashSaved ?? DEFAULT)
+            // not `mashSaved` directly — keeps the printed steps and the
+            // printed strike-temp / mash-water targets in agreement (both
+            // ultimately derived from the same profile).
+            printBrewDaySheet({
+              recipe, ingredients, targets,
+              brewDay: bd,
+              waterChem: getWaterChem(recipeId),
+              mashProfile,
+              tankName,
+              // Per-recipe brewer wins; falls back to brewery-wide setting.
+              brewerName: (recipe.brewer || '').trim() || settings.breweryName || '',
+              yeastLib,
+            });
+          }}
+          title="A4 brew-day handwriting sheet — targets pre-printed, actuals blank"
+        >🖨 Print Brew Day Sheet</button>
         <button
           className="btn sm"
           disabled={!linkedBrew}

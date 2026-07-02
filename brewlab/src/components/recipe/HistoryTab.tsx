@@ -23,6 +23,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store';
+import { fmtNum } from '../../lib/format';
 import { lsGet } from '../../lib/storage';
 import { calcABV, platoToSg } from '../../lib/calculations';
 import type { Recipe, Ingredient, BrewDayData, ColdSideData } from '../../types';
@@ -80,11 +81,8 @@ const fmtAbv = (ogStr: string, fgStr: string): string => {
   const fgP = parseFloat(fgStr);
   if (!isFinite(ogP) || !isFinite(fgP) || ogP <= 0 || fgP <= 0) return '—';
   const abv = calcABV(platoToSg(ogP), platoToSg(fgP));
-  return isFinite(abv) && abv >= 0 ? `${abv.toFixed(1)}%` : '—';
+  return isFinite(abv) && abv >= 0 ? fmtNum(abv, { dp: 1, suffix: '%' }) : '—';
 };
-
-const fmtNum = (n: number | null | undefined, dp = 0, suffix = ''): string =>
-  n != null && isFinite(n) && n > 0 ? `${n.toFixed(dp)}${suffix}` : '—';
 
 export default function HistoryTab({ recipeId, onOpenRecipe }: Props) {
   const recipes              = useStore(s => s.recipes);
@@ -578,8 +576,8 @@ function BrewCard({ row, expanded, onToggle, onOpen }: CardProps) {
               ['ABV',       abvStr],
               ['Batch Size', batchLDisp],
               ['Style',     r.style || '—'],
-              ['IBU',       fmtNum(r.ibu, 0)],
-              ['EBC',       fmtNum(r.ebc, 0)],
+              ['IBU',       r.ibu > 0 ? fmtNum(r.ibu, { dp: 0 }) : '—'],
+              ['EBC',       r.ebc > 0 ? fmtNum(r.ebc, { dp: 0 }) : '—'],
             ] as [string, string][]).map(([label, value]) => (
               <div key={label} style={{ background: 'var(--panel2)', borderRadius: 6, padding: '6px 10px' }}>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--text-muted)', textTransform: 'uppercase' as const, letterSpacing: 0.5 }}>

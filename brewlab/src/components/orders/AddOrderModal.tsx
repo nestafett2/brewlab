@@ -25,6 +25,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store';
 import { dateToStr, todayDate } from '../../lib/dates';
 import { fmtKg } from '../../lib/units';
+import { fmtNum } from '../../lib/format';
 import {
   suggestShortItems, type LibBySection, type LibSection, type Suggestion,
 } from './orderForecast';
@@ -253,7 +254,10 @@ export default function AddOrderModal({ onClose }: Props) {
     const date = orderDate || dateToStr(todayDate());
     const win = window.open('', '_blank', 'width=700,height=600');
     if (!win) {
-      window.alert('Popup blocked. Allow popups for this site to print the order list.');
+      pushToast({
+        message: 'Popup blocked. Allow popups for this site to print the order list.',
+        variant: 'error',
+      });
       return;
     }
     const brand = (settings.breweryName?.trim() || 'BrewLab');
@@ -378,7 +382,7 @@ export default function AddOrderModal({ onClose }: Props) {
                       <div style={brewNameStyle}>{sug.ingredient}</div>
                       <div style={brewDateStyle}>
                         <span style={{ color: TYPE_COLORS[sug.type] }}>{TYPE_LABELS[sug.type]}</span>
-                        {' '} · order {fmtKg(sug.qty)} kg · short {sug.shortfall.toFixed(1)}
+                        {' '} · order {fmtKg(sug.qty)} kg · short {fmtNum(sug.shortfall, { dp: 1 })}
                       </div>
                     </div>
                   </div>

@@ -16,6 +16,7 @@
  * `window.print()` after a small delay so styles and fonts load first.
  */
 
+import { useStore } from '../../store';
 import {
   fiscalYearLabel, calcMaltUsageFromMaster, calcPlannedMaltUsage,
   buildMonthlyLedger, sumLedgerRange, ledgerOpeningAt, ledgerClosingAt,
@@ -46,7 +47,10 @@ tr.total-row td{font-weight:700;border-top:2px solid #333;border-bottom:none;}
 function _printTariffWindow(title: string, bodyHtml: string): void {
   const win = window.open('', '_blank');
   if (!win) {
-    alert('Print failed — popup blocked. Allow popups for this site.');
+    useStore.getState().pushToast({
+      message: 'Print failed — popup blocked. Allow popups for this site.',
+      variant: 'error',
+    });
     return;
   }
   win.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title>
@@ -160,7 +164,10 @@ export function printNeekyuu(args: {
   const { year, data, taxMaster, ingredientsByRecipe, maltLib, reservations } = args;
   const blocks = data.neekyuu?.reportBlocks ?? [];
   if (blocks.length === 0) {
-    alert('Add at least one block first.');
+    useStore.getState().pushToast({
+      message: 'Add at least one block first.',
+      variant: 'info',
+    });
     return;
   }
 

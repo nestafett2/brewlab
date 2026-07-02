@@ -52,6 +52,7 @@ export default function OrderPlannerPage() {
   const libNextId    = useStore(s => s.libNextId);
   const setLibNextId = useStore(s => s.setLibNextId);
   const setInventoryStock = useStore(s => s.setInventoryStock);
+  const pushToast         = useStore(s => s.pushToast);
 
   const [section, setSection] = useState<LibSection | 'all'>('all');
   const [ordersOpen, setOrdersOpen] = useState(false);
@@ -88,7 +89,7 @@ export default function OrderPlannerPage() {
     let text: string;
     try { text = await file.text(); }
     catch (err) {
-      window.alert('Could not read file: ' + (err as Error).message);
+      pushToast({ message: 'Could not read file: ' + (err as Error).message, variant: 'error' });
       e.target.value = '';
       return;
     }
@@ -98,7 +99,7 @@ export default function OrderPlannerPage() {
         : importBeerXML(text, 'malts', libNextId, inventoryStock);
       const total = result.counts.malts + result.counts.hops + result.counts.yeast + result.counts.misc;
       if (total === 0) {
-        window.alert('No matching entries found in this file.');
+        pushToast({ message: 'No matching entries found in this file.', variant: 'info' });
         return;
       }
       if (result.newEntries.malts.length) setMaltLib([...maltLib, ...result.newEntries.malts]);
@@ -112,9 +113,9 @@ export default function OrderPlannerPage() {
       if (result.counts.hops)  parts.push(`${result.counts.hops} hops`);
       if (result.counts.yeast) parts.push(`${result.counts.yeast} yeasts`);
       if (result.counts.misc)  parts.push(`${result.counts.misc} misc`);
-      window.alert('✓ Imported ' + parts.join(', '));
+      pushToast({ message: 'Imported ' + parts.join(', '), variant: 'success' });
     } catch (err) {
-      window.alert('Error parsing file: ' + (err as Error).message);
+      pushToast({ message: 'Error parsing file: ' + (err as Error).message, variant: 'error' });
     } finally {
       e.target.value = '';
     }

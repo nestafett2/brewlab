@@ -9,6 +9,7 @@
 
 import { useState } from 'react';
 import { LIB_BULK_FIELD_DEFS, type LibSection, type FieldDef, type LibEntry } from './libraryShared';
+import { renderLibFieldInput, type LibFieldValue } from './libraryFieldInput';
 
 interface Props {
   section: LibSection;
@@ -20,10 +21,13 @@ interface Props {
 export default function LibraryBulkEditModal({ section, selectedCount, onSave, onClose }: Props) {
   const defs = LIB_BULK_FIELD_DEFS[section];
   const [enabled, setEnabled] = useState<Record<string, boolean>>({});
-  const [values,  setValues]  = useState<Record<string, string>>({});
+  // Values can be string OR boolean — booleans land here when a checkbox-
+  // typed bulk field is added (none today, but the renderer is shared
+  // with the single-edit modal which does support checkbox).
+  const [values,  setValues]  = useState<Record<string, LibFieldValue>>({});
 
   const toggle = (k: string) => setEnabled(prev => ({ ...prev, [k]: !prev[k] }));
-  const setVal = (k: string, v: string) => setValues(prev => ({ ...prev, [k]: v }));
+  const setVal = (k: string, v: LibFieldValue) => setValues(prev => ({ ...prev, [k]: v }));
 
   const apply = () => {
     const changes: Record<string, unknown> = {};
@@ -37,8 +41,10 @@ export default function LibraryBulkEditModal({ section, selectedCount, onSave, o
           const n = parseFloat(s);
           changes[d.key] = isFinite(n) ? n : '';
         }
+      } else if (d.type === 'checkbox') {
+        changes[d.key] = !!v;
       } else {
-        changes[d.key] = v;
+        changes[d.key] = String(v ?? '');
       }
     }
     onSave(changes as Partial<LibEntry>);
@@ -75,9 +81,9 @@ function BulkRow({
 }: {
   def: FieldDef;
   enabled: boolean;
-  value: string;
+  value: LibFieldValue;
   onToggle: () => void;
-  onChange: (v: string) => void;
+  onChange: (v: LibFieldValue) => void;
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -91,20 +97,7 @@ function BulkRow({
         <label style={{ fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: 0.8, color: 'var(--text-muted)', textTransform: 'uppercase' as const, display: 'block', marginBottom: 2 }}>
           {def.label}
         </label>
-        {def.type === 'text' && (
-          <input type="text" disabled={!enabled} placeholder="—"
-            value={value} onChange={e => onChange(e.target.value)} style={inputStyle} />
-        )}
-        {def.type === 'number' && (
-          <input type="number" disabled={!enabled} placeholder="—"
-            value={value} onChange={e => onChange(e.target.value)} style={inputStyle} />
-        )}
-        {def.type === 'select' && (
-          <select disabled={!enabled} value={value || (def.opts?.[0] ?? '')}
-            onChange={e => onChange(e.target.value)} style={inputStyle}>
-            {(def.opts || []).map(o => <option key={o} value={o}>{o}</option>)}
-          </select>
-        )}
+        {renderLibFieldInput(def, value, onChange, { disabled: !enabled })}
       </div>
     </div>
   );
@@ -136,11 +129,4 @@ const footerStyle: React.CSSProperties = {
 const hintStyle: React.CSSProperties = {
   fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)',
   marginBottom: 10, letterSpacing: 1,
-};
-
-const inputStyle: React.CSSProperties = {
-  width: '100%', boxSizing: 'border-box',
-  background: 'var(--panel2)', border: '1px solid var(--border2)',
-  color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: 10,
-  padding: '4px 6px', outline: 'none',
 };

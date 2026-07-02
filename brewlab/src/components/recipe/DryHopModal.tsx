@@ -110,7 +110,10 @@ export default function DryHopModal({ slot, ingredients, meta, onSave, onDelete,
   };
 
   const handleDelete = () => {
-    if (!confirm(`Delete Dry Hop ${slot} and all its data?\n\nNote: this won't undo any inventory already recorded — use ↩ Restock for that.`)) return;
+    // Confirm dropped — the parent's handleDhDelete pushes a toast with
+    // undo that restores the full pre-delete dh* meta. Inventory rows
+    // already recorded under this dry-hop slot must be reversed via
+    // ↩ Restock; the toast can't reach those.
     onDelete();
     onClose();
   };

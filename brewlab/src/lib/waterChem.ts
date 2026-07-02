@@ -1,19 +1,27 @@
 /**
  * Water-chemistry exclusion filter — the single canonical guard for tax-build
- * code paths. CLAUDE.md "Water Chemistry — Tax Exclusion Rules" mandates that
- * three filters always run together at every tax-build point:
+ * code paths and the misc-display split.
  *
- *   1. `(use || '').toLowerCase() === 'water chemistry'`
- *   2. WATER_CHEM_KW regex match on the ingredient name
- *   3. type='water' rows are skipped (never iterated for tax totals)
+ * Classification rule (React, intentionally diverges from HTML reference):
+ *   1. use === 'water chemistry' (case-insensitive, trimmed) → water-chem.
+ *   2. Else if use is set to any other non-empty value         → NOT water-chem.
+ *      Explicit user choice wins over the name regex; this prevents false
+ *      positives on names that incidentally match WATER_CHEM_KW (e.g.
+ *      "Kaffir Lime" used at boil) from being silently excluded from tax.
+ *   3. Else (use is empty/null)                                → fall through
+ *      to WATER_CHEM_KW regex on the name.
  *
- * The HTML applies these inline at multiple sites (pullIngredientTotals
- * line 8483, pullTaxDataFromTabs line 8635, ntaNormalise line 11569). The
- * React port routes every site through `iterTaxIngredients` so the three
- * filters can never accidentally drift apart.
+ * The third filter — type='water' rows are skipped entirely — lives in
+ * `iterTaxIngredients` below, not here.
  *
- * Do NOT inline these checks in tax/NTA call sites — always use the helpers
- * here. That is the structural guarantee.
+ * The HTML applies a both-filters-together rule at every tax-build site
+ * (pullIngredientTotals 8483, pullTaxDataFromTabs 8635, ntaNormalise 11569).
+ * The React port deliberately changes the combining logic; the regex
+ * itself is unchanged. See CLAUDE.md "Water Chemistry — Tax Exclusion
+ * Rules" for the rationale.
+ *
+ * Do NOT inline these checks in call sites — always use the helpers here.
+ * That is the structural guarantee that display and tax stay in sync.
  */
 
 import type { Ingredient } from '../types';
@@ -27,14 +35,15 @@ export const WATER_CHEM_KW: RegExp =
 
 /**
  * True if the ingredient is a water-chemistry addition that must be excluded
- * from NTA tax misc/grain totals. Matches the HTML's two-filter pair
- * (use field + name regex) — both run together.
+ * from NTA tax misc totals (and grouped under the WATER CHEMISTRY display
+ * section). Explicit `use` field is decisive when set; regex is fallback
+ * for legacy entries that have no use selected. See module docstring.
  */
 export function isWaterChem(ing: Pick<Ingredient, 'use' | 'name'>): boolean {
-  const use = (ing.use || '').toLowerCase();
-  if (use === 'water chemistry') return true;
-  if (WATER_CHEM_KW.test(ing.name || '')) return true;
-  return false;
+  const use = (ing.use || '').trim().toLowerCase();
+  if (use === 'water chemistry') return true;       // (1) explicit yes
+  if (use !== '')                return false;       // (2) explicit other use wins over regex
+  return WATER_CHEM_KW.test(ing.name || '');         // (3) no use → fall through to regex
 }
 
 /**

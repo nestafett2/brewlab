@@ -28,6 +28,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store';
 import { dateToStr, todayDate } from '../../lib/dates';
+import { fmtNum } from '../../lib/format';
 import type { HarvestedYeastEntry } from '../../types';
 
 interface Props {
@@ -62,6 +63,7 @@ export default function HarvestYeastModal({
   const setHarvestedYeast = useStore(s => s.setHarvestedYeast);
   const selectedRecipeId  = useStore(s => s.selectedRecipeId);
   const recipes           = useStore(s => s.recipes);
+  const pushToast         = useStore(s => s.pushToast);
   // Inventory entry points (per-strain or empty-state) don't pass an
   // explicit beer name; fall back to the active recipe selection. When
   // there's no recipe, the harvest source's beer name is empty and only
@@ -113,9 +115,9 @@ export default function HarvestYeastModal({
 
   const save = () => {
     const trimmed = strain.trim();
-    if (!trimmed) { window.alert('Please enter a strain name.'); return; }
+    if (!trimmed) { pushToast({ message: 'Please enter a strain name.', variant: 'error' }); return; }
     const amt = parseFloat(amount);
-    if (!isFinite(amt) || amt <= 0) { window.alert('Please enter a valid amount.'); return; }
+    if (!isFinite(amt) || amt <= 0) { pushToast({ message: 'Please enter a valid amount.', variant: 'error' }); return; }
     const gen = parseInt(generation, 10) || 1;
     const taxTag = fromBatch.trim();
     const entry: HarvestedYeastEntry = {
@@ -172,7 +174,7 @@ export default function HarvestYeastModal({
         {balance != null && (
           <div style={balanceStyle}>
             Current stock of <b>{strain}</b>:&nbsp;
-            <span style={{ color: 'var(--amber)' }}>{balance.toFixed(1)} L</span>&nbsp;
+            <span style={{ color: 'var(--amber)' }}>{fmtNum(balance, { dp: 1, suffix: ' L' })}</span>&nbsp;
             (Gen {harvestedYeast[strain]?.generation || 1})
           </div>
         )}

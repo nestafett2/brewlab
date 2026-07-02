@@ -1,3 +1,504 @@
+# SESSION_LOG entry — 2026-05-12 — Print artifacts pass: Monthly Report fix + Prep Sheet + Brew Day Sheet + recipe metadata fields (brewer, extra additions)
+
+A substantial session. Three new print artifacts shipped, a fourth (Monthly Packaging Report) fixed in place, two new recipe schema fields added with full Supabase round-trip, and one source-of-truth bug caught and corrected by Ben. The HTML reference's 10 print paths are now confirmed all ported. Several reusable lessons surfaced — baking them in here so future sessions don't re-litigate.
+
+## Print port verification — function-name grep is misleading; calc-fingerprint grep isn't
+
+The session opened with the question: were all HTML print functions actually ported, or had some been silently dropped? First-pass grep for HTML function names (`printTaxRecord`, `printTaxSummary`, `printTaxMasterTab`, `printMonthlyReport`, `printAnalysis`, `ntaPrintForm`, `printTariffPlanner`, `printNeekyuuHyo`, `printOrderList`, `printYearlySchedule`, `window.print`) showed several names absent — but the absence was misleading. The porter restructured features during the rebuild: Monthly Report became a sub-tab of Tax Master rather than its own page. Function-name grep doesn't account for that.
+
+Follow-up grep on the calculation fingerprint — the four waste-calc fields `fvBtWaste`, `totalWastePkg`, `kegWaste`, `flowmeterWaste` used together — found the feature alive in `src/components/tax/TaxMasterPage.tsx`'s `TotalSubTab`. **Lesson for future sessions:** when verifying "is feature X ported?", grep for the calculation fingerprint (the field names the feature must mention to function), not the function name. Function names get renamed during restructures; the calc inputs are load-bearing and don't.
+
+Verdict: all 10 HTML print paths ported. But the Monthly Report sub-tab DID have a print-path bug worth fixing.
+
+## Monthly Packaging Report print path fix
+
+`TaxMasterPage.tsx`'s `printSubTab` was special-casing nothing — every sub-tab routed through the same flat-table dumper. For Brew & Fermentation and Conditioning that was correct, but the Total sub-tab needed the per-month block layout that the HTML reference produced: one `<div>` per packaging month with table + sidebar, separated by `page-break-inside: avoid`, plus an "UNSCHEDULED" section for batches missing a pkg date, plus the date range carried into the H1 and title.
+
+**Fix shape.** `handlePrint` now dispatches `activeSubTab === 'total'` to a new `printMonthlyReport(rows, dateFrom, dateTo)`; the existing `printSubTab` signature narrowed to `'brew' | 'cond'`. Extracted `groupRowsByMonth()` to module scope so the on-screen `TotalSubTab` (via `useMemo`) and the print builder use the same grouping — they agree by construction rather than by accident.
+
+**Sidebar metrics** computed locally in the print builder rather than borrowed from `MonthSummaryCard`. The on-screen card splits Beer/Happoshu by COUNT (units of kegs/cans); the HTML print sidebar splits by LITRES (`sellKegL`, `sellCanL`, `sellTotal`). Same source fields on `DerivedRow`, different aggregations. The on-screen `MonthSummaryCard` is untouched.
+
+**"UNSCHEDULED" renamed to "NO PACKAGE DATE"** everywhere (Ben's call — more specific than "MISSING DATES" or the abstract "UNSCHEDULED"). Applied to both the on-screen `TotalSubTab` and the print so they stay in lockstep. Internal variable name `unscheduledRows` + CSS class `.unscheduled-label` deliberately not renamed — they have no user-visible impact and renaming would churn the diff. Flagged as a low-priority code-cleanup follow-up.
+
+**Per-block auto-suppress yellow Happoshu row highlight** added to the print path only. `#FFF8C4` soft amber/cream, `print-color-adjust: exact` for Chrome PDF rendering without forcing the user to toggle "background graphics" in the print dialog. The auto-suppress logic uses `mRows.some(r => r.isBeer)` — a row gets the highlight class only if (a) it's Happoshu and (b) its containing block has at least one Beer row. Per-block, not per-report — Feb can highlight while an all-Happoshu Mar wouldn't. Ben's reasoning: an explicit toggle felt unnecessary if the only reason to want one was the all-Happoshu edge case, so encoded that edge as auto-suppress instead.
+
+**A3 landscape kept** — matches the other two Tax Master sub-tab prints, and the 19-column row demands the wider page. Ben deferred the A4 question until he's seen real output on paper. Parked as pending.
+
+## Fake-data fixture for testing without production data
+
+New `fake-monthly-report-data.json` at project root (17 KB) + reproducible generator at `brewlab/scripts/gen-fake-monthly-report-data.mjs`. Eight brews #432–439 with Japanese craft names spanning Feb/Mar/Apr 2026: 6 Beer + 2 Happoshu (one Happoshu packaged into each of Feb and Mar so the sidebar split is testable in both blocks), 2 unscheduled (both Beer so the NO PACKAGE DATE block sidebar shows a no-split case). One intentional outlier brew — Goro Pilsner with 5.4% FV→BT loss — exercises the high-waste rendering path. Mixed 350 ml and 500 ml cans. `snap-*` fields populated directly (deliberate bypass of `buildSnapshot` — this is fixture data, not a real flow test).
+
+`.gitignore` updated for `fake-*.json` and `brewlab-backup-*.json` patterns. Imported via Settings → Import Backup — the existing import path wipes `bl_*` keys, scrubs Supabase URL/anon key from `bl_brew_settings`, and puts the app into local-only boot mode so the test data isn't immediately stomped by a Supabase pull. Round-trip verified.
+
+## Prep Sheet print — new A4 brewer's prep artifact
+
+New `src/components/recipe/prepSheetPrint.ts`. A4 portrait, 10 mm margins, 12 px body / 11 px labels / 18 px header. Designed across five mockup iterations with Ben.
+
+**Section order is mill-first**: header + targets stripe (OG/FG/ABV/IBU/SRM chips) → fermentables (with "MILL FIRST" label — first physical task on prep day) → water (strike/mash/sparge grid + mineral profile + salt additions inline) → hops & boil → yeast (single inline row — Ben specifically did NOT want the full pitch math chain; one strain + pitch amount + pitch temp is enough) → extra additions (free-text, suppressed entirely when empty — no ghost header on an empty section).
+
+**Soft amber/cream target chips** (`#FFF4D9` background, `#E8D89E` border, weight 500, `print-color-adjust: exact`). No row dividers in tables — header underline only. Ben's preference for visual density. Salt additions inline-suppressed when all zero ("No salt additions." italic note rather than blank space). Grain types inlined as `"210 kg (all malt)"` rather than a separate 6-col grid — keeps the section tight.
+
+**Yeast section uses an honest harvested display.** When the strain has positive harvest balance, shows e.g. `"10 L harvested (short 27% — supplement w/ fresh)"` in amber-red if short, or `"10 L harvested · sufficient"` muted green if enough. Doesn't fabricate a top-up amount the brewer hasn't planned. Suppressed entirely when no harvest data exists or when the pitch unit isn't litres (no slurry semantics for dry/packet yeast).
+
+**Whirlpool section dropped** — Ben's call: belongs on the brew day sheet, not the prep sheet. Prep is what the brewer does the night before / morning of, before whirlpool happens.
+
+Button: Recipe tab → ActionStack → TOOLS group, after "Add to Planner", with the 🖨 icon.
+
+## Brew Day Sheet print — new A4 handwriting sheet
+
+New `src/components/recipe/brewDaySheetPrint.ts`. Same A4 / 10 mm / 12 px shape as the prep sheet but with " · brew day" suffix on the beer-name H1. Drops IBU + SRM from the targets row (irrelevant mid-brew). Designed by following Ben's existing Excel-sheet-2 layout, then converted to chronological brew order.
+
+**Six sections**: mash (with measurement grid) → lauter & sparge → boil & whirlpool → knockout & pitch → efficiency → notes.
+
+**Mash measurement grid**: 4 rows (Temp/pH/Gravity/Notes) × 6 cols (5 unlabeled + 1 "Pre-trans" rightmost). Ben picked 5 cols as a compromise between his Excel's ~8 fixed slots and a fully dynamic per-step grid. The on-screen Brew Day tab uses the same 5+pre-trans shape, so the print mirrors it.
+
+**8-step sparge flowmeter tracker** — matches Ben's existing Excel verbatim: start sparge / finish sparge / after underlet / after grain rinse / sparge amount (target chip from `targets.spargeVolL`) / extra used (= 2 − 1) / need sparge (= 4 − 5) / finish # (= 3 + 6). Formula hints printed inline so the brewer doesn't have to remember which subtraction gives which. Ben explicitly said keep all 8 when Claude Code tried to collapse it to one notes line.
+
+**Two distinct blank styles**, deliberately. **Inline underlines** (`border-bottom: 1px solid #999`, configurable `min-width`) for short fields like "Flowmeter start". **Bordered empty cells** (`height: 24px`, `border: 1px solid #ccc`) for the grid-style mash measurement section. Two visual languages so the brewer's eye learns which kind to fill in.
+
+**Notes box** with feint horizontal stripes via CSS `repeating-linear-gradient` — keeps handwriting tracking straight without needing ruled paper. Claude Code embellishment, Ben kept it. `page-break-inside: avoid` per section. Single-column layout throughout (single-handed brewer writing on the floor — column packing fights handwriting density).
+
+Button: Brew Day tab bottom action strip, next to "📝 Record Usage". Disabled when `targets` haven't computed (brand-new recipe with no batch size).
+
+## Two new recipe schema fields — extraAdditions + brewer
+
+Both needed by the new print sheets but worth separate fields rather than abusing `notes`.
+
+**`extraAdditions`** (free-text additions field). Ben chose this over a structured cellar-additions schema. Simpler, no schema design for typed entries, brewer types what they need. The textarea on the Recipe tab sits between the ingredient cards and the bottom panel row, with an example placeholder ("e.g. orange peel @ 5 min · coriander @ flameout · vanilla bean during DH"). Suppressed entirely from the print sheet — section header included — when the trimmed value is empty.
+
+**`brewer`** (per-recipe brewer name). Ben chose per-recipe over per-brew-day for simplicity at his current scale (small brewery, mostly one brewer). Per-brew-day would be more flexible if multiple brewers ever brew the same recipe — explicit decision worth re-examining if scale grows. UI is a slim header row at the top of the Recipe tab (label "BREWER" + transparent-background input with bottom-border underline — sits as recipe meta, not as a process input). Placeholder shows the brewery-wide setting as the default fallback.
+
+**Two SQL migrations applied today** (`recipes.extra_additions` and `recipes.brewer`, both `text NOT NULL DEFAULT ''`). Fields seeded in all four recipe-creation paths: `createRecipeFromTemplate` (store), BeerXML import (`Desktop.tsx`), blank-recipe path (`NewRecipeModal.tsx`); `createNewVersion` and `duplicateRecipe` inherit via `...source` spread.
+
+**Sync pattern: ship safe, then flip.** Initially implemented with the asymmetric read-but-don't-write pattern (read with empty-string fallback in `rowToRecipe`, omit from `recipeToRow` to avoid PGRST204 on devices that hadn't yet pulled the migration). After Ben confirmed the SQL was applied to Supabase, flipped to full read+write: `extra_additions: r.extraAdditions || ''` and `brewer: r.brewer || ''` added to `recipeToRow`. Both fields now round-trip across devices. JSDoc on the Recipe interface updated to drop the "Local-only for now" language.
+
+Both prints fall back: `recipe.brewer || settings.breweryName || "—"`.
+
+## Ferm/pitch temp field-source bug — naming-implies-semantic trap
+
+Claude Code's initial brew day sheet implementation derived the ferm-temp target from yeast-library `temp_min`/`temp_max` midpoint. Wrong for Ben's recipes — e.g. Minatoyama Lager has 18 °C planned ferm temp, but the W-34/70 yeast-lib midpoint would be ~13.5 °C. The library is a generic floor/ceiling; the recipe-level setpoint is the brewer's actual plan, and it ought to be the source of truth on the print.
+
+Ben corrected: **`BrewDayData.fermTemp` and `BrewDayData.pitchTemp` are PLANNED targets** (the brewer's chosen setpoints), not recorded measurements as Claude Code had assumed from the field names. The naming was misleading — both live on the brew-day blob alongside actual measurements like `postboilL` and `measOg`, but their semantics differ (target vs measured).
+
+**Fix:** rewired `brewDaySheetPrint.ts` to read `brewDay.fermTemp` and `brewDay.pitchTemp` as the primary source for both target chips, with yeast-lib derivation as fallback (yeast-lib midpoint for ferm; yeast-lib min — already what `targets.targetPitchTempC` carries — for pitch). Verified `prepSheetPrint.ts` was already doing this for pitch temp; only the variable name + comment misframed it as "input/actual". Renamed `pitchTempInput` → `bdPitchTarget` and updated the comment to flag the planned-target semantic.
+
+**Lesson for future sessions:** when designing print sheets that depend on data fields, grep for the field first before writing the spec. Don't assume the field name implies its semantic. Brew day fields named `xxxTemp` are a mix of planned setpoints (`pitchTemp`, `fermTemp`) and actual measurements (`postboilL` is volume but the temperature pattern in this blob is consistently planned) — name alone doesn't disambiguate. Read the surrounding usage or ask Ben.
+
+## Compile
+
+`npx tsc --noEmit`: clean across every change.
+
+## Files touched
+
+New: `src/components/recipe/prepSheetPrint.ts`, `src/components/recipe/brewDaySheetPrint.ts`, `brewlab/scripts/gen-fake-monthly-report-data.mjs`, `fake-monthly-report-data.json` (project root, gitignored).
+
+Edited: `src/types/index.ts` (+ `extraAdditions`, `+ brewer`), `src/lib/supabase.ts` (`rowToRecipe` reads + `recipeToRow` writes, both fields), `src/store/index.ts` (seed `extraAdditions: ''` + `brewer: ''` in `createRecipeFromTemplate`), `src/pages/Desktop.tsx` (seed in BeerXML import), `src/components/recipe/NewRecipeModal.tsx` (seed in blank-recipe path), `src/components/recipe/RecipeTab.tsx` (Brewer input + Extra additions textarea + prep sheet handler + ActionStack wiring), `src/components/recipe/ActionStack.tsx` (Print Prep Sheet button), `src/components/recipe/BrewDayTab.tsx` (Print Brew Day Sheet button + handler), `src/components/tax/TaxMasterPage.tsx` (Monthly Report print path: `printMonthlyReport` + `groupRowsByMonth` + Happoshu highlight + NO PACKAGE DATE rename + signature narrow), `.gitignore` (fixture + backup patterns).
+
+---
+
+# SESSION_LOG entry — 2026-05-09 (late, follow-up 4) — Numeric display formatting policy + `fmtNum` helper
+
+End-of-port polish batch. Single shared formatter for all numeric display, plus three policy decisions baked into the helper's docstring so future sessions don't have to re-litigate.
+
+## Helper
+
+`src/lib/format.ts:fmtNum(n, opts?)`. Default behaviour: cap at 3 decimal places, strip trailing zeros (`9.2000001 → "9.2"`, `5000.000 → "5000"`, `0.123456 → "0.123"`). Force exact precision via `{ dp: N }` for column-aligned tables and regulatory display where stripping would clobber alignment. `null`/`undefined`/`NaN` returns `'—'` by default; override with `fallback`.
+
+**Suffix is verbatim** (caller controls separator). I started with auto-spacing logic ("kg" → "5 kg", "%" → "5%") but the BrewDay cached strings need `' %'` with a space and the percent-prefix special case made the API ambiguous. Verbatim is explicit: pass `' kg'` for "5.4 kg", `'%'` for "5.4%", `' °C'` for "5.4 °C". Caught early; everything else followed cleanly.
+
+## Three policy decisions (locked in)
+
+These live in the `fmtNum` docstring + this entry so future sessions don't redebate them.
+
+1. **ABV is always 1 dp app-wide.** `fmtNum(v, { dp: 1, suffix: '%' })`. Applied at: `RecipeTab` totals strip, `RecipePreview` stat tile, `AnalysisTab` est+meas, `PackagingTab` final readings, `EditIngredientModal` stats panel, `AddIngredientModal` stats panel, `StyleSummaryPanel` range bar, `StyleGuideModal` comparison row, `HistoryTab.fmtAbv`. HTML reference was inconsistent (some sites 1 dp, others 2); React picks 1 across the board.
+
+2. **Column-aligned displays force precision through the helper, don't strip.** Routes through `fmtNum({ dp: N })` so null/NaN handling is centralized but visible output is identical to the prior `.toFixed(N)`. Applied to: `IngredientCard` IBU/pct columns (1 dp), `HarvestedYeastView` running balance / got / used columns (1 dp), `BreweryOverviewPanel` pivot cells (1 dp), `StyleSummaryPanel` + `StyleGuideModal` range bars (1–2 dp), all `BrewDayTab` calc card values (1–2 dp), `WaterTab` ion / mineral / pH columns (0–2 dp), `PackagingTab` `fmt1` helper, `FermTab` daily-log readings + DH-pred values, `MashProfileModal.f1`. The BrewDay cached strings (cross-device read mirror in `bl_bd_<id>` blob) likewise route through the helper at the same precision, so caches and live UI stay in lockstep.
+
+3. **Regulatory / persistence / inputs / charts are exempt.** Untouched: `lib/tax.ts` (29 toFixed sites — pre-storage canonical strings written into `tax_records`), all `tax/*` files (NTA / TaxMaster / TaxSummary regulatory display), all `tariff/*` files (TRQ / Neekyuu / annual planner / tariffPrint), `lib/units.ts` and `lib/utils.ts:fmtAmt` (unit-driven helpers — their semantics are the spec), `libraryImport`/`libraryExport`/`recipeImport` (BeerXML / BSMX canonicalisation), `FermChart` canvas axis labels (chart-render code), input-bound mirrors `GrainPctModal` / `HopIbuModal amtStr/ibuStr` / `EditIngredientModal:81` slurry input / `DryHopModal` planned-g / `DhSplitModal` validation toast text and totals (precision must match the input field as the user types so values don't flicker mid-edit).
+
+## Consolidated four hand-rolled strip-zeros sites
+
+- `LibrariesPage.tsx:640` — `n.toFixed(1).replace(/\.0$/, '')` → `fmtNum(parseFloat(v), { fallback: v })`
+- `CurrentStockTable.tsx:277` — same shape, same fix
+- `LibraryEntryModal.tsx:266–268` (local `fmtKg`) — deleted; `fmtNum(onHandKg, { fallback: '0' })` at the call site
+- `HistoryTab.tsx:86–87` (local `fmtNum`) — deleted; call sites now do `r.ibu > 0 ? fmtNum(r.ibu, { dp: 0 }) : '—'` inline (preserves the `> 0` guard the local helper had — the shared helper returns `'0'` for zero, but for IBU/EBC display zero means "not computed" so we keep the dash). `fmtAbv` rewritten to use `fmtNum({ dp: 1, suffix: '%' })`.
+
+## Files touched
+
+New: `src/lib/format.ts`.
+
+Edited (~22):
+- `pages/Desktop.tsx`
+- `recipe/RecipeTab.tsx`, `RecipePreview.tsx`, `IngredientCard.tsx`, `StyleSummaryPanel.tsx`, `StyleGuideModal.tsx`, `BrewDayTab.tsx`, `WaterTab.tsx`, `PackagingTab.tsx`, `FermTab.tsx`, `MashProfileModal.tsx`, `AnalysisTab.tsx`, `EditIngredientModal.tsx`, `AddIngredientModal.tsx`, `HopIbuModal.tsx`, `BreweryOverviewPanel.tsx`, `HistoryTab.tsx`
+- `inventory/CurrentStockTable.tsx`, `HarvestedYeastView.tsx`, `HarvestYeastModal.tsx`, `UseHarvestedYeastModal.tsx`
+- `libraries/LibrariesPage.tsx`, `LibraryEntryModal.tsx`
+- `orders/AddOrderModal.tsx`
+
+## Compile
+
+`npx tsc -b --force` after wiping both `tsconfig.*.tsbuildinfo` files: clean.
+
+## Unexpected discoveries flagged
+
+- **BrewDayTab caches display strings into the `bl_bd_<id>` blob** (lines 215–225) so tablet/mobile read the same numbers without recomputing. Stayed as `dp: 1`/`dp: 2` forced — these strings are the cross-device source of truth for non-active recipes, must match the live UI exactly. Caches and live UI now both route through `fmtNum`, so they can't drift.
+- **PackagingTab caches a single computed value** (`'cs-liters-bt-saved'`) into `bl_cold_<id>` for Tax Master read. Stored as a number, not a formatted string; not affected by this batch.
+- **`AddIngredientModal` has 21 `.toFixed` sites** — by far the densest. Most are display (stats panel + yeast harvest labels + cells/Billion math); five are input-bound writes (`setExtra`, `setAtten`, `setSlurryL`) that stay as `.toFixed`.
+- **`HistoryTab`'s old local `fmtNum` returned `'—'` for `n <= 0`**, not just for null/NaN. The shared helper returns the actual zero string. For IBU/EBC where 0 means "not computed yet", I preserved the `> 0` guard at the call site; existing semantics intact.
+
+---
+
+# SESSION_LOG entry — 2026-05-09 (late, follow-up 3) — Toast/undo retrofit + per-recipe blob coverage
+
+End-of-port polish batch. Replaced `window.alert` / `window.confirm` placeholders across ~30 files with the existing toast/undo system, added undo coverage to destructive actions on the per-recipe blobs, and dropped redundant confirm gates on every action that already toasts with undo.
+
+## What was already there
+
+The toast/undo infrastructure was already shipped before this session — `src/lib/toast.ts`, the `pushToast` / `dismissToast` / `popUndoById` / `popMostRecentUndo` actions in `store/index.ts`, the bottom-right `ToastContainer` mounted in `App.tsx`, the persistent topbar `UndoButton`, and the global Ctrl+Z keydown handler. The React system is strictly richer than HTML's `showUndoToast` / `undoPush` (HTML had only ephemeral status toasts plus a single global state-snapshot stack; React has per-action closures, per-toast Undo buttons, `undoHistory` decoupled from toast lifetime, and Ctrl+Z that doesn't snapshot the whole world). Plan therefore: zero new infrastructure, pure retrofit.
+
+## Carve-outs (kept as `window.confirm` per Ben's call)
+
+- **`Desktop.tsx:590` — single-recipe delete.** Cascade hits 6+ blob tables; the 8 s undo window isn't enough margin for a misclick.
+- **`LibrariesPage.tsx:294` — bulk library delete.** Bulk ops with large N deserve the explicit gate.
+- **Plus a self-flagged extension: `Desktop.tsx:490` — bulk recipe delete.** The same two reasons (cascade + bulk-with-large-N) apply doubly. Wasn't in Ben's explicit carve-out list but I retained the confirm conservatively. Flagged for an explicit override next session if Ben wants it dropped.
+
+## Scope cut (per Ben's call)
+
+- **MashProfileModal `handleSave` undo — SKIP.** Save is an update, not destruction. Undo on every save would be noise. (Modal's `handleReset` and library-level `handleSaveAsProfile` are unaffected — Reset got toast+undo on form-state restore, library save got an alert→toast conversion.)
+
+## Untouched (intentional friction — ConnectionPanel double-confirm, sync-time prompt, three NTA gates)
+
+- `ConnectionPanel.tsx:47–48, 51` — Reset All Data double-confirm + final notice (wipes Supabase across all devices).
+- `store/index.ts:1671` — pending ferm log deletion sync prompt (not a UI action — sync-time decision flow).
+- `TaxTab.tsx:94, 108, 110` — three NTA tax-record gates (overwrite manually-edited fields / blanks / overwrite filed record). Legal/compliance friction stays.
+
+## Per-recipe blob coverage added
+
+The 7 per-recipe blobs from `supabase.ts:PER_RECIPE_KEY_PREFIXES` (excluding the local-only `bl_checklist_` and the row-keyed `bl_ferm_log_`):
+
+| # | Blob | Destructive surface | Result |
+|---|---|---|---|
+| 1 | `bl_recipe_ings_` | RecipeTab delete/duplicate | already toast+undo (kept) |
+| 2 | `bl_bd_` | none — same component reads & writes | no coverage needed |
+| 3 | `bl_ferm_meta_` | DryHopModal slot delete | **new toast+undo** in `FermTab.handleDhDelete` |
+| 4 | `bl_cold_` | none | no coverage needed |
+| 5 | `bl_water_chem_` | WaterTab Clear | **new toast+undo** capturing the full `WaterChemData` |
+| 6 | `bl_recipe_profiles_` | profile dropdowns (selection swap, not destruction) | no coverage needed |
+| 7 | `bl_mash_` | MashProfileModal Reset | **new toast+undo** restoring `ratio` / `steps` / `notes` form state |
+
+Plus `bl_ferm_log_` row delete in `FermTab.handleDeleteEntry` got new toast+undo (HTML had no undo there). Touched but **not** new behaviour: Desktop bulk recipe delete already had a toast+undo before this batch — confirm gate retained per the carve-out reasoning above.
+
+## Other notable changes
+
+- **`store.setNtaRegister` action added** so the NTA submission removal undo can restore the full register at the original indices. The existing `addNtaSubmission` / `deleteNtaSubmission` work index-based; this gives the closure a clean restore path.
+- **Recipe-tab validation alerts** (`Select an ingredient first.`, `No grains in recipe.`, etc.) → `pushToast({ variant: 'info' })`. Errors (`Carrageenan not found in misc library.`) → `variant: 'error'`.
+- **Helper modules** (`lib/print.ts`, `tariff/tariffPrint.ts`, `orders/orderXlsx.ts`) reach the toast via `useStore.getState().pushToast(...)` — these are pure functions, not components.
+- **Unexpected discovery — `RecipeTab.tsx:461`** had a stub `alert('Scale Recipe not yet ported.')` for the unported Scale Recipe modal; converted to a `pushToast` info. The feature itself is still unported — flagged in the File-menu placeholder list.
+
+## Files touched (29)
+
+Pages / containers: `pages/Desktop.tsx`, `App.tsx` (no changes — already wired).
+
+Recipe area: `RecipeTab.tsx`, `WaterTab.tsx`, `MashProfileModal.tsx`, `DryHopModal.tsx`, `FermTab.tsx`, `FermEntryModal.tsx`, `DhSplitModal.tsx`, `AddIngredientModal.tsx`, `AnalysisTab.tsx`, `NewRecipeModal.tsx`.
+
+Planner / Notes / Libraries / Inventory: `planner/AddBrewModal.tsx`, `planner/YearlyModal.tsx`, `notes/NotesPage.tsx`, `libraries/LibrariesPage.tsx`, `inventory/HarvestedYeastView.tsx`, `inventory/HarvestYeastModal.tsx`, `inventory/UseHarvestedYeastModal.tsx`, `inventory/InventoryPage.tsx`, `inventory/InventoryCorrectionModal.tsx`, `inventory/LedgerEntryModal.tsx`, `inventory/LedgerExportModal.tsx`, `inventory/RecordUsageModal.tsx`.
+
+Settings: `MashProfilesPanel.tsx`, `WaterProfilesPanel.tsx`, `EquipmentProfilesPanel.tsx`, `PitchProfilesPanel.tsx`, `StylesPanel.tsx`, `TanksPanel.tsx`.
+
+Tax / Tariff: `tax/TaxTab.tsx`, `tax/TaxMasterPage.tsx`, `tax/NtaPage.tsx`, `tariff/ReservationsTab.tsx`, `tariff/TariffReductionPage.tsx`, `tariff/tariffPrint.ts`.
+
+Orders / helpers: `orders/AddOrderModal.tsx`, `orders/OrderPlannerPage.tsx`, `orders/orderXlsx.ts`, `lib/print.ts`.
+
+Store: `store/index.ts` — added `setNtaRegister` action.
+
+## Compile
+
+`npx tsc -b --force` after wiping both `tsconfig.*.tsbuildinfo` files: clean. Both `tsconfig.app.json` and `tsconfig.node.json` rebuilt with zero diagnostics.
+
+---
+
+# SESSION_LOG entry — 2026-05-09 (late, follow-up 2) — `malted` column migration + React wire-up
+
+Short follow-up after applying `migrations/2026-05-04_add_malted_column.sql` to Supabase. The column was previously deliberately excluded from the `recipe_ingredients` row payload because writing it unconditionally produced PGRST204 on databases that hadn't yet run the migration. With the column present, per-row `Ingredient.malted` overrides now round-trip across devices instead of having to be re-derived from `MaltLib.malted` at recipe-edit time.
+
+**`lib/supabase.ts` changes**
+
+- `ingToRow` (~line 1004): added `malted: ing.malted === undefined ? null : ing.malted,` to the row payload. The `undefined → NULL` mapping lets the column's `DEFAULT true` apply for ingredients pulled from the library (the typical case — `Ingredient.malted` is only set explicitly when the user toggles the per-row checkbox in `EditIngredientModal`). Explicit `true` and `false` round-trip directly. Replaced the long deliberate-exclusion comment block above the function body with a short rationale block pointing at the same callers (`pullIngredientTotals`, `ntaNormalise`) and noting the read-side semantics for legacy rows.
+- `rowToIng` (~line 1015): unchanged — already had the right shape (`null/undefined → undefined`, explicit `Boolean(...)` otherwise). Verified before editing.
+
+**Why undefined → NULL, not undefined → true**
+
+NULL on insert lets the column's `DEFAULT true` materialise the row at the new default. Writing literal `true` would mask future schema changes (if the default ever shifts to false for some unmalted-by-default convention, NULL-on-write rows would track the new default; literal-true rows wouldn't). The migration's header comment specified this exact form for that reason.
+
+**Compile**
+
+`npx tsc -b --force` after wiping both `tsconfig.*.tsbuildinfo` files: clean.
+
+---
+
+# SESSION_LOG entry — 2026-05-09 (late, follow-up) — Audit + four-bug batch (LIB_HEADERS.misc, dead Save Recipe, mash profile cross-component invalidation)
+
+A short follow-up session. Re-audited `START_HERE.md`'s pending lists against the live source after the morning's sync-layer rebuild, then shipped four small bugs identified by the audit.
+
+## Audit findings
+
+Ten sync keys flagged as "missing from sbSet" in `START_HERE.md` are all wired — confirmed in `lib/supabase.ts`: `bl_mash_<id>` and `bl_recipe_profiles_<id>` get dedicated JSONB blob branches; `bl_tariff_<year>` matches via the new `SETTINGS_KEY_PREFIXES`; `bl_nta_register / bl_nta_basis_current / bl_nta_basis_default / bl_templates / bl_equipment / bl_yearly / bl_suppliers` are all in `SETTINGS_KEYS`. The "13 stale TS errors" claim is also stale — `npx tsc -b --force` after deleting both `node_modules/.tmp/tsconfig.*.tsbuildinfo` files exits clean with zero diagnostics. Three pre-existing bugs were confirmed still present: LIB_HEADERS/FIELDS misc length mismatch, `BrewDayTab.mashProfile` `useMemo([recipeId])` stale dep, and `WaterTab` passing literal `null` to `calcBrewDayTargets`. The "Dead Save button on recipe meta-bar" turned out to be loose terminology — the meta-bar uses live `updateRecipe` on every input and has no Save at all; the actual dead Save was the File-menu "Save Recipe" item with `onClick={closeMenus}`.
+
+## Bug 1 — `LIB_HEADERS.misc` Price column
+
+`LIB_FIELDS.misc` has six entries (`name, misc_type, use, happoshu_trigger, price, notes`); `LIB_HEADERS.misc` had only five (`Name, Type, Use, Happoshu, Notes`). `LibrariesPage.tsx`'s table renderer zips them positionally, so the Notes header sat above the Price column and the Notes column had no header. Inserted `'Price ¥/kg'` between `'Happoshu'` and `'Notes'` to match the malts/hops convention. Removed the now-stale comment in `LibrariesPage.tsx` that documented the mismatch.
+
+## Bug 2 — Dead "Save Recipe" File menu item
+
+`Desktop.tsx:652` — `<div className="menu-dd-item" onClick={closeMenus}>Save Recipe</div>`. Recipe edits autosave via live `updateRecipe` on every input, so the menu item was a no-op (just dismissed the dropdown). Removed the div + the redundant `menu-dd-sep` immediately below it (would have left two consecutive separators). The remaining single divider sits between the Import group and the Export group — a sensible boundary.
+
+## Bugs 3+4 — Mash profile cross-component invalidation
+
+`MashProfileModal` writes `bl_mash_<id>` directly via `lsSet`. The readers (`BrewDayTab` + `WaterTab`) cached the value from localStorage on mount and didn't refresh — `BrewDayTab` via `useMemo([recipeId])` (no LS subscription); `WaterTab` via a `useState` lazy initializer (only runs once) AND it was passing literal `null` for `mashProfile` instead of threading the actual value through.
+
+### Pattern audit before fix
+
+Checked three mechanisms before designing the fix:
+- **Existing Zustand slice for `bl_mash_<id>`** — none. The store has `mashProfiles` (the global library) and `RecipeDeleteSnapshot.mash` (used only by capture/restore), but no reactive per-recipe map.
+- **Window event / pub-sub on `lsSet`** — none. `storage.ts:31–34` is just `lsLocal + sbDispatch`.
+- **Same-pattern solution elsewhere** — yes, `recipeProfilesByRecipe` (`store/index.ts:206, 1224–1254`). The other per-recipe blobs (brew_day / ferm_meta / cold_side / water_chem) don't have this problem because the same component reads and writes them — no cross-component invalidation needed. The mash blob is unique because the writer (`MashProfileModal`) is decoupled from its readers.
+
+### Fix — added `mashByRecipe` Zustand slice
+
+`store/index.ts`:
+- New `mashByRecipe: Record<string, MashProfile | null>` field on `BrewLabState`. `undefined` = not yet loaded; `null` = loaded, no saved profile.
+- `getMash(recipeId)` — lazy-cache getter mirroring `getRecipeProfiles`. Returns cached value, or reads from LS and seeds the cache via `setTimeout` (avoids set-during-render).
+- `setMash(recipeId, profile)` — `lsSet` + `set({ mashByRecipe: { ...current, [recipeId]: profile } })`. Every subscriber re-renders.
+- Hard-delete path: pluck `[id]` from `mashByRecipe` alongside the other `*ByRecipe` maps.
+- Hydrate reset: clear `mashByRecipe: {}` so post-hydrate access re-reads from the freshly-hydrated localStorage.
+- Snapshot capture: prefer the cached map value, fall back to LS read (matches the `recipeProfiles` capture pattern).
+- Snapshot restore: seed `mashNext` so post-restore consumers see the value without a remount.
+- Tightened `RecipeDeleteSnapshot.mash` from `unknown` → `MashProfile | null`.
+
+`MashProfileModal.tsx`:
+- Pull `getMash` and `setMash` from the store. Drop the `lsGet/lsSet` import.
+- `initial` `useMemo` reads via `getMash(recipeId)` (also seeds the cache for any subscriber that opens after the modal).
+- `handleSave` calls `setMash(recipeId, buildProfileBlob())` instead of `lsSet`.
+
+`BrewDayTab.tsx`:
+- Replaced the `useMemo([recipeId])` + `lsGet` with a Zustand subscription: `useStore(s => s.mashByRecipe[recipeId])` + a `useEffect` that calls `getMash(recipeId)` when the cache slot is `undefined`. `mashProfile = mashSaved ?? DEFAULT_MASH_PROFILE` — both `undefined` (not yet loaded) and `null` (loaded with no saved profile) fall through. Existing `targets` `useMemo` already lists `mashProfile` as a dep, so it refires on save automatically. Dropped the now-unused `lsGet` and `MashProfile` imports.
+
+`WaterTab.tsx`:
+- Subscribed to `mashByRecipe[recipeId]` (same pattern as BrewDayTab) and threaded the actual `mashProfile` (with `?? DEFAULT_MASH_PROFILE` fallback) into `calcBrewDayTargets` instead of the literal `null`.
+- Moved the volume prefill out of the `useState` lazy initializer and into a `useEffect` keyed on `[mashProfile, recipe, ingredients, maltLib, hopLib, yeastLib, equipProfiles, settings.grainAbsorb, settings.coolingShrinkage]`. The effect respects `dirtyRef.current` (prefill stops once the user touches anything) and only writes empty slots, so an incoming mash-profile save updates the prefilled volumes for an unedited tab but never overwrites a value the user has typed. The 400ms debounced `setWaterChem` save is unchanged — `dirtyRef` keeps prefill non-persistent.
+
+## Compile
+
+`npx tsc -b --force` after wiping `tsconfig.*.tsbuildinfo`: clean. Both `tsconfig.app.json` and `tsconfig.node.json` rebuilt with zero diagnostics.
+
+---
+
+# SESSION_LOG entry — 2026-05-09 (late) — Libraries redesign, Import Recipe (BeerXML), water-chem precedence, Misc/WaterChem split, Recipe edit UI polish
+
+A long session focused on the Libraries tab (two design rounds), the File menu's first real wiring (Import Recipe), an architectural change to the water-chem filter, the cosmetic Water Chemistry / Misc display split that piggybacks on it, and a multi-pass alignment polish on the Recipe Edit page. One CLAUDE.md update for the filter precedence change.
+
+---
+
+## Libraries tab redesign
+
+A two-round BeerSmith-style overhaul of the Libraries tab. Same data model, very different interaction surface.
+
+### Round 1 — selection model + density + detail pane
+
+The HTML reference uses per-row Edit/Duplicate/Delete buttons + a leftmost master/per-row checkbox column. Replaced both with a click-to-select / right-click-for-actions pattern plus a fixed-height detail pane below the table.
+
+- **Action column dropped.** No more per-row Edit/Duplicate/Delete stacked buttons. Action moved to right-click context menu.
+- **Checkbox columns dropped.** Selection is now click-based — file-explorer semantics: click replaces, shift+click range, ctrl/cmd+click toggle. Anchor by index in this round (changed to ID-based in round 2).
+- **Double-click → Edit modal** wired (existing modal, no internal change).
+- **Right-click context menu** — inline JSX reusing the Recipe-tab `ctx-menu` / `ctx-item` / `ctx-sep` / `danger` CSS classes; outside-mousedown + Escape close, deferred attach so the right-click that opens the menu doesn't immediately close it. Two variants:
+  - Single-row: Edit / Duplicate / sep / Delete.
+  - Bulk (right-click on a row in a multi-selection): Delete N items only in round 1; expanded in round 2.
+- **Density bump.** Added Libraries-scoped CSS variables to `:root` (`--lib-fs-row`, `--lib-fs-header`, `--lib-fs-detail-title`, etc.) — none of the existing CSS exports general typography tokens, so this is a scoped namespace. Row height target ~32–38 px naturally; matches the Libraries-tab BeerSmith density.
+- **Detail pane.** New 240 px panel below the table; renders nothing when 0 selected, `"N items selected"` when >1, and full field grid + Notes block when single. Field list driven off `LIB_FIELD_DEFS[section]` so every section type renders its own schema automatically. Read-only; edits go through the Edit modal.
+- **Bulk toolbar (Bulk Edit / Delete / Clear)** kept as-is per Ben's choice — both paths (toolbar + right-click menu) reach the same actions.
+- **Touch verification.** Tablet.tsx and Mobile.tsx don't import LibrariesPage at all → desktop-only pattern is safe; right-click + ctrl/shift+click need no fallbacks.
+
+### Round 2 — polish
+
+Five follow-ups after Ben eyeballed round 1:
+
+- **Detail pane title bar darkened.** Added `background: var(--panel)` + edge-to-edge padding so the title row reads as a BeerSmith-style gray section band over the table rows. `border-top: var(--border2)` for stronger table↔pane separation.
+- **Notes block rendered for all four sections.** Earlier Notes lookup keyed off `LIB_FIELD_DEFS.find(d => d.key === 'notes')`, which returned undefined for every section — none of the four `LIB_FIELD_DEFS` entries include `notes`. The modal's comment ("notes lives outside fieldDefs in HTML — handled separately") explains why. Switched the detail pane to read `entry.notes` directly off the row, matching the modal's approach. **Did not extend `LIB_FIELD_DEFS`** per scope — uniform behavior across malts/hops/yeast/misc.
+- **Trailing zeros trimmed in detail pane.** Added a numeric branch in `formatValue` that runs `Number(raw).toString()` for `def.type === 'number'` — `'9.2000000'` → `'9.2'`, `'5000.0000'` → `'5000'`. Detail-pane scope only; table cells unchanged.
+- **Sortable column headers + ID-based anchor.** Replaced `anchorIdxRef: useRef<number>` with `anchorIdRef: useRef<string | null>` (ID-based) so reordering rows can't strand the anchor. Recipe sidebar's `FolderTree` already uses this pattern. Sort state `{ field, dir }` in component state, never persisted. Numeric whitelist hardcoded — `aa, beta, ebc, price, atten, temp_min, temp_max, dbfg, max_pct, moisture, diastatic_power, protein, yield_pct, potential`. **Lot # treated as text** per Ben's choice (real-world lot numbers like "UL 9/25" would NaN-cluster under numeric sort). ▲/▼ indicator next to the active sort header. `#` column not sortable. Section switch resets sort.
+- **Bulk right-click menu expanded.** Added Bulk Edit + Duplicate alongside the existing Delete. New `bulkDuplicate(ids)` helper — clones selected entries with `(copy)` suffix, bumps `libNextId[section]` once for the whole batch, single toast with undo.
+
+### Bulk Edit dropdown bug — `LIB_BULK_FIELD_DEFS` schema fix
+
+**Symptom.** In the Libraries Bulk Edit modal, Supplier rendered as a plain text input even though the single Edit Entry modal renders it correctly as a dropdown of saved suppliers.
+
+**Two-part bug.**
+1. `LIB_BULK_FIELD_DEFS` (in `libraryShared.ts`) declared supplier as `'text'` for malts/hops/misc — Bulk Edit's schema literally asked for plain text.
+2. Bulk Edit's inline `BulkRow` only rendered `text`, `number`, `select` — silently no-op'd for `supplier-select` and `checkbox`.
+
+**Fix.** Extracted the single Edit modal's `renderInput` + `SupplierSelect` into a new shared module `libraryFieldInput.tsx` (`renderLibFieldInput(def, value, onChange, { disabled? })`). Both modals now call the same function — divergence-proof. Added a `disabled` parameter for Bulk Edit's "disabled until checkbox ticked" UX. State shape on Bulk Edit widened from `Record<string, string>` to `Record<string, LibFieldValue>` so checkbox-typed bulk fields would also work (none today; forward-safe). `LIB_BULK_FIELD_DEFS.malts.supplier`, `.hops.supplier`, `.misc.supplier` flipped to `'supplier-select'`. `yeast.lab` left as `'text'` — lab isn't a supplier.
+
+---
+
+## File menu — Import Recipe (BeerXML)
+
+First real wiring of a placeholder File menu item. Port of HTML's `handleRecipeXML` (line 17232) + `confirmRecipeImport` (17323), with a few intentional divergences.
+
+**Critical scope finding upfront.** The HTML does NOT have BSMX recipe import. `importBSMX` (HTML 17058) is library-only and explicitly rejects recipe exports ("Make sure you exported from an Ingredients view in BeerSmith, not a recipe."). Confirmed by greppingg every variant of "BSMX recipe" / "F_R_NAME" / "Recipe.bsmx" / etc. in the HTML — nothing. So BSMX recipe import is net-new build, not a port. Ben opted to defer to a separate task; today's PR is BeerXML only. `.bsmx` files trigger an explanatory toast.
+
+**New file: `src/components/recipe/recipeImport.ts`.** Pure parser — same shape as `libraryImport.ts`. Exports `parseRecipeXML(text): ParsedRecipe[]`. Walks every `<RECIPE>` node:
+
+- NAME → `Recipe.beerName`. **`Recipe.name` (the tax serial 仕込記号) left empty** so the brewer's tax identifier isn't accidentally seeded with a foreign string. (HTML stores `<NAME>` in `name` only — it predates the React `name`/`beerName` split.)
+- `<STYLE><NAME>` → `Recipe.style`. Style key matched case-insensitively against `BJCP_2021` names; falls back to `<CATEGORY_NUMBER><STYLE_LETTER>` (e.g. `'21A'`) when name match fails. Empty string when neither matches.
+- BATCH_SIZE, BOIL_TIME, EFFICIENCY (default 75 % per HTML), OG, FG (both → °P via inline SG-to-Plato), NOTES.
+- Fermentables → `type: 'grain'`, amt as kg, EBC = SRM × 1.97, malted heuristic `!/(adjunct|sugar|fruit|juice)/i.test(TYPE)`. Hops → grams + Tinseth-ish IBU for boil hops, `use` lowercased to match React convention (`'boil'`, `'whirlpool'`, `'dry hop'`, `'first wort'`). Yeasts → ml + atten% in `extra`. Misc → MISCS MISC with fallback to flat MISC nodes (matches HTML 17288–17290).
+- **Mash schedule** parsed from `<MASH><MASH_STEPS><MASH_STEP>` into a `MashProfile` blob. Decoction maps to Infusion (not in React's `MashStepType` union). Persisted via `lsSet('bl_mash_<id>', profile)` so it picks up the existing `bl_mash_` Supabase prefix. **Net-new vs HTML import** which doesn't read MASH at all.
+
+**Desktop.tsx wiring.** Hidden `<input type="file" accept=".xml,.beerxml,.bsmx">` triggered by the menu item. `onChange` reads, parses, sets `pendingImports` → triggers a preview modal (`RecipeImportPreview`). Single-recipe variant shows full ingredient summary + mash schedule + notes; multi-recipe variant collapses to one line per recipe. Confirm allocates IDs in-loop via `newRecipeId([...current, ...allocatedSoFar])`, calls `addRecipe` + `setIngredients(newId, ings.map((ing, idx) => ({ ...ing, id: \`${newId}_${idx}\` })))` per CLAUDE.md ingredient-ID rule. Opens the **first** imported recipe per Ben's spec (HTML opens the last).
+
+**Defaults Ben confirmed:** `<NAME>` to beerName only / use lowercased / FG imported / first opens / inline conversions stay inline / no new types / mash imported / preview shown / 75 % default efficiency.
+
+---
+
+## Misc display split — Water Chemistry / Misc
+
+Cosmetic-only: split the MISC ingredient section into "WATER CHEMISTRY · N" and "MISC · N" everywhere misc is rendered. The classifier filter is the same one the tax engine already uses (`isWaterChem` in `lib/waterChem.ts`) — display split and tax exclusion always agree.
+
+**Audit.** Three render sites use `isWaterChem`:
+- `RecipeTab.tsx` — Recipe edit Ingredients sub-tab. Single `<IngredientCard label="MISC">` split into two cards, both `type="misc"` so they share `bl_recipe_cols_misc` column-visibility prefs. Only the first visible section gets `extraTopGap`.
+- `RecipePreview.tsx` — Overview page. `grouped` useMemo gains a `waterChem` array; render order Grains → Hops → Yeast → Water Chemistry → Misc; each `length > 0` gated.
+- `Desktop.tsx` `SingleRecipePreview` — BeerXML import preview. Same split pattern applied.
+
+**BrewDayTab does NOT render misc** — its only `ingredients` references are calc inputs, not list rendering. Confirmed by grep. Other recipe sub-tabs (Ferm, Packaging, Water, History, Analysis, Checklist, Tax) also don't list misc as a UI block.
+
+**Pre-existing bug flagged but not fixed.** `LIB_FIELDS.misc` (6 fields) and `LIB_HEADERS.misc` (5 headers) length mismatch — same shape as the malt-column-shift bug fixed 9 May. Out of scope this round; deferred.
+
+---
+
+## Water-chem filter precedence — architectural change
+
+**Symptom.** False positives like "Kaffir Lime" set to `use='Boil'` were being classified as water-chemistry — the regex matched "lime", and the OR condition didn't care about the explicit `use`. These items were silently excluded from tax misc totals AND grouped under WATER CHEMISTRY in the display.
+
+**Old logic (matches HTML reference):** `isWaterChem(ing) = use === 'water chemistry' OR WATER_CHEM_KW.test(name)`. Either condition wins.
+
+**New logic (React diverges):** explicit `use` field is decisive when set; regex is fallback for legacy entries with no use selected.
+
+```ts
+const use = (ing.use || '').trim().toLowerCase();
+if (use === 'water chemistry') return true;       // (1) explicit yes
+if (use !== '')                return false;       // (2) explicit other use wins over regex
+return WATER_CHEM_KW.test(ing.name || '');         // (3) no use → fall through
+```
+
+The regex itself is unchanged. Only the combining logic.
+
+**Scope.** All six `isWaterChem` callsites inherit automatically (display split: 3 sites; tax engine via `iterTaxIngredients`: `lib/tax.ts`, `lib/nta.ts`, generator itself). No callsite edits.
+
+**snap_* unaffected.** Verified `recordToTaxMaster` (`store/index.ts:1363`) → `buildSnapshot(coldSide, prev)` (`lib/tax.ts:416`) reads exclusively from `ColdSideData` and the existing `TaxRecord` — does not call `isWaterChem` or `iterTaxIngredients`. Already-filed tax records preserve their captured `malt`/`wheat`/`oats`/`other` values. Only **live** recompute and **displays** shift for affected recipes.
+
+**Behavior diff (live values only):**
+
+| Item | Before | After |
+|---|---|---|
+| `'Kaffir Lime'`, `use='Boil'` | water-chem (excluded) | NOT water-chem (counted in tax misc) |
+| `'Calcium Chloride'`, `use=''` | water-chem | water-chem (regex fallback, unchanged) |
+| `'Calcium Chloride'`, `use='Mash'` | water-chem (regex still wins) | NOT water-chem (explicit Mash wins) |
+| `'Calcium Chloride'`, `use='Water Chemistry'` | water-chem | water-chem (unchanged) |
+| `'Whirlfloc'`, `use='Boil'` | NOT water-chem | NOT water-chem (unchanged) |
+
+**CLAUDE.md updated.** "Water Chemistry — Tax Exclusion Rules" section reworked to distinguish HTML reference (still both-filters-together) from React (explicit-use precedence). Includes a "Why diverged" paragraph citing Kaffir Lime, plus a `snap_*` unaffected note. Architectural decision → CLAUDE.md change is per project convention.
+
+---
+
+## Recipe Overview title swap
+
+The Overview page (`RecipePreview.tsx`) was rendering `recipe.name` (tax identifier 仕込記号) in the large display slot and `recipe.beerName` (brand name) as the small subhead. Per CLAUDE.md "Beer Name vs Recipe Name" — beerName is the brand, name is the internal tax identifier. The brand should be the visually dominant title.
+
+**Fix:**
+```jsx
+<div className="rp-name">{recipe.beerName || recipe.name}</div>
+{recipe.beerName && recipe.name && <div className="rp-beer-name">{recipe.name}</div>}
+```
+
+Falls back to `name` in the large slot when beerName is empty (with subhead hidden so it doesn't repeat the same value). CSS class names (`.rp-name`, `.rp-beer-name`) kept for diff minimality — `.rp-name` now renders beerName when present, which is semantically backward but functionally fine. Deferred renaming to the typography pass.
+
+---
+
+## Sidebar popover card — replaces sidebar-click navigation
+
+A short-lived "navigate to Recipes/Overview on sidebar click" change was applied earlier this session, then reverted in favor of a floating popover.
+
+**v1 (reverted).** `setPreview` wrapper added `setActiveTab('recipes')` + `setSidebarTab('overview')` on recipe single-click so the user could click any recipe from any tab and land on its Overview view. Worked but felt like a navigation steal — clicking a recipe in the sidebar from Brew Day tab would yank the user away.
+
+**v2 (current).** Floating preview card overlays the current tab. Single-click → popover; double-click → permanent tab; "Open Recipe →" → close popover + open as tab. Dismissal: outside-click, Escape, re-click same row (toggle), click another recipe (replace).
+
+- New file `RecipePreviewPopover.tsx` — thin floating-positioned wrapper around the existing `<RecipePreview>`, reuses everything (title swap, stats, ingredient lists with Water Chemistry / Misc split, "Open Recipe →" CTA). Fixed position, 660 px wide, anchored at sidebar's right edge + 12 measured at open time via `getBoundingClientRect`.
+- New state `popoverRecipeId` + `popoverPos` in `Desktop.tsx`. `useLayoutEffect` measures the sidebar's `[data-recipe-sidebar]` element on open. Outside-mousedown + Escape close handlers, deferred attach (matches existing recipeCtxMenu pattern), sidebar exempt from outside-close (the wrapper handles toggle/replace explicitly).
+- `setPreview` wrapper in Desktop.tsx: recipe single-click → toggle popover; folder click → close popover + update `preview` (folder-preview pane on Recipes tab still works).
+- `FolderTree` gains optional `popoverId` prop; row's "selected" visual ORs `(preview-match) || (popoverId-match)` so the open popover's target row stays highlighted.
+- Both rendered sidebar instances (Recipes tab + Ingredients sub-tab) inherit automatically since they share `renderRecipeBrowserSidebar`'s closure.
+
+---
+
+## Recipe Edit page (Ingredients sub-tab) — alignment polish
+
+A long iteration on layout, with three meta-bar centering flips before settling.
+
+### Pass 1 — initial layout adjustments
+
+- Title centered (with metadata clustered next to or below).
+- Top metric strip gap 40 → 16.
+- Bottom row: `2fr 1fr 1fr 1fr` (Style ~40 %); `gap: 24`; `rowStyle` switched to `space-between` for label-left / value-right inside Totals/Process/Measured.
+- StyleSummaryPanel: dropped the "STYLE" header, dropdown promoted to top with ⊞ inline.
+- Ingredient row density: minHeight 32 → 26, padding `'4px 8px'` → `'2px 8px'`.
+
+### Pass 2 — tighter
+
+- Title centered (kept).
+- Top metric strip gap 16 → 8.
+- Ingredient rows minHeight 26 → 22, padding 2px → 1px.
+- Bottom row gap 24 → 32; columns `1.5fr 1fr 1fr 1fr` (Style narrower).
+
+### Pass 3 — first revert (ill-advised, then un-reverted)
+
+User asked to revert title centering; I dropped the centered cluster, restored left-title / right-pills layout. User then realized centering was actually the desired state — restored centering wrapper + abs-positioned glass + `justifyContent: 'center'`.
+
+### Pass 4 — horizontal layout, rightward shift, narrower amount→name gap
+
+- Cards container `padding: '12px 16px'` → `'12px 16px 12px 64px'` — extra left padding shifts ingredient block rightward.
+- Amount cell gains `textAlign: 'right'` so "200 kg" sits flush against the name (~40 px of internal cell whitespace eliminated; row gap stays at 12).
+
+### Pass 5 — final left/right edge alignment
+
+The user marked up a screenshot showing one shared left edge for: title / subtitle / sub-tabs row / metric strip labels / section headers / amount column. Plus right-edge constraints: beer glass aligns with Checklist tab (last); ingredient data block aligns with Brew History tab (second-to-last).
+
+- **Meta-bar centering reverted again** (third flip). Title flush left, pills right via `marginLeft: 'auto'`, glass inline at end of pills (no abs-positioned wrapper). On Ingredients sub-tab, `paddingLeft: 236` + `paddingRight: 20` overrides — 236 = sidebar (220) + content padding (16); 20 matches the glass's right margin. Other recipe sub-tabs (Brew Day / Ferm / etc.) use the default 20 px from CSS class.
+- **Sub-tabs row** — `justifyContent: 'flex-start'`, `paddingLeft: 236` on Ingredients, `paddingRight: 20`. Each `.sub-tab` div gains inline `flex: 1, justifyContent: 'center'` so the 10 tabs share the row width equally. Side effect: tabs stretch on every recipe sub-tab, not just Ingredients (visually consistent, no harm).
+- **Top metric strip** — `topStripInnerStyle.justifyContent` `'center'` → `'flex-start'`, dropped `margin: '0 auto'`, kept `padding: '10px 16px'`.
+- **Cards container** — `table-wrap` `justifyContent` `'center'` → `'flex-start'`; padding `'12px 10% 12px 16px'` (16 left to align with metric strip; 10 % right ≈ one tab-column short of the row's right edge ≈ Brew History tab).
+
+### Pass 6 — MEASURED panel removed
+
+**Safety check passed.** `measOg` and `postboilL` are inputs on `BrewDayTab.tsx:475, 486`. `AnalysisTab.tsx:120-126` recomputes the derived efficiency from those source fields. The MEASURED panel here was a redundant read-only display; nothing's lost. Total cost (the only field without another dedicated display) is implicit in each ingredient row's cost column.
+
+**Removed:** `<MeasuredPanel>` JSX from bottom row; orphan `MeasuredPanel` function; `bdBlob` / `measOgPlato` / `postboilL` / `measEffPct` derivations (~30 lines of localStorage reads + `useMemo` chains); unused `platoToSg` and `calcActualEfficiency` imports.
+
+**Bottom row** — `gridTemplateColumns: '1.5fr 1fr 1fr 1fr'` → `'1.5fr 1fr 1fr'` (Style still widest at ~43 %); padding `'10px 12px 12px'` → `'10px 10% 12px 16px'` matching cards container's edges; 32 px gap preserved.
+
+**Net visual result.** All six elements share x = 236 (sidebar 220 + 16 content padding). Beer glass and Checklist tab end at the same right edge (both at `paddingRight: 20`). Cards data block and Brew History tab end approximately at 90 % of row width.
+
+**Caveats.** The right-edge "Brew History ↔ data block" alignment is approximate, not pixel-perfect — depends on ActionStack width relative to leftCol. Sub-tabs' `flex: 1` applies on every recipe sub-tab, not just Ingredients. Total cost has no dedicated display anywhere now (cost column on individual rows still works via column-visibility menu).
+
+---
+
+## Carried forward to next session
+
+- Verify all in-flight CC work landed cleanly (sidebar popover, recipe edit final alignment + MEASURED removal) by eyeballing live.
+- `LIB_FIELDS.misc` / `LIB_HEADERS.misc` length mismatch — pre-existing, deferred.
+- Numeric formatting + typography passes — explicitly deferred end-of-port polish.
+- File menu's other 9 placeholder items.
+
+---
+
 # SESSION_LOG entry — 2026-05-09 (evening) — PWA polish, Recipe tab redesign, BSMX audit, Mash + Library fixes
 
 PWA polish, Recipe tab redesign across 4 passes, BSMX audit, Brew Day MASH bug fix, library price column fix. Six code commits + audit-only investigation.
@@ -625,3 +1126,19 @@ Reasoning: Ben's actual workflow is to keep recipes he brewed (no automated arch
 Kept: schema migration (column renamed, stays NULL), broader snapshot-then-undo pattern, dangling-ref handling in TaxMasterPage and HarvestedYeastView, BrewDayTab/PackagingTab dirtyRef guards.
 
 Removed: archiveRecipe / restoreRecipe actions, hasCommittedData predicate, Archive UI surfaces, Archive-specific badges.
+
+---
+
+## 10 May 2026 — Long polishing session
+
+Profile locking architecture (Equipment + Mash + Pitch via shared computeLockedProfileIds helper, lock trigger = measOg > 0, value-fields-lock-metadata-editable rule). Triggered by a snapshot-vs-reference grep of brew_day that revealed live re-resolution of equipment profiles on every render — tax-safe but historical-display retroactivity issue. Water profile locking deferred indefinitely (different architecture).
+
+File menu wiring brought down from 9 placeholders to 1: Export Recipe (BeerXML), Export All Data (backup, denylist-based, versioned format), Import Backup (two-stage modal, credential-scrub-on-restore for sync safety) all shipped. Save as New Version / Version… / Lock Recipe / Export for Sharing all deleted from menu. Export Selected remains as the last placeholder.
+
+Templates "From Template" BJCP filter shipped (NewRecipeModal dropdown + free-text search, only styles actually present).
+
+BEER_BUFFER_PH_PER_MEQ_L moved from hardcoded constant in calculations.ts into Settings → Advanced → Calculation Constants. SAFE_PRE_BOIL_PH_FLOOR confirmed already removed (floor-cap concept gone).
+
+Yeast harvest "From Brew" picker bug fixed — post-2026-05-07-migration cleanup. formatPair helper hoisted to lib/yeastDisplay.ts. SCHEMA.md updated.
+
+Cleanups: stale TODOs at AddIngredientModal.tsx:89 + BrewDayTab.tsx:11 removed; GitHub appeal-optional doc references scrubbed (account suspended permanently, not appealing); START_HERE Brew Day card flatten + 15.8L offset references removed (both done in prior sessions).

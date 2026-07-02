@@ -25,6 +25,7 @@
 import { useState, type ReactElement } from 'react';
 import { useStore } from '../../store';
 import { fmtAmt } from '../../lib/utils';
+import { fmtNum } from '../../lib/format';
 import type { Ingredient, IngredientType } from '../../types';
 
 type RecipeSectionType = 'grain' | 'hop' | 'yeast' | 'misc';
@@ -274,10 +275,10 @@ function IngredientRow({
     use: <span style={cellDetailStyle}>{ing.use || '—'}</span>,
     time: <span style={cellDetailStyle}>{ing.time ? `${ing.time}m` : '—'}</span>,
     ibu: ibu != null && ibu > 0
-      ? <span style={cellIbuStyle}>{ibu.toFixed(1)}</span>
+      ? <span style={cellIbuStyle}>{fmtNum(ibu, { dp: 1 })}</span>
       : <span style={cellMutedStyle}>—</span>,
     pct: pct != null && pct > 0
-      ? <span style={cellMutedStyle}>{pct.toFixed(1)}%</span>
+      ? <span style={cellMutedStyle}>{fmtNum(pct, { dp: 1, suffix: '%' })}</span>
       : <span style={cellMutedStyle}>—</span>,
     aa: ing.extra
       ? <span style={cellDetailStyle}>{ing.extra}%</span>
@@ -423,8 +424,8 @@ const rowStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 12,
-  minHeight: 32,
-  padding: '4px 8px',
+  minHeight: 22,
+  padding: '1px 8px',
   cursor: 'pointer',
   borderLeft: '2px solid transparent',
   borderBottom: '1px solid rgba(255,255,255,0.03)',
@@ -436,8 +437,11 @@ const rowSelectedStyle: React.CSSProperties = {
 };
 
 // Per-column wrapper widths for the flex row. Name flexes to fill.
+// Amount is right-aligned so the value sits flush against the name —
+// matches BeerSmith's spreadsheet pattern and unifies it with the
+// right-aligned data columns below.
 const cellWrapperStyles: Record<string, React.CSSProperties> = {
-  amount: { width: 90,  flexShrink: 0 },
+  amount: { width: 90,  flexShrink: 0, textAlign: 'right' },
   name:   { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   use:    { width: 100, flexShrink: 0, textAlign: 'right' },
   time:   { width: 44,  flexShrink: 0, textAlign: 'right' },

@@ -74,7 +74,10 @@ export default function YearlyModal({ onClose }: Props) {
     }
     const win = window.open('', '_blank', 'width=900,height=700');
     if (!win) {
-      alert('Popup blocked. Allow popups for this site to print the yearly schedule.');
+      pushToast({
+        message: 'Popup blocked. Allow popups for this site to print the yearly schedule.',
+        variant: 'error',
+      });
       return;
     }
     win.document.write(`<!DOCTYPE html><html><head><title>Production Schedule — ${year}</title>

@@ -58,3 +58,7 @@ coverage/
 *.bak
 *.orig
 *.tmp
+
+# ── Local fixtures / test backups (do not commit) ──────────────────────
+fake-*.json
+brewlab-backup-*.json

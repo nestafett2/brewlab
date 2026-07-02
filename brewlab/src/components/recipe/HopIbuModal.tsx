@@ -15,6 +15,7 @@
 
 import { useState, useMemo } from 'react';
 import { calcHopIbuPerGram } from '../../lib/calculations';
+import { fmtNum } from '../../lib/format';
 import type { Ingredient, IbuMethod } from '../../types';
 
 interface Props {
@@ -50,7 +51,7 @@ function ingToGrams(i: Ingredient): number {
 function buildLabel(ing: Ingredient): string {
   const aa = parseFloat(ing.extra || '0') || 0;
   const time = ing.time != null ? ing.time : 0;
-  return `${ing.name} [${aa.toFixed(1)}%] — ${ing.use}${time ? ` ${time} min` : ''}`;
+  return `${ing.name} [${fmtNum(aa, { dp: 1, suffix: '%' })}] — ${ing.use}${time ? ` ${time} min` : ''}`;
 }
 
 export default function HopIbuModal({
@@ -165,7 +166,7 @@ export default function HopIbuModal({
           {/* Total */}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
             <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-muted)' }}>TOTAL</span>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600, color: 'var(--green)' }}>{totalIbu.toFixed(1)} IBU</span>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600, color: 'var(--green)' }}>{fmtNum(totalIbu, { dp: 1, suffix: ' IBU' })}</span>
           </div>
         </div>
         <div className="modal-footer">

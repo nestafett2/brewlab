@@ -1,6 +1,6 @@
 # BrewLab — START HERE
 
-**Last session: 9 May 2026 (long day — morning: live deploy; evening: Recipe tab redesign + bug fixes)**
+**Last session: 12 May 2026 (print artifacts pass — Monthly Report fix + Prep Sheet + Brew Day Sheet + recipe metadata fields)**
 **Read this first. Everything else is reference.**
 
 ---
@@ -59,80 +59,83 @@ All major page ports complete. Sync layer rebuild complete.
 
 ---
 
-## What Got Done Last Session (9 May 2026)
+## What Got Done Last Session (12 May 2026)
 
-Long day, two distinct chunks: morning got BrewLab onto a live URL; evening was UI polish + bug fixing.
+Substantial session. Three new print artifacts shipped, the Monthly Packaging Report print path fixed in place, two new recipe schema fields added with full Supabase round-trip. All 10 HTML print functions are now confirmed ported.
 
-### Morning — live deploy
+**Print port verification.** Started with concern that HTML print functions (`printTaxRecord`, `printMonthlyReport`, etc.) might be unported. Function-name grep was misleading — the porter restructured features (Monthly Report became a sub-tab of Tax Master). Follow-up grep on the calculation fingerprint (`fvBtWaste`, `totalWastePkg`, `kegWaste`, `flowmeterWaste` used together) found everything ported. Lesson logged for future "is feature X ported?" investigations: grep for the calc fingerprint, not the function name.
 
-- **GitHub migration to `nestafett2/brewlab`** (personal account; `nomodachi` work account still suspended, appeal optional).
-- **Vercel deploy** — live at https://brewlab-red.vercel.app, auto-redeploys on every push to `main`. One-line gotcha: `vite.config.ts` `base` was `/brewlab/` (GitHub Pages subpath) → changed to `/` for Vercel root.
-- **Supabase configured live** via Settings → Connection. Per-user creds in-app, NOT Vercel env vars — preserves the shareable single-brewery-per-DB model.
-- **OneDrive risk dismissed** — path looks like OneDrive but Backup is OFF for Desktop. Verified twice; do not re-raise.
-- **`.github/workflows/deploy-pages.yml` removed** — Pages no longer the host.
+**Monthly Packaging Report print fix.** `TaxMasterPage.tsx`'s `printSubTab` was special-casing nothing — the Total sub-tab dumped a flat 24-column table instead of the HTML reference's per-month block layout (table + sidebar per month, page-break-inside:avoid, UNSCHEDULED section, date range in title). Fixed by adding a dedicated `printMonthlyReport` branch in `handlePrint` dispatch and narrowing `printSubTab`'s signature to `'brew' | 'cond'`. Extracted shared `groupRowsByMonth()` to module scope so on-screen `TotalSubTab` (via `useMemo`) and the print builder agree on grouping by construction. Sidebar metrics computed locally — on-screen `MonthSummaryCard` splits Beer/Happoshu by COUNT (units of kegs/cans), the HTML print sidebar splits by LITRES. Same source fields, different aggregations. "UNSCHEDULED" renamed to "NO PACKAGE DATE" everywhere (Ben's choice — more specific). Added per-block auto-suppress yellow Happoshu row highlight in print only (`#FFF8C4`, `print-color-adjust: exact` for Chrome PDF without "background graphics" toggle). The all-Happoshu edge case encoded as auto-suppress rather than an explicit toggle. A3 landscape kept; A4 question parked until Ben sees real output.
 
-### Evening — PWA polish, Recipe tab redesign, bug fixes
+**Fake-data fixture for testing.** New `fake-monthly-report-data.json` (17 KB) at project root + reproducible generator at `brewlab/scripts/gen-fake-monthly-report-data.mjs`. Eight brews #432–439 with Japanese craft names spanning Feb/Mar/Apr 2026, 6 Beer + 2 Happoshu (one in each packaged month so sidebar split is testable), 2 unscheduled (both Beer). Mixed 350/500 ml cans. One intentional outlier brew (Goro Pilsner 5.4% FV→BT loss) for the high-waste rendering path. `.gitignore` updated for `fake-*.json` and `brewlab-backup-*.json`. Imported via Settings → Import Backup; round-trip verified.
 
-**iPad PWA polish.** Status bar was overlaying the BREWLAB top nav in standalone mode. Added `padding: env(safe-area-inset-*)` on `#root` (top/L/R only — dropped bottom after content shifted up leaving a home-indicator gap). Cleaned up `/brewlab/` subpath leftovers in `index.html`, `main.tsx`, `manifest.json`, and `sw.js`. `theme_color` updated from blue (`#0a84ff`) to dark gray (`#2c2c2e`) to match the actual top nav (`var(--panel)`).
+**Prep Sheet print — new feature.** `src/components/recipe/prepSheetPrint.ts`. A4 portrait, 10 mm margins, 12 px body / 11 px labels / 18 px header. Designed across 5 mockup iterations. Five sections: header + targets stripe (OG/FG/ABV/IBU/SRM chips) → fermentables (MILL FIRST — first physical task on prep day) → water (strike/mash/sparge grid + minerals + salt additions inline) → hops & boil → yeast (single inline row — Ben specifically didn't want the full pitch math chain) → extra additions (free-text, suppressed entirely when empty — no ghost header). Soft amber/cream target chips (`#FFF4D9`, `print-color-adjust: exact`). No row dividers in tables, header underline only. Yeast section uses honest harvested display ("10 L harvested (short 27% — supplement w/ fresh)" in amber-red if short, "sufficient" muted green if not) — doesn't fabricate a top-up amount. Whirlpool section dropped (Ben's call — belongs on brew day sheet, not prep). Button: Recipe tab TOOLS group, after "Add to Planner".
 
-**Recipe tab redesign — 4 passes.**
-- **Pass 1** (`fbcd9c6`): top metric strip (BATCH/GRAIN/HOPS/IBU/ABV) replacing the 6 process pills; new PROCESS panel in the bottom row; TOTALS picks up DH G/L + WP G/L (new `calcDryHopGperL` / `calcWhirlpoolGperL` helpers).
-- **Pass 2** (`5202f53`): dense ingredient list — `IngredientCard.tsx` rewritten as flat sections (no card chrome, no header column row); right-click section header opens a column-visibility menu (mirrors inventory's pattern, persists per-section to `bl_recipe_cols_<type>`, local-only); misc gets extra top gap.
-- **Pass 3** (`75a3b10`): visual unification — bottom 4 panels lose backgrounds/borders/radius; panel headers go from amber Bebas to muted gray small-caps (matching ingredient section labels); meta-bar pills flatten; sidebars unified to main bg; orphan `.ing-card*` CSS deleted.
-- **Pass 4** (`b09724e`): polish — bottom panel rows cluster label+value on the left with whitespace right; ingredient amounts unbolded; top metrics center-grouped (40 px gap, dropped maxWidth); DryHopModal font sizes +2 across the board.
+**Brew Day Sheet print — new feature.** `src/components/recipe/brewDaySheetPrint.ts`. Same A4 shape as prep sheet but with " · brew day" suffix on the beer-name H1 and IBU/SRM dropped from targets row (irrelevant mid-brew). Designed by following Ben's existing Excel-sheet-2 layout, converted to chronological brew order. Six sections: mash (with 4×6 measurement grid — 5 unlabeled cols + 1 Pre-trans) → lauter & sparge (8-step flowmeter tracker matching Ben's Excel verbatim: start sparge / finish sparge / after underlet / after grain rinse / sparge amount / extra used / need sparge / finish #) → boil & whirlpool → knockout & pitch → efficiency → notes. Two distinct blank styles, deliberately: inline underlines for short fields, bordered empty cells for grid handwriting. Notes box has feint horizontal rules via CSS `repeating-linear-gradient` so handwriting tracks straight. Single-column layout (column packing fights handwriting density). Button: Brew Day tab bottom action strip, next to "📝 Record Usage". Disabled when targets haven't computed.
 
-**BSMX audit.** Reference test file: `hop1.bsmx` (Wakatu hop, `F_H_PRICE = 141.7476156`). Audited React `importBSMX` against HTML reference (lines 17058–17220). All three suspected areas — price conversion (× 35.274 ¥/oz → ¥/kg), notes preservation, core fields — match HTML verbatim. **No bugs in the importer.**
+**Two new recipe schema fields.** `extraAdditions` (free-text additions field — Ben chose this over a structured cellar-additions schema) and `brewer` (per-recipe brewer name — Ben chose per-recipe over per-brew-day for current scale; per-brew-day would be more flexible if multiple brewers ever brew the same recipe). Two SQL migrations applied today (`text NOT NULL DEFAULT ''`). Both fields seeded in all four recipe-creation paths (`createRecipeFromTemplate`, BeerXML import, blank-recipe path; `createNewVersion` + `duplicateRecipe` inherit via spread). Initially shipped with the safe asymmetric read-but-don't-write pattern (read with empty-string fallback, omit from `recipeToRow` to avoid PGRST204); after Ben confirmed the SQL was applied, flipped to full read+write — both fields now round-trip across devices. UI: Brewer single-line input in a slim header row at the top of the Recipe tab; Extra additions textarea between ingredient cards and bottom panel. Both prints fall back: `recipe.brewer || settings.breweryName || "—"`.
 
-**Brew Day MASH panel divergence fix** (`3863570`). Symptom: bob2 recipe (250 kg grain) showed Mash Water = 1320 L (total) instead of 750 L (mash only); Sparge = 0 instead of ~570; Strike = 71.7°C instead of 74.6°C. Root cause: `MashProfileModal` initializes from a hard-coded in-memory `DEFAULT_PROFILE` (`{ ratio: 3.0, steps: [...] }`) but only persists to `bl_mash_<recipeId>` on Save click. `BrewDayTab` reads `bl_mash_<recipeId>` directly, gets null, passes null to `calcBrewDayTargets`, which falls back to the water-balance ratio formula `(preBoilVolL + grainAbsorbTotL) / totalGrainKg` ≈ 5.28 L/kg. Fix: extracted `DEFAULT_MASH_PROFILE` to `lib/calculations.ts`; `BrewDayTab` applies the same fallback when localStorage is null. Both views now compute against the same baseline before the user explicitly saves.
-
-**Library price display fix** (`fe4766f`). Two bugs surfaced after the BSMX audit confirmed the importer was correct.
-- **Issue A — malt price empty for imported entries.** `LIB_FIELDS.malts` had 9 entries (`name, maltster, supplier, malt_type, malted, tariff, ebc, price, notes`) but `LIB_HEADERS.malts` had 7 columns. The two are zipped positionally at render time, so `malted`/`tariff` shifted every column from EBC onward — the visual "Price ¥/kg" column was actually rendering the `tariff` boolean (always empty for imports). Fix: removed `malted` and `tariff` from `LIB_FIELDS.malts` (still in modal as checkboxes via `LIB_FIELD_DEFS`). Existing imported data was correct in Supabase; just being read from the wrong field name.
-- **Issue B — yeast library missing price column.** Added Price ¥/pkg to `LIB_HEADERS.yeast` + `LIB_FIELDS.yeast`, plus a price field to `LIB_FIELD_DEFS.yeast` so the Add/Edit modal can edit it.
+**Ferm/pitch temp field-source bug.** Initial brew day sheet derived ferm temp from yeast-library `temp_min`/`temp_max` midpoint — wrong for Ben's recipes (e.g. Minatoyama Lager has 18 °C planned ferm temp, W-34/70 midpoint ~13.5 °C). Ben corrected: `BrewDayData.fermTemp` and `pitchTemp` are PLANNED targets, not recorded measurements as Claude Code had assumed from the field names. Fix: rewired `brewDaySheetPrint.ts` to read `brewDay.fermTemp` / `brewDay.pitchTemp` as the primary source, with yeast-lib derivation as fallback. Verified `prepSheetPrint.ts` was already doing this for pitch temp — only the variable name + comment misframed it as "input/actual"; renamed + comment updated. Lesson logged: don't assume a field's name implies its semantic; grep the field first.
 
 ---
 
 ## What's Still Broken / Pending
 
-### Infrastructure
+### End-of-port polish (do together)
+- Typography pass (with click-any-text-to-find-token dev tool idea — defer until all tabs are visible together).
 
-- **GitHub work account appeal (low priority).** Code is safely on the `nestafett2` personal account. The suspended `nomodachi` work account can be appealed if/when convenient — not blocking anything.
+### Feature gaps
+- File menu: 1 placeholder left — Export Selected (context-aware multi-select: recipes / malts / hops / etc. depending on current view; needs design discussion).
 
-### Recipe + Brew Day follow-ups
+### Calibration
+- BEER_BUFFER_PH_PER_MEQ_L (now editable in Settings → Advanced → Calculation Constants, default 0.04) is a rough estimate. Recalibrate against measured datapoints once production brewing produces real data. Lower priority.
 
-- **Brew Day tab card chrome.** Visual unification pass only touched the Recipe tab — Brew Day's MASH / BOIL / PITCH & OXYGEN panels still have card backgrounds + borders. Apply the same flatten treatment.
-- **WaterTab passes `mashProfile: null`** to `calcBrewDayTargets`. Same divergence as the Brew Day MASH bug; may be intentional for ion-blending math (water-balance ratio is what mash-pH calc actually wants there). Investigate before applying the same fallback.
-- **`BrewDayTab.mashProfile` `useMemo([recipeId])` stale dep.** Doesn't refetch when the modal saves while Brew Day is mounted. Likely masked by tab unmount/remount; real edge case.
-- **Top metric strip spacing.** Still feels off per user — minor follow-up.
+### Smoke tests pending (browser, no CC needed)
+- Numeric formatting (integer batch sizes, 1 dp ABV everywhere).
+- Toast/undo retrofit (recipe delete confirms still gate, MashProfileModal Reset restores form, WaterTab Clear, FermTab log row delete).
+- Beer Buffer Capacity input renders in Settings → Advanced + Ferm tab residual-acid responds when changing the value.
+- Equipment + Mash + Pitch profile locking (🔒 + Clone & Edit + disabled fields on profiles attached to recipes with measOg saved).
+- Templates BJCP filter (dropdown + search in New Recipe → From Template).
+- BeerXML round-trip (export a recipe, re-import the file, confirm equivalent).
+- Backup round-trip (export, import, reconnect Supabase from Settings → Connection, verify state preserved).
+- Yeast harvest picker (formatted pair "384 — Hazy IPA" displays in Add/Edit Ingredient).
+- **Prep Sheet print** — all sections render, target chips visible, "—" fallbacks appear, Extra Additions section suppressed on empty.
+- **Brew Day Sheet print** — ferm/pitch temps sourced from `brewDay.fermTemp` / `brewDay.pitchTemp` correctly (not yeast-lib midpoint), 8-step sparge tracker complete, 4×6 mash measurement grid renders.
+- **Brewer field cross-device sync** — set on desktop, verify it appears on tablet/mobile after pull.
+- **Extra additions field cross-device sync** — same as above.
+- **Monthly Report print** — NO PACKAGE DATE label appears, Happoshu highlight visible in mixed Feb/Mar blocks, suppressed in all-Happoshu blocks.
 
-### End-of-port queue (priority-ish order)
-- **15.8L volume offset** in Brew Day calcs (data quality bug — investigate before brewing real batches)
-- **BSMX recipe import** — selective hand-pick from user's 632-recipe BeerSmith export (not bulk)
-- **Style Guide setting** — decide function or remove (5 min)
-- **Beer style guideline import** flow (BJCP 2025) into Style Guide modal
-- **Broader undo coverage** — current undo doesn't restore the 7 per-recipe blobs (ferm_log, brew_day, cold_side, water_chem, etc.).
+### Print follow-ups (from 12 May session)
+- **Monthly Report A3 vs A4** — A3 landscape currently; revisit page-size choice once Ben prints a real one with production data.
+- **Fixture brews showing "(recipe deleted)"** — `bl_recipes` stubs in `fake-monthly-report-data.json` don't fully populate `decorateBeerName`'s identity check. Cosmetic-only on the fixture; real data unaffected. Low priority.
+- **Internal naming residue** in `printMonthlyReport` — variable `unscheduledRows` and CSS class `.unscheduled-label` still say "unscheduled" even though every user-visible string changed to "NO PACKAGE DATE". Code-internal only.
 
-### Deferred
-- **Brewhouses-as-tankCalib** — when 2nd brewhouse arrives
-- **Google Sheets sync** — one-way (BrewLab → Sheets, read-only)
-- **Teiban / Gentei / One-off classification** — deferred from today
-- **HTML/React label divergence** — cosmetic
-- **Optional add_malted_column.sql migration**
-- **Typography pass** — last
+### Brew-floor print sheets remaining
+- **Sheet 3** — Ferm + Packaging combined daily log. Design + impl pending. Next print artifact after current ones are smoke-tested.
+- **Sheet 4** — Brew Day filled (auto-archive). Discussed; may not be needed since blank + typed-back data covers it. Revisit after Ben uses the blank sheet in production.
+- **"Print Full Brew Packet"** button — stringing the sheets together. Eventually, after the individual sheets stabilise.
+
+### Layout bugs
+- Inventory screen too wide (needs investigation — flagged for next session).
+
+### Deferred (post-launch / conditional)
+- BJCP 2025 style guideline import (gated on JBA/BJCP releasing the spec).
+- Google Sheets sync (one-way).
+- Teiban / Gentei / One-off classification.
+- HTML/React label divergence.
 
 ### Future products (post-launch)
-- AI-powered recipe analysis tool
-- Sales team upcoming-brews app
-- Can count reporting tool
+- AI-powered recipe analysis tool (claude.ai not API).
+- Sales team upcoming-brews app.
+- Can count reporting tool.
 
 ---
 
 ## Next Session Focus
 
-- **Brew Day card chrome flatten pass** — extends Recipe tab unification to Brew Day's MASH / BOIL / PITCH & OXYGEN panels.
-- **BSMX recipe import (selective)** — user has a 632-recipe BeerSmith export; wants hand-picked imports rather than bulk dump. Build a recipe-picker modal on top of the existing `importBSMX` infrastructure (already handles grain/hop/yeast/misc lib entries; recipe path is new).
-- **Eyeball the new recipe layout** in normal workflow (carryover from 7 May).
-- **Optional: calc-drift sanity check** from the 7 May TS fix — `calcOG` / `calcEBC` / `grainDiPh` correctly parse string-typed legacy library numerics. Spot-check imported recipes; not urgent.
-- **15.8L volume offset** — only if you want a self-contained data-quality task.
+1. **Test the new prints in the live app + cross-device sync.** Top priority before more code lands. Prep Sheet, Brew Day Sheet, fixed Monthly Report — plus brewer / extra additions field round-trip across desktop/tablet/mobile. The print smoke tests are listed under Smoke tests pending above; running them is the highest leverage thing to do next.
+2. **If prints look good in practice: Sheet 3 design (Ferm + Packaging combined daily log).** Otherwise: fix what surfaces. Sheet 3 is the next brew-floor print artifact after the current pair.
+3. **Inventory-screen-too-wide bug.** Flagged for investigation — exact symptom unclear yet; first session task is reproduce + identify the offending layout rule.
 
 ---
 
@@ -177,7 +180,7 @@ These are Ben's hard rules. Don't violate them.
 | Service | Account | Notes |
 |---|---|---|
 | Supabase | brewing@nomodachi.com | Project ID: `inxipvdturxgeapsznxb` |
-| GitHub | nestafett2 (personal account) | Repo: `github.com/nestafett2/brewlab`. The `nomodachi` work account is suspended; appeal optional. |
+| GitHub | nestafett2 (personal account) | Repo: `github.com/nestafett2/brewlab`. |
 | Vercel | Ben's personal account | Deployed at `https://brewlab-red.vercel.app`, auto-deploys on push to `main`. |
 | Netlify | — | Abandoned. Hit free-tier bandwidth limit. Do not use. |
 

@@ -17,6 +17,7 @@ import { useStore } from '../../store';
 import type { Recipe } from '../../types';
 import { getUnifiedStyle } from '../../lib/styles';
 import { sgToPlato } from '../../lib/calculations';
+import { fmtNum } from '../../lib/format';
 import StyleGuideModal from './StyleGuideModal';
 import StylePickerDropdown from './StylePickerDropdown';
 
@@ -49,12 +50,12 @@ export default function StyleSummaryPanel({ recipe, stats }: Props) {
     return () => { clearTimeout(id); document.removeEventListener('mousedown', onDocClick); };
   }, [styleOpen]);
 
-  const ogStr  = stats.ogPlato > 0 ? `${stats.ogPlato.toFixed(1)}°P` : '—';
-  const ibuStr = stats.ibu     > 0 ? stats.ibu.toFixed(1) : '—';
-  const abvStr = stats.abv     > 0 ? `${stats.abv.toFixed(1)}%` : '—';
+  const ogStr  = stats.ogPlato > 0 ? fmtNum(stats.ogPlato, { dp: 1, suffix: '°P' }) : '—';
+  const ibuStr = stats.ibu     > 0 ? fmtNum(stats.ibu, { dp: 1 }) : '—';
+  const abvStr = stats.abv     > 0 ? fmtNum(stats.abv, { dp: 1, suffix: '%' }) : '—';
   // Color: stats.ebc canonical; convert at display time when SRM toggled.
   const colorVal = colorUnit === 'SRM' ? stats.ebc / 1.97 : stats.ebc;
-  const colorStr = colorVal > 0 ? `${colorVal.toFixed(1)} ${colorUnit}` : '—';
+  const colorStr = colorVal > 0 ? fmtNum(colorVal, { dp: 1, suffix: ` ${colorUnit}` }) : '—';
   // Marker position uses SRM internally regardless of display unit (matches
   // HTML brewlab-desktop.html:7848–7852).
   const colorSrmForBar = stats.ebc / 1.97;
@@ -63,38 +64,38 @@ export default function StyleSummaryPanel({ recipe, stats }: Props) {
 
   return (
     <div style={panelStyle}>
-      <div style={panelHeaderStyle}>
-        <span>Style</span>
-        <span
-          style={modalTriggerStyle}
-          title="Style Guide Comparison"
-          onClick={() => setStyleModalOpen(true)}
-        >⊞</span>
-      </div>
-
-      <div className="style-guide" style={{ paddingTop: 4 }}>
-        <div ref={styleWrapRef} style={{ position: 'relative', marginBottom: 10 }}>
-          <div
-            onClick={() => setStyleOpen(o => !o)}
-            style={pickerTriggerStyle}
-          >
-            <span style={pickerLabelStyle}>
-              {style ? style.name : '— select style —'}
-            </span>
-            <span style={{ color: 'var(--text-muted)', fontSize: 8, flexShrink: 0 }}>▼</span>
-          </div>
-          {styleOpen && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 300, marginTop: 2 }}>
-              <StylePickerDropdown
-                selectedKey={recipe.styleKey}
-                width={620}
-                onSelect={(key, label) => {
-                  updateRecipe(recipe.id, { styleKey: key, style: label });
-                }}
-                onClose={() => setStyleOpen(false)}
-              />
+      {/* No section header — the dropdown sits at the top, with the
+          ⊞ Style Guide trigger as a small inline button to its right. */}
+      <div className="style-guide">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+          <div ref={styleWrapRef} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+            <div
+              onClick={() => setStyleOpen(o => !o)}
+              style={pickerTriggerStyle}
+            >
+              <span style={pickerLabelStyle}>
+                {style ? style.name : '— select style —'}
+              </span>
+              <span style={{ color: 'var(--text-muted)', fontSize: 8, flexShrink: 0 }}>▼</span>
             </div>
-          )}
+            {styleOpen && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 300, marginTop: 2 }}>
+                <StylePickerDropdown
+                  selectedKey={recipe.styleKey}
+                  width={620}
+                  onSelect={(key, label) => {
+                    updateRecipe(recipe.id, { styleKey: key, style: label });
+                  }}
+                  onClose={() => setStyleOpen(false)}
+                />
+              </div>
+            )}
+          </div>
+          <span
+            style={modalTriggerStyle}
+            title="Style Guide Comparison"
+            onClick={() => setStyleModalOpen(true)}
+          >⊞</span>
         </div>
 
         <StyleRangeBar
@@ -102,7 +103,7 @@ export default function StyleSummaryPanel({ recipe, stats }: Props) {
           value={ogStr}
           range={style?.og ? [sgToPlato(style.og[0]), sgToPlato(style.og[1])] : null}
           actual={stats.ogPlato}
-          rangeText={style?.og ? `${sgToPlato(style.og[0]).toFixed(1)}–${sgToPlato(style.og[1]).toFixed(1)} P` : '—'}
+          rangeText={style?.og ? `${fmtNum(sgToPlato(style.og[0]), { dp: 1 })}–${fmtNum(sgToPlato(style.og[1]), { dp: 1, suffix: ' P' })}` : '—'}
         />
         <StyleRangeBar
           label="IBU"
@@ -121,8 +122,8 @@ export default function StyleSummaryPanel({ recipe, stats }: Props) {
           actual={colorSrmForBar}
           rangeText={style?.srm
             ? (colorUnit === 'EBC'
-                ? `${(style.srm[0] * 1.97).toFixed(1)}–${(style.srm[1] * 1.97).toFixed(1)} EBC`
-                : `${style.srm[0].toFixed(1)}–${style.srm[1].toFixed(1)} SRM`)
+                ? `${fmtNum(style.srm[0] * 1.97, { dp: 1 })}–${fmtNum(style.srm[1] * 1.97, { dp: 1, suffix: ' EBC' })}`
+                : `${fmtNum(style.srm[0], { dp: 1 })}–${fmtNum(style.srm[1], { dp: 1, suffix: ' SRM' })}`)
             : '—'}
         />
         <StyleRangeBar
@@ -130,7 +131,7 @@ export default function StyleSummaryPanel({ recipe, stats }: Props) {
           value={abvStr}
           range={style?.abv ?? null}
           actual={stats.abv}
-          rangeText={style?.abv ? `${style.abv[0].toFixed(1)}–${style.abv[1].toFixed(1)} %` : '—'}
+          rangeText={style?.abv ? `${fmtNum(style.abv[0], { dp: 1 })}–${fmtNum(style.abv[1], { dp: 1, suffix: ' %' })}` : '—'}
         />
       </div>
 
@@ -263,18 +264,6 @@ const panelStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   minWidth: 0,
-};
-
-const panelHeaderStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '0 0 6px',
-  fontSize: 11,
-  fontWeight: 700,
-  letterSpacing: '0.08em',
-  color: 'var(--text-muted)',
-  textTransform: 'uppercase' as const,
 };
 
 const modalTriggerStyle: React.CSSProperties = {

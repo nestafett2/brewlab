@@ -61,6 +61,7 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
   const ledgerData          = useStore(s => s.ledgerData);
   const setLedgerData       = useStore(s => s.setLedgerData);
   const recipes             = useStore(s => s.recipes);
+  const pushToast           = useStore(s => s.pushToast);
   const maltLib  = useStore(s => s.maltLib);
   const hopLib   = useStore(s => s.hopLib);
   const yeastLib = useStore(s => s.yeastLib);
@@ -210,7 +211,12 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
       }
     }
     onClose();
-    if (skipped.length) window.alert('Skipped (zero amount):\n' + skipped.join('\n'));
+    if (skipped.length) {
+      pushToast({
+        message: `Skipped (zero amount): ${skipped.join(', ')}`,
+        variant: 'info',
+      });
+    }
   };
 
   if (!brew) {

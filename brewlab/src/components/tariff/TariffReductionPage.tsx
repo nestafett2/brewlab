@@ -36,6 +36,7 @@ export default function TariffReductionPage() {
   const ingredientsByRecipe = useStore(s => s.ingredientsByRecipe);
   const maltLib = useStore(s => s.maltLib);
   const templates = useStore(s => s.templates);
+  const pushToast = useStore(s => s.pushToast);
 
   const cur = currentFiscalYear();
   const [year, setYear] = useState<number>(cur);
@@ -74,7 +75,10 @@ export default function TariffReductionPage() {
     } else {
       const blocks = data.neekyuu?.reportBlocks ?? [];
       if (blocks.length === 0) {
-        alert('No report blocks to export. Click ↺ Reset to NTA Template first.');
+        pushToast({
+          message: 'No report blocks to export. Click ↺ Reset to NTA Template first.',
+          variant: 'info',
+        });
         return;
       }
       exportNeekyuuXlsx({ year, breweryName, data, taxMaster, ingredientsByRecipe, maltLib });

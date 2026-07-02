@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useStore } from '../../store';
 import { fmtAmt, asNum } from '../../lib/utils';
+import { fmtNum } from '../../lib/format';
 import type { Ingredient, HopUse } from '../../types';
 import {
   calcOG, calcFG, calcABV, calcTotalIBU, calcEBC, sgToPlato,
@@ -198,13 +199,13 @@ export default function EditIngredientModal({ recipeId, ingredient, allIngredien
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', marginBottom: 10 }}>Recipe Stats</div>
             {draftStats && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                <div className="ie-stat-row"><span className="ie-stat-lbl">OG</span><span className="ie-stat-val" style={{ color: 'var(--amber)' }}>{draftStats.ogPlato > 0 ? `${draftStats.ogPlato.toFixed(2)} °P` : '—'}</span></div>
-                <div className="ie-stat-row"><span className="ie-stat-lbl">FG</span><span className="ie-stat-val">{draftStats.fgPlato > 0 ? `${draftStats.fgPlato.toFixed(2)} °P` : '—'}</span></div>
-                <div className="ie-stat-row"><span className="ie-stat-lbl">ABV</span><span className="ie-stat-val" style={{ color: 'var(--green)' }}>{draftStats.abv > 0 ? `${draftStats.abv.toFixed(1)}%` : '—'}</span></div>
-                <div className="ie-stat-row"><span className="ie-stat-lbl">IBU</span><span className="ie-stat-val">{draftStats.ibu > 0 ? draftStats.ibu.toFixed(1) : '—'}</span></div>
-                <div className="ie-stat-row"><span className="ie-stat-lbl">EBC</span><span className="ie-stat-val">{draftStats.ebc > 0 ? draftStats.ebc.toFixed(1) : '—'}</span></div>
-                <div className="ie-stat-row"><span className="ie-stat-lbl">Grain</span><span className="ie-stat-val">{draftStats.totalGrainKg > 0 ? `${draftStats.totalGrainKg.toFixed(2)} kg` : '—'}</span></div>
-                <div className="ie-stat-row" style={{ borderBottom: 'none' }}><span className="ie-stat-lbl">Hops</span><span className="ie-stat-val">{draftStats.totalHopG > 0 ? `${draftStats.totalHopG.toFixed(0)} g` : '—'}</span></div>
+                <div className="ie-stat-row"><span className="ie-stat-lbl">OG</span><span className="ie-stat-val" style={{ color: 'var(--amber)' }}>{draftStats.ogPlato > 0 ? fmtNum(draftStats.ogPlato, { dp: 2, suffix: ' °P' }) : '—'}</span></div>
+                <div className="ie-stat-row"><span className="ie-stat-lbl">FG</span><span className="ie-stat-val">{draftStats.fgPlato > 0 ? fmtNum(draftStats.fgPlato, { dp: 2, suffix: ' °P' }) : '—'}</span></div>
+                <div className="ie-stat-row"><span className="ie-stat-lbl">ABV</span><span className="ie-stat-val" style={{ color: 'var(--green)' }}>{draftStats.abv > 0 ? fmtNum(draftStats.abv, { dp: 1, suffix: '%' }) : '—'}</span></div>
+                <div className="ie-stat-row"><span className="ie-stat-lbl">IBU</span><span className="ie-stat-val">{draftStats.ibu > 0 ? fmtNum(draftStats.ibu, { dp: 1 }) : '—'}</span></div>
+                <div className="ie-stat-row"><span className="ie-stat-lbl">EBC</span><span className="ie-stat-val">{draftStats.ebc > 0 ? fmtNum(draftStats.ebc, { dp: 1 }) : '—'}</span></div>
+                <div className="ie-stat-row"><span className="ie-stat-lbl">Grain</span><span className="ie-stat-val">{draftStats.totalGrainKg > 0 ? fmtNum(draftStats.totalGrainKg, { dp: 2, suffix: ' kg' }) : '—'}</span></div>
+                <div className="ie-stat-row" style={{ borderBottom: 'none' }}><span className="ie-stat-lbl">Hops</span><span className="ie-stat-val">{draftStats.totalHopG > 0 ? fmtNum(draftStats.totalHopG, { dp: 0, suffix: ' g' }) : '—'}</span></div>
               </div>
             )}
             <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic' }}>Updates live as you edit</div>
@@ -311,7 +312,7 @@ export default function EditIngredientModal({ recipeId, ingredient, allIngredien
                     </select>
                   </div>
                   <div className="form-group" style={{ flex: 1 }}>
-                    <label>From Brew #</label>
+                    <label>From Brew</label>
                     <input type="text" value={yeastBatch} onChange={e => setYeastBatch(e.target.value)} placeholder="—" style={{ width: '100%' }} />
                   </div>
                 </div>

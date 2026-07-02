@@ -20,6 +20,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
+import { useStore } from '../../store';
 import type { Ingredient, DhSplit } from '../../types';
 
 interface Props {
@@ -32,6 +33,7 @@ interface Props {
 const SLOTS: (1 | 2 | 3)[] = [1, 2, 3];
 
 export default function DhSplitModal({ ing, onSave, onClose }: Props) {
+  const pushToast = useStore(s => s.pushToast);
   // Hop weight in grams — matches HTML line 19625.
   const totalG = useMemo(() => {
     const a = parseFloat(String(ing.amt)) || 0;
@@ -74,7 +76,10 @@ export default function DhSplitModal({ ing, onSave, onClose }: Props) {
   const handleSave = () => {
     // HTML guard at line 19659 — refuse if sum overflows total.
     if (totalG > 0 && sum > totalG + 0.01) {
-      window.alert(`Total split (${sum.toFixed(0)} g) exceeds recipe amount (${totalG.toFixed(0)} g).`);
+      pushToast({
+        message: `Total split (${sum.toFixed(0)} g) exceeds recipe amount (${totalG.toFixed(0)} g).`,
+        variant: 'error',
+      });
       return;
     }
     // Sparse output — only include slots with > 0 grams. If everything is

@@ -34,13 +34,14 @@ interface Props {
   onGrainPct: () => void;
   onHopIbu: () => void;
   onAddToPlanner: () => void;
+  onPrintPrepSheet: () => void;
 }
 
 export default function ActionStack({
   recipeId, selectedId,
   onAddIngredient, onQuickAddCarrageenan,
   onSubstitute, onDuplicate, onDelete,
-  onMashProfile, onScale, onGrainPct, onHopIbu, onAddToPlanner,
+  onMashProfile, onScale, onGrainPct, onHopIbu, onAddToPlanner, onPrintPrepSheet,
 }: Props) {
   // EDIT-group rows need an ingredient selected. Render the row with
   // muted styling + disabled cursor when nothing's picked, but keep
@@ -148,6 +149,9 @@ export default function ActionStack({
       </div>
       <div className="sidebar-btn" onClick={onAddToPlanner} title="Schedule a brew of this recipe">
         <span className="icon">📅</span>Add to Planner
+      </div>
+      <div className="sidebar-btn" onClick={onPrintPrepSheet} title="A4 brewer's prep sheet — fermentables, water, hops, yeast">
+        <span className="icon">🖨</span>Print Prep Sheet
       </div>
     </div>
   );

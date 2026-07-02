@@ -9,6 +9,8 @@
  * markup that prints correctly without runtime CSS resolution.
  */
 
+import { useStore } from '../store';
+
 interface PrintOptions {
   /** Browser window title (also the suggested PDF filename). */
   title: string;
@@ -57,7 +59,10 @@ const DEFAULT_PRINT_CSS = `
 export function printHtml(bodyHtml: string, opts: PrintOptions): Window | null {
   const w = window.open('', '_blank');
   if (!w) {
-    alert('Please allow popups to print.');
+    useStore.getState().pushToast({
+      message: 'Please allow popups to print.',
+      variant: 'error',
+    });
     return null;
   }
   const pageSize = opts.pageSize ?? 'A4';

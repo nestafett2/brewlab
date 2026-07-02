@@ -22,6 +22,7 @@ export default function StylesPanel() {
   const setSettings     = useStore(s => s.setSettings);
   const customStyles    = useStore(s => s.customStyles);
   const setCustomStyles = useStore(s => s.setCustomStyles);
+  const pushToast       = useStore(s => s.pushToast);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [modalOpen,  setModalOpen]  = useState(false);
 
@@ -69,10 +70,16 @@ export default function StylesPanel() {
             setEditingKey(null);
           }}
           onDelete={key => {
+            const before = customStyles;
+            const target = customStyles[key];
             const next = { ...customStyles };
             delete next[key];
             setCustomStyles(next);
             if (editingKey === key) setEditingKey(null);
+            pushToast({
+              message: target ? `Deleted custom style "${target.name}"` : 'Deleted custom style',
+              undo: () => setCustomStyles(before),
+            });
           }}
           onEdit={key => setEditingKey(key)}
           onClose={close}
@@ -301,7 +308,7 @@ function CustomStyleModal({
                   <button
                     className="btn sm"
                     style={{ fontSize: 8, padding: '1px 6px', color: 'var(--red)' }}
-                    onClick={() => { if (window.confirm('Delete this custom style?')) onDelete(k); }}
+                    onClick={() => onDelete(k)}
                   >✕</button>
                 </div>
               );

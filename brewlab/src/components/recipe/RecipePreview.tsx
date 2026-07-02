@@ -17,6 +17,8 @@ import { useEffect, useMemo } from 'react';
 import { useStore } from '../../store';
 import type { Recipe, Ingredient } from '../../types';
 import { fmtAmt } from '../../lib/utils';
+import { fmtNum } from '../../lib/format';
+import { isWaterChem } from '../../lib/waterChem';
 
 interface Props {
   recipe: Recipe;
@@ -45,22 +47,28 @@ export default function RecipePreview({ recipe, onOpen }: Props) {
   const ingredients = ingredientsByRecipe[recipe.id] ?? [];
 
   const grouped = useMemo(() => {
-    const grains: Ingredient[] = [];
-    const hops: Ingredient[]   = [];
-    const yeast: Ingredient[]  = [];
-    const misc: Ingredient[]   = [];
+    const grains: Ingredient[]    = [];
+    const hops: Ingredient[]      = [];
+    const yeast: Ingredient[]     = [];
+    const misc: Ingredient[]      = [];
+    const waterChem: Ingredient[] = [];
     for (const i of ingredients) {
       if      (i.type === 'grain') grains.push(i);
       else if (i.type === 'hop')   hops.push(i);
       else if (i.type === 'yeast') yeast.push(i);
-      else if (i.type === 'misc')  misc.push(i);
+      else if (i.type === 'misc') {
+        // Split misc into water-chemistry vs real misc — same filter the
+        // tax engine uses (lib/waterChem.ts) so the two views agree.
+        if (isWaterChem(i)) waterChem.push(i);
+        else misc.push(i);
+      }
       // 'water' rows intentionally omitted — water adjustments aren't
       // shown in the recipe summary; matches HTML.
     }
     const totalGrainKg = grains.reduce((s, i) => s + (i.unit === 'kg' ? i.amt : i.amt / 1000), 0);
     const totalHopG    = hops.reduce((s, i) => s + (i.unit === 'g' ? i.amt : i.amt * 1000), 0);
     const totalIBU     = hops.reduce((s, i) => s + (i.ibu || 0), 0);
-    return { grains, hops, yeast, misc, totalGrainKg, totalHopG, totalIBU };
+    return { grains, hops, yeast, misc, waterChem, totalGrainKg, totalHopG, totalIBU };
   }, [ingredients]);
 
   const headerMeta = [recipe.style, recipe.classification, recipe.brewDate]
@@ -71,8 +79,12 @@ export default function RecipePreview({ recipe, onOpen }: Props) {
       <div className="rp-header">
         <div className="rp-header-row">
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="rp-name">{recipe.name}</div>
-            {recipe.beerName && <div className="rp-beer-name">{recipe.beerName}</div>}
+            {/* Title hierarchy: brand name (beerName) is the dominant
+                title; the internal tax identifier (name / 仕込記号) is
+                the small subhead beneath. CSS classes kept for diff
+                minimality — `.rp-name` now holds beerName when present. */}
+            <div className="rp-name">{recipe.beerName || recipe.name}</div>
+            {recipe.beerName && recipe.name && <div className="rp-beer-name">{recipe.name}</div>}
             {headerMeta && <div className="rp-meta">{headerMeta}</div>}
             <div className="rp-stars">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -94,9 +106,9 @@ export default function RecipePreview({ recipe, onOpen }: Props) {
         </div>
         <div className="rp-stats">
           {recipe.batchL > 0 && <Stat label="Batch" value={`${recipe.batchL} L`} />}
-          {grouped.totalGrainKg > 0 && <Stat label="Grain" value={`${grouped.totalGrainKg.toFixed(1)} kg`} />}
-          {grouped.totalHopG > 0 && <Stat label="Hops" value={`${grouped.totalHopG.toFixed(0)} g`} />}
-          {grouped.totalIBU > 0 && <Stat label="IBU" value={grouped.totalIBU.toFixed(1)} />}
+          {grouped.totalGrainKg > 0 && <Stat label="Grain" value={fmtNum(grouped.totalGrainKg, { suffix: ' kg' })} />}
+          {grouped.totalHopG > 0 && <Stat label="Hops" value={fmtNum(grouped.totalHopG, { suffix: ' g' })} />}
+          {grouped.totalIBU > 0 && <Stat label="IBU" value={fmtNum(grouped.totalIBU)} />}
         </div>
       </div>
 
@@ -107,6 +119,7 @@ export default function RecipePreview({ recipe, onOpen }: Props) {
         {grouped.grains.length > 0 && <Section label="Grains & Fermentables" items={grouped.grains} />}
         {grouped.hops.length > 0 && <HopSection items={grouped.hops} />}
         {grouped.yeast.length > 0 && <Section label="Yeast" items={grouped.yeast} />}
+        {grouped.waterChem.length > 0 && <Section label="Water Chemistry" items={grouped.waterChem} />}
         {grouped.misc.length > 0 && <Section label="Misc" items={grouped.misc} />}
       </div>
     </div>

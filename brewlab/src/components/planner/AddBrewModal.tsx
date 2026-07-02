@@ -428,10 +428,7 @@ export default function AddBrewModal({
           {isEdit && (
             <button
               className="btn danger"
-              onClick={() => {
-                if (!window.confirm('Delete this brew?')) return;
-                onDelete();
-              }}
+              onClick={() => onDelete()}
             >DELETE</button>
           )}
         </div>

@@ -27,6 +27,7 @@ import { addDays, dateToStr, diffDays, fmtDate, strToDate, todayDate } from '../
 import { ACTION_TYPES, deriveVesselGroups, findVesselName } from '../planner/plannerShared';
 import { formatBrewLine, formatBrewStyleLine } from '../../lib/brewFormat';
 import { INV_UNITS } from '../../lib/units';
+import { fmtNum } from '../../lib/format';
 import {
   deriveTimeline, buildForecastRows, computeRowStatus,
   type LibSection, type LibBySection,
@@ -538,7 +539,7 @@ function ScheduleTable({ brewCols, bySec, recipeById, onOpenRecipe }: ScheduleTa
                               : { color: 'var(--text-muted)' };
                           return (
                             <td key={i} className="num" style={cellStyle}>
-                              {cell.amt > 0 ? cell.amt.toFixed(1) : <span style={{ opacity: 0.25 }}>—</span>}
+                              {cell.amt > 0 ? fmtNum(cell.amt, { dp: 1 }) : <span style={{ opacity: 0.25 }}>—</span>}
                             </td>
                           );
                         })}

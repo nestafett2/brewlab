@@ -9,11 +9,18 @@
  * (lib/calculations.ts:537) and mashProfile.ratio for mash water target
  * (per-recipe wiring). Other fields are stored for the editor's UI
  * completeness and the per-recipe mash blob (bl_mash_<recipeId>).
+ *
+ * LOCK RULE: a profile is locked when at least one recipe selected it
+ * (recipe_profiles[].mash) AND that recipe's brew_day blob has measOg > 0.
+ * Locked profiles: rename + notes editable; ratio, mashIn, mashOut, and
+ * the entire Steps section (type, temp, time, +/✕) read-only; Delete
+ * replaced with Clone & Edit. See lib/profileLock.ts.
  */
 
 import { useState, useMemo } from 'react';
 import { useStore } from '../../store';
 import { makeId } from '../../lib/utils';
+import { computeLockedProfileIds, nextCloneName } from '../../lib/profileLock';
 import type { MashProfile, MashStep, MashStepType } from '../../types';
 import { profileSharedStyles as ss } from './EquipmentProfilesPanel';
 
@@ -22,8 +29,20 @@ const STEP_TYPES: MashStepType[] = ['Infusion', 'Decoction', 'Temperature', 'Spa
 export default function MashProfilesPanel() {
   const profiles    = useStore(s => s.mashProfiles);
   const setProfiles = useStore(s => s.setMashProfiles);
+  const recipes     = useStore(s => s.recipes);
+  const recipeProfilesByRecipe = useStore(s => s.recipeProfilesByRecipe);
+  const pushToast   = useStore(s => s.pushToast);
   const [search, setSearch]       = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Derived lock state — see lib/profileLock.ts. Re-runs when recipes or
+  // the per-recipe profile cache change. Same reactivity caveat as the
+  // Equipment panel: simultaneous brew_day save in another tab won't
+  // refresh this until something else re-renders the panel.
+  const lockedMashIds = useMemo(
+    () => computeLockedProfileIds(recipes, recipeProfilesByRecipe, 'mash'),
+    [recipes, recipeProfilesByRecipe],
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -33,6 +52,8 @@ export default function MashProfilesPanel() {
   }, [profiles, search]);
 
   const editing = editingId ? profiles.find(p => p.id === editingId) ?? null : null;
+  const editingLocked = editing ? lockedMashIds.has(editing.id) : false;
+  const editingUsageCount = editing ? lockedMashIds.get(editing.id) ?? 0 : 0;
 
   const addProfile = () => {
     const id = makeId();
@@ -56,9 +77,36 @@ export default function MashProfilesPanel() {
   };
 
   const deleteProfile = (id: string) => {
-    if (!window.confirm('Delete this mash profile?')) return;
+    const before = profiles;
+    const target = profiles.find(p => p.id === id);
     setProfiles(profiles.filter(p => p.id !== id));
     if (editingId === id) setEditingId(null);
+    pushToast({
+      message: target ? `Deleted mash profile "${target.name}"` : 'Deleted mash profile',
+      undo: () => setProfiles(before),
+    });
+  };
+
+  // Clone a locked profile, switch the modal to the new (unlocked) clone.
+  // Existing recipes keep their reference to the original. No auto-switch.
+  const cloneAndEdit = (id: string) => {
+    const src = profiles.find(p => p.id === id);
+    if (!src) return;
+    const newId = makeId();
+    const newName = nextCloneName(src.name ?? '', profiles.map(p => p.name ?? ''));
+    const clone: MashProfile = {
+      ...src,
+      id: newId,
+      name: newName,
+      // Deep-copy the steps array so edits to the clone don't mutate the
+      // original (shallow ...src would share the same array reference).
+      steps: (src.steps ?? []).map(s => ({ ...s })),
+    };
+    setProfiles([...profiles, clone]);
+    setEditingId(newId);
+    pushToast({
+      message: `Cloned "${src.name}" → "${newName}". Edit the new profile.`,
+    });
   };
 
   return (
@@ -85,6 +133,8 @@ export default function MashProfilesPanel() {
             <div style={ss.empty}>No profiles yet.</div>
           ) : filtered.map(p => {
             const stepCount = p.steps?.length ?? 0;
+            const usage = lockedMashIds.get(p.id) ?? 0;
+            const isLocked = usage > 0;
             return (
               <div key={p.id} style={ss.row} onClick={() => setEditingId(p.id)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
@@ -94,7 +144,17 @@ export default function MashProfilesPanel() {
                   {p.mashOut != null && <div style={ss.rowMeta}>Mash out {p.mashOut}°C</div>}
                   <div style={ss.rowMeta}>{stepCount} step{stepCount !== 1 ? 's' : ''}</div>
                 </div>
-                <span style={ss.chevron}>›</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {isLocked && (
+                    <span
+                      style={ss.lockBadge}
+                      title={`Locked — used in ${usage} saved brew${usage === 1 ? '' : 's'}. Clone to edit.`}
+                    >
+                      🔒
+                    </span>
+                  )}
+                  <span style={ss.chevron}>›</span>
+                </div>
               </div>
             );
           })}
@@ -104,9 +164,12 @@ export default function MashProfilesPanel() {
       {editing && (
         <MashProfileModal
           profile={editing}
+          locked={editingLocked}
+          usageCount={editingUsageCount}
           onChange={updates => updateProfile(editing.id, updates)}
           onClose={() => setEditingId(null)}
           onDelete={() => deleteProfile(editing.id)}
+          onCloneAndEdit={() => cloneAndEdit(editing.id)}
         />
       )}
     </>
@@ -118,12 +181,15 @@ export default function MashProfilesPanel() {
 // ═══════════════════════════════════════════════════════════════════
 
 function MashProfileModal({
-  profile, onChange, onClose, onDelete,
+  profile, locked, usageCount, onChange, onClose, onDelete, onCloneAndEdit,
 }: {
   profile: MashProfile;
+  locked: boolean;
+  usageCount: number;
   onChange: (updates: Partial<MashProfile>) => void;
   onClose: () => void;
   onDelete: () => void;
+  onCloneAndEdit: () => void;
 }) {
   const numOrUndef = (s: string): number | undefined => {
     if (s.trim() === '') return undefined;
@@ -149,15 +215,29 @@ function MashProfileModal({
   return (
     <div style={ss.modalBackdrop} onClick={onClose}>
       <div style={ss.modalPanel} onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <input
-            type="text"
-            placeholder="Profile Name"
-            value={profile.name ?? ''}
-            onChange={e => onChange({ name: e.target.value })}
-            style={ss.profileNameInput}
-          />
-          <button className="btn sm" style={ss.deleteBtn} onClick={onDelete}>✕ Delete</button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+            <input
+              type="text"
+              placeholder="Profile Name"
+              value={profile.name ?? ''}
+              onChange={e => onChange({ name: e.target.value })}
+              style={ss.profileNameInput}
+            />
+            {locked && (
+              <span
+                style={ss.lockBadge}
+                title={`Locked — used in ${usageCount} saved brew${usageCount === 1 ? '' : 's'}. Ratio, temps, and steps are read-only; clone to edit them.`}
+              >
+                🔒 LOCKED
+              </span>
+            )}
+          </div>
+          {locked ? (
+            <button className="btn sm" onClick={onCloneAndEdit}>⎘ Clone &amp; Edit</button>
+          ) : (
+            <button className="btn sm" style={ss.deleteBtn} onClick={onDelete}>✕ Delete</button>
+          )}
         </div>
 
         <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
@@ -167,6 +247,7 @@ function MashProfileModal({
               type="number"
               step={0.1}
               value={profile.ratio ?? ''}
+              disabled={locked}
               onChange={e => onChange({ ratio: numOrUndef(e.target.value) })}
             />
           </div>
@@ -176,6 +257,7 @@ function MashProfileModal({
               type="number"
               step={0.5}
               value={profile.mashIn ?? ''}
+              disabled={locked}
               onChange={e => onChange({ mashIn: numOrUndef(e.target.value) })}
             />
           </div>
@@ -185,6 +267,7 @@ function MashProfileModal({
               type="number"
               step={0.5}
               value={profile.mashOut ?? ''}
+              disabled={locked}
               onChange={e => onChange({ mashOut: numOrUndef(e.target.value) })}
             />
           </div>
@@ -198,6 +281,7 @@ function MashProfileModal({
                 value={step.type}
                 onChange={e => updateStep(idx, { type: e.target.value as MashStepType })}
                 style={stepInputStyle}
+                disabled={locked}
               >
                 {STEP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
@@ -205,6 +289,7 @@ function MashProfileModal({
                 type="number"
                 value={step.temp ?? ''}
                 placeholder="°C"
+                disabled={locked}
                 onChange={e => updateStep(idx, { temp: parseFloat(e.target.value) || 0 })}
                 style={{ ...stepInputStyle, width: 60 }}
               />
@@ -213,6 +298,7 @@ function MashProfileModal({
                 type="number"
                 value={step.time ?? ''}
                 placeholder="min"
+                disabled={locked}
                 onChange={e => updateStep(idx, { time: parseFloat(e.target.value) || 0 })}
                 style={{ ...stepInputStyle, width: 55 }}
               />
@@ -220,12 +306,13 @@ function MashProfileModal({
               <button
                 className="btn sm"
                 style={{ color: 'var(--red)', borderColor: 'var(--red)', marginLeft: 'auto' }}
+                disabled={locked}
                 onClick={() => removeStep(idx)}
               >✕</button>
             </div>
           ))}
         </div>
-        <button className="btn sm" onClick={addStep}>+ Add Step</button>
+        <button className="btn sm" onClick={addStep} disabled={locked}>+ Add Step</button>
 
         <div className="settings-field" style={{ marginTop: 14 }}>
           <label>Notes</label>
