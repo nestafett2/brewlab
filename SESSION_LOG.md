@@ -1,3 +1,26 @@
+## 03 July 2026 — Google Sheets Sync + NTA Submitter Polish
+
+**Google Sheets OAuth sync**
+Built end-to-end Google Sheets integration for the inventory tax ledger. Three workbooks (Malts / Hops / Yeast & Misc), one tab per ingredient. OAuth implicit grant flow — user connects once per device via Settings → Google Sheets. Token stored in `bl_gsheets` (local-only, never syncs to Supabase). Auto-appends on Record Usage confirm and manual Add Entry. Edits push CORRECTION rows with delta qty. Deletes push CORRECTION rows with negative qty. XLSX export untouched. Google Cloud OAuth Client ID: `1069631621980-lr80vo546tjbskkk676cbdt2f2hbbgg7.apps.googleusercontent.com`. Authorised origins: `https://brewlab-red.vercel.app` and `https://brewlab-red.vercel.app/`.
+
+Key files: `src/lib/gsheets.ts`, `src/components/settings/GoogleSheetsSettings.tsx`, `src/components/inventory/LedgerEntryModal.tsx`, `src/components/inventory/LedgerExportModal.tsx`, `src/components/inventory/RecordUsageModal.tsx`.
+
+Commits: `4271b15` (initial build), `60c0e60` (auto-push on entry add/edit/delete, removed manual sync button), `218cb70` (separate EXPORT and SYNC TO SHEETS buttons — later superseded by auto-push approach).
+
+**Tax Ledger XLSX — taxBatch in Beer/Note**
+OUT rows now show `taxBatch — beerName` in the Beer/Note column when taxBatch is present. Manual Add Entry rows won't have taxBatch (no field in that form) — only Record Usage entries carry it.
+
+**NTA Submitter improvements**
+- Print Form gate: button now only shows when `isChecked && matches.length > 0`
+- Register sort: newest-first default, toggle to oldest-first, original indices preserved for delete/detail/print actions
+- Print All: prints entire register without checkbox selection
+
+Commit: `5a84757`
+
+**Note:** Monthly XLSX backup script (shell + cron, downloads Sheets as XLSX on 1st of month) deferred to post-launch. Sheet IDs to be confirmed once production data exists.
+
+---
+
 ## 03 July 2026 (afternoon) — Inventory polish, Export Selected, Record Usage resolver, Overview reminders
 
 ### Commits this session

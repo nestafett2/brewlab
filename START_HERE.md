@@ -1,6 +1,6 @@
 # BrewLab — START HERE
 
-**Last session: 03 July 2026 (Inventory polish, Export Selected, Record Usage resolver, Overview reminders)**
+**Last session: 03 July 2026 (Google Sheets ledger sync, NTA Submitter improvements)**
 **Read this first. Everything else is reference.**
 
 ---
@@ -58,21 +58,15 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 
 ## What Got Done Last Session (03 July 2026)
 
-**Inventory toolbar condensed** — MALTS/HOPS/YEAST/ADJUNCTS/HARVESTED buttons collapsed into a single dropdown. TAX LEDGER is now a standalone toggle; the redundant CURRENT button removed.
+**Google Sheets OAuth sync built** — three separate Google Sheets workbooks (Malts / Hops / Yeast & Misc) now receive live ledger pushes. OAuth flow via Settings → Google Sheets (Client ID + three Sheet IDs + Connect button). Token stored locally in `bl_gsheets` — never syncs to Supabase. Auto-appends on every Record Usage confirm and every Add Entry. Edits append a CORRECTION row with delta. Deletes append a CORRECTION row with negative quantity. XLSX export unchanged and independent.
 
-**Inventory layout fixed** — page constrained to 1024px centered. INGREDIENT column capped at 260px with ellipsis truncation and full-name tooltip on hover.
+**Tax Ledger XLSX — taxBatch in Beer/Note column** — OUT rows in the exported XLSX now show `taxBatch — beerName` format when a tax batch number exists, matching the format used by Record Usage entries.
 
-**Recurring orders print gap fixed** — `forecastPrint.ts` now passes `recurringOrders` to `deriveTimeline`, so printed forecasts match the on-screen forecast.
+**NTA Submitter — Print Form gate** — Print Form button now only appears after a Check has been run and a matching submission found. Previously showed whenever the register was non-empty.
 
-**Export Selected** — File menu → Export Selected now exports all highlighted sidebar recipes as a zip file, one BeerXML per recipe. Compatible with BeerSmith and other apps. Uses jszip (statically imported, ~95KB bundle addition).
+**NTA Submitter — Submitted Recipes Register sort** — register now sorts newest-first by default with a toggle to switch to oldest-first.
 
-**File menu stay-open bug fixed** — menu items no longer re-open the dropdown after being clicked.
-
-**Record Usage — "not in library" resolver** — ingredients that don't match a library entry now show "⚠ not in library — click to fix". Clicking opens an inline panel to either search and link to an existing library entry, or add the ingredient as a new library entry. Link is saved permanently via `libId` on the recipe ingredient.
-
-**Record Usage — checkbox reset bug fixed** — stable UIDs (`section_name` instead of counter) plus brewId-aware reseed logic. Resolving a "not in library" row no longer wipes the user's checkbox selections.
-
-**Overview recording reminders** — each reminder row now has a clickable brew name (opens the recipe) and a Dismiss button (permanently hides that reminder via `bl_dismissed_rec_reminders` in localStorage).
+**NTA Submitter — Print All button** — new button in the register header prints the entire submission register without requiring checkbox selection.
 
 ---
 
@@ -91,8 +85,6 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 - Monthly Report A3 vs A4 — revisit once production data exists.
 
 ### Feature gaps
-- NTA Submitter: dedicated Submitted Recipes view (sortable by date, Print All).
-- NTA Submitter: Print Form button should gate on submission status.
 - Recipe browser: OEM/Collab/Own Brand field (noted, deferred).
 - Focus mode: full-screen toggle hiding sidebar and action stack (noted, deferred).
 
@@ -116,7 +108,7 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 
 ### Deferred
 - BJCP 2025 style guideline import.
-- Google Sheets sync (one-way, stubbed).
+- Google Sheets sync (built — inventory ledger auto-push live). Monthly backup script (shell script + cron, post-launch).
 - Teiban / Gentei / One-off classification.
 - HTML/React label divergence.
 - Typography pass (after all tabs visible together).
@@ -132,8 +124,8 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 ## Next Session Focus
 
 1. **Brew Day Sheet print polish** — fit to one page.
-2. **NTA Submitter improvements** — Submitted Recipes view + print gate.
-3. **Smoke tests** — work through the pending list above.
+2. **Smoke tests** — work through the pending list.
+3. **WORKFLOWS.md** — add Google Sheets setup workflow (connect, configure Sheet IDs, test sync).
 
 ---
 
