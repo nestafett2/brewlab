@@ -106,7 +106,6 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
     if (!brew) return [];
     const out: RowData[] = [];
     const brewTag = brew.name.toLowerCase().split(' ').slice(0, 3).join(' ');
-    let uidCount = 0;
 
     for (const sec of SECTIONS) {
       const ingType = ING_TYPES[sec];
@@ -126,7 +125,7 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
           return (e.beer ?? '').toLowerCase().includes(brewTag);
         });
         out.push({
-          uid: `r-${uidCount++}`,
+          uid: `${sec}_${ing.name}`,
           section: sec,
           ingName: ing.name,
           ingUnit: ing.unit,
@@ -152,14 +151,36 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
   const [resolvingUid, setResolvingUid] = useState<string | null>(null);
   const [resolveSearch, setResolveSearch] = useState('');
 
-  // Re-seed local state when the row set changes (e.g. brew change).
+  // Re-seed local state when the row set changes. On a genuine brew
+  // change, fully reset to defaults. On a same-brew recompute (e.g.
+  // resolveLink/addToLibrary linking a "not in library" ingredient,
+  // which changes that row's ledgerKey and produces a new `rows`
+  // array), merge in defaults only for uids not already tracked so the
+  // user's existing checkbox/amount edits survive the round trip —
+  // uids are stable (section + ingredient name) across that recompute.
   const lastRowsRef = useRef<RowData[] | null>(null);
+  const lastBrewIdRef = useRef<string | null>(null);
   if (lastRowsRef.current !== rows) {
+    const brewChanged = lastBrewIdRef.current !== brewId;
     lastRowsRef.current = rows;
-    setChecked(initialChecked);
-    const amt: Record<string, string> = {};
-    for (const r of rows) amt[r.uid] = fmtIngAmt(r.ingAmt, r.ingUnit);
-    setAmounts(amt);
+    lastBrewIdRef.current = brewId;
+    if (brewChanged) {
+      setChecked(initialChecked);
+      const amt: Record<string, string> = {};
+      for (const r of rows) amt[r.uid] = fmtIngAmt(r.ingAmt, r.ingUnit);
+      setAmounts(amt);
+    } else {
+      setChecked(prev => {
+        const next = { ...prev };
+        for (const r of rows) if (!(r.uid in next)) next[r.uid] = !r.alreadyLogged;
+        return next;
+      });
+      setAmounts(prev => {
+        const next = { ...prev };
+        for (const r of rows) if (!(r.uid in next)) next[r.uid] = fmtIngAmt(r.ingAmt, r.ingUnit);
+        return next;
+      });
+    }
   }
 
   useEffect(() => {
