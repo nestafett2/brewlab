@@ -9,16 +9,19 @@
  *   • MIDDLE (300) — SUGGESTED: short-stock items computed from the
  *     selected brews, grouped by supplier. Each row has a checkbox
  *     and an "Add Selected to Order" button.
- *   • RIGHT (flex 1) — MY ORDER: staged items grouped by supplier
- *     with delete ✕. Below: collapsible Add Manually form. Bottom:
- *     "📋 Create Order" button → reveals the Order Details panel with
- *     fallback supplier + order date + ✓ CREATE ORDER / 🖨 PRINT.
+ *   • RIGHT (flex 1) — MY ORDER: a flat staged list (checkbox +
+ *     ingredient + qty + delete ✕ — no per-row supplier/delivery
+ *     controls). Below it, an always-visible bulk assignment bar
+ *     (Select All + supplier dropdown + delivery date + Apply to
+ *     Selected) writes supplier/delivery onto the checked items. Below
+ *     that, Order Details (order date + notes, always visible — no
+ *     more Review & Create toggle) with ✓ CREATE ORDER / 🖨 PRINT /
+ *     ← Back. Then collapsible Add Manually.
  *
- * On confirm:
- *   • Push each staged item to bl_orders with a fresh id.
- *   • Push a matching IN ledger entry per item that has a library
- *     match — so the forecast picks up the order as incoming stock
- *     immediately. Same as HTML saveAllOrders 15082–15094.
+ * On confirm: push each staged item to bl_orders with a fresh id and
+ * status='pending'. New orders never write a ledger entry on creation
+ * — the ledger only reflects status='received' orders, and that
+ * transition now only happens via OrdersPanel's bulk "Mark Received".
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -114,14 +117,24 @@ export default function AddOrderModal({ onClose }: Props) {
   const [manualQty, setManualQty]    = useState<string>('25');
   const [manualSupp, setManualSupp]  = useState<string>('');
 
-  // Log-order panel state. Supplier here is a bulk-fill action (fills
-  // blank per-item suppliers when changed), not a fallback applied at
-  // confirm time — delivery and supplier are per-item now (see
-  // StagedItem). Notes is the one remaining order-level field, applied
-  // to every item created in this batch. Status is no longer settable
-  // here — new orders always start 'pending'.
-  const [logPanelOpen, setLogPanelOpen] = useState(false);
-  const [globalSupplier, setGlobalSupplier] = useState<string>('');
+  // Bulk assignment bar state — checked items + the supplier/delivery
+  // values "APPLY TO SELECTED" writes onto them. StagedItem still needs
+  // supplier/delivery fields for this to write into and for confirmAndLog
+  // to read back out; only the per-row inline editing UI is gone.
+  const [stagedChecked, setStagedChecked] = useState<Record<number, boolean>>({});
+  const [bulkSupplier, setBulkSupplier] = useState<string>('');
+  const [bulkDelivery, setBulkDelivery] = useState<string>('');
+
+  // Reset checked state whenever the staged array changes — add/remove
+  // shifts indices, and an Apply already consumed the current selection.
+  useEffect(() => {
+    setStagedChecked({});
+  }, [staged]);
+
+  // Order Details state — always visible now (no more Review & Create
+  // toggle). Notes is the one remaining order-level field, applied to
+  // every item created in this batch. Status is no longer settable
+  // anywhere in this modal — new orders always start 'pending'.
   const [orderDate, setOrderDate] = useState<string>(dateToStr(todayDate()));
   const [orderNotes, setOrderNotes] = useState<string>('');
 
@@ -191,9 +204,24 @@ export default function AddOrderModal({ onClose }: Props) {
   const removeStaged = (i: number) =>
     setStaged(prev => prev.filter((_, idx) => idx !== i));
 
-  // Per-item edits from the MY ORDER staging rows (supplier / delivery).
-  const updateStagedField = <K extends keyof StagedItem>(i: number, field: K, value: StagedItem[K]) =>
-    setStaged(prev => prev.map((item, idx) => idx === i ? { ...item, [field]: value } : item));
+  // ── Bulk assignment (checkbox select + apply supplier/delivery) ──
+  const toggleStagedChecked = (i: number) =>
+    setStagedChecked(prev => ({ ...prev, [i]: !prev[i] }));
+  const allStagedChecked = staged.length > 0 && staged.every((_, i) => stagedChecked[i]);
+  const toggleSelectAllStaged = () => {
+    if (allStagedChecked) {
+      setStagedChecked({});
+    } else {
+      const next: Record<number, boolean> = {};
+      staged.forEach((_, i) => { next[i] = true; });
+      setStagedChecked(next);
+    }
+  };
+  const applyToSelected = () => {
+    setStaged(prev => prev.map((item, i) =>
+      stagedChecked[i] ? { ...item, supplier: bulkSupplier, delivery: bulkDelivery } : item
+    ));
+  };
 
   const confirmAndLog = () => {
     if (!staged.length) { onClose(); return; }
@@ -228,7 +256,6 @@ export default function AddOrderModal({ onClose }: Props) {
   };
 
   const printOrderList = () => {
-    const supp = globalSupplier;
     const date = orderDate || dateToStr(todayDate());
     const win = window.open('', '_blank', 'width=700,height=600');
     if (!win) {
@@ -243,7 +270,7 @@ export default function AddOrderModal({ onClose }: Props) {
       <tr>
         <td>${escapeHtml(it.ingredient)}</td>
         <td style="text-align:right">${it.qty} kg</td>
-        <td>${escapeHtml(it.supplier || supp)}</td>
+        <td>${escapeHtml(it.supplier || '—')}</td>
         <td>${escapeHtml(it.delivery || '')}</td>
       </tr>`).join('');
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Order List — ${date}</title>
@@ -257,7 +284,7 @@ export default function AddOrderModal({ onClose }: Props) {
   .footer{margin-top:24px;font-size:10px;color:#888;}
 </style></head><body>
 <h2>${escapeHtml(brand)} — Order List</h2>
-<p>Date: ${date}${supp ? ' · Supplier: '+escapeHtml(supp) : ''} · ${staged.length} item${staged.length !== 1 ? 's' : ''}${orderNotes ? ' · Notes: '+escapeHtml(orderNotes) : ''}</p>
+<p>Date: ${date} · ${staged.length} item${staged.length !== 1 ? 's' : ''}${orderNotes ? ' · Notes: '+escapeHtml(orderNotes) : ''}</p>
 <table>
   <thead><tr><th>Ingredient</th><th style="text-align:right">Qty</th><th>Supplier</th><th>Delivery</th></tr></thead>
   <tbody>${rows}</tbody>
@@ -278,16 +305,6 @@ export default function AddOrderModal({ onClose }: Props) {
     });
     return m;
   }, [suggestions]);
-
-  const groupedStaged = useMemo(() => {
-    const m: Record<string, { item: StagedItem; i: number }[]> = {};
-    staged.forEach((item, i) => {
-      const k = item.supplier || '— No Supplier —';
-      if (!m[k]) m[k] = [];
-      m[k].push({ item, i });
-    });
-    return m;
-  }, [staged]);
 
   return (
     <div style={overlayStyle} onMouseDown={onClose}>
@@ -381,7 +398,7 @@ export default function AddOrderModal({ onClose }: Props) {
         <div style={rightColStyle}>
           <div style={colHeaderStyle}>
             <div style={colTitleStyle}>MY ORDER</div>
-            <div style={colHintStyle}>Items to order — grouped by supplier</div>
+            <div style={colHintStyle}>Check items to bulk-assign supplier/delivery below</div>
           </div>
           <div style={{ ...listScrollStyle, minHeight: 80 }}>
             {staged.length === 0 ? (
@@ -389,101 +406,90 @@ export default function AddOrderModal({ onClose }: Props) {
                 padding: '24px 16px', fontFamily: 'var(--mono)', fontSize: 9,
                 color: 'var(--text-muted)', textAlign: 'center', whiteSpace: 'pre-line' as const,
               }}>{'No items yet —\n← pick from suggested or add manually below'}</div>
-            ) : Object.keys(groupedStaged).sort().map(supplierKey => (
-              <div key={supplierKey}>
-                <div style={supplierHeaderStyle}>{supplierKey}</div>
-                {groupedStaged[supplierKey].map(({ item, i }) => (
-                  <div key={i} style={stagedRowStyle}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={brewNameStyle}>{item.ingredient}</div>
-                      <div style={brewDateStyle}>{item.qty} kg</div>
-                      <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                        <select
-                          value={item.supplier}
-                          onChange={e => updateStagedField(i, 'supplier', e.target.value)}
-                          style={stagedFieldStyle}
-                        >
-                          <option value="">— None —</option>
-                          {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                        <input
-                          type="date"
-                          value={item.delivery}
-                          onChange={e => updateStagedField(i, 'delivery', e.target.value)}
-                          style={stagedFieldStyle}
-                        />
-                      </div>
-                    </div>
-                    <span
-                      onClick={() => removeStaged(i)}
-                      title="Remove"
-                      style={{ cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, padding: '2px 4px' }}
-                    >✕</span>
-                  </div>
-                ))}
+            ) : staged.map((item, i) => (
+              <div key={i} style={stagedRowStyle}>
+                <input
+                  type="checkbox"
+                  checked={!!stagedChecked[i]}
+                  onChange={() => toggleStagedChecked(i)}
+                  style={{ accentColor: 'var(--amber)', width: 14, height: 14, cursor: 'pointer', flexShrink: 0, marginTop: 2 }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={brewNameStyle}>{item.ingredient}</div>
+                  <div style={brewDateStyle}>{item.qty} kg</div>
+                </div>
+                <span
+                  onClick={() => removeStaged(i)}
+                  title="Remove"
+                  style={{ cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12, padding: '2px 4px' }}
+                >✕</span>
               </div>
             ))}
           </div>
 
-          {/* Order-details panel — toggled */}
-          {logPanelOpen ? (
-            <div style={logPanelStyle}>
-              <div style={{
-                fontFamily: 'var(--display)', fontSize: 11, letterSpacing: 2,
-                color: 'var(--amber)', marginBottom: 2,
-              }}>ORDER DETAILS</div>
-              <Row label="SUPPLIER">
-                <select
-                  value={globalSupplier}
-                  onChange={e => {
-                    const val = e.target.value;
-                    setGlobalSupplier(val);
-                    // Bulk-fill: only touches items that don't already
-                    // have a supplier set — not a fallback applied later.
-                    if (val) {
-                      setStaged(prev => prev.map(item => item.supplier ? item : { ...item, supplier: val }));
-                    }
-                  }}
-                  style={inputStyle}
-                >
-                  <option value="">— None —</option>
-                  {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </Row>
-              <Row label="ORDER DATE">
-                <input type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)} style={inputStyle} />
-              </Row>
-              <Row label="NOTES">
-                <input
-                  type="text" value={orderNotes}
-                  onChange={e => setOrderNotes(e.target.value)}
-                  placeholder="optional"
-                  style={inputStyle}
-                />
-              </Row>
-              <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
-                <button className="btn primary" style={{ flex: 1, fontSize: 10 }} onClick={confirmAndLog}>
-                  ✓ CREATE ORDER
-                </button>
-                <button className="btn" style={{ fontSize: 10 }} onClick={printOrderList}>🖨 PRINT</button>
-                <button
-                  className="btn"
-                  style={{ fontSize: 10, color: 'var(--text-muted)' }}
-                  onClick={() => setLogPanelOpen(false)}
-                >← Back</button>
-              </div>
-            </div>
-          ) : (
-            <div style={triggerRowStyle}>
+          {/* Bulk assignment bar — always visible, not toggled */}
+          <div style={bulkBarStyle}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={allStagedChecked}
+                onChange={toggleSelectAllStaged}
+                style={{ accentColor: 'var(--amber)', width: 14, height: 14, cursor: 'pointer' }}
+              />
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)', whiteSpace: 'nowrap' as const }}>
+                Select All
+              </span>
+            </label>
+            <select
+              value={bulkSupplier}
+              onChange={e => setBulkSupplier(e.target.value)}
+              style={{ ...inputStyle, flex: 'none', width: 90 }}
+            >
+              <option value="">— None —</option>
+              {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <input
+              type="date"
+              value={bulkDelivery}
+              onChange={e => setBulkDelivery(e.target.value)}
+              style={{ ...inputStyle, flex: 'none', width: 116 }}
+            />
+            <button
+              className="btn sm primary"
+              disabled={!Object.values(stagedChecked).some(Boolean)}
+              onClick={applyToSelected}
+            >APPLY TO SELECTED</button>
+          </div>
+
+          {/* Order Details — always visible, no more Review & Create toggle */}
+          <div style={logPanelStyle}>
+            <div style={{
+              fontFamily: 'var(--display)', fontSize: 11, letterSpacing: 2,
+              color: 'var(--amber)', marginBottom: 2,
+            }}>ORDER DETAILS</div>
+            <Row label="ORDER DATE">
+              <input type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)} style={inputStyle} />
+            </Row>
+            <Row label="NOTES">
+              <input
+                type="text" value={orderNotes}
+                onChange={e => setOrderNotes(e.target.value)}
+                placeholder="optional"
+                style={inputStyle}
+              />
+            </Row>
+            <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+              <button className="btn primary" style={{ flex: 1, fontSize: 10 }} disabled={!staged.length} onClick={confirmAndLog}>
+                ✓ CREATE ORDER
+              </button>
+              <button className="btn" style={{ fontSize: 10 }} disabled={!staged.length} onClick={printOrderList}>🖨 PRINT</button>
               <button
-                className="btn primary"
-                style={{ flex: 1 }}
-                disabled={!staged.length}
-                onClick={() => setLogPanelOpen(true)}
-              >📋 Review & Create</button>
-              <button className="btn" onClick={onClose}>CANCEL</button>
+                className="btn"
+                style={{ fontSize: 10, color: 'var(--text-muted)' }}
+                onClick={onClose}
+              >← Back</button>
             </div>
-          )}
+          </div>
 
           {/* Add Manually — collapsible */}
           <div style={{ borderTop: '1px solid var(--border)', flexShrink: 0 }}>
@@ -659,20 +665,15 @@ const logPanelStyle: React.CSSProperties = {
   display: 'flex', flexDirection: 'column' as const, gap: 8, flexShrink: 0,
 };
 
-const triggerRowStyle: React.CSSProperties = {
-  padding: '10px 12px', borderTop: '1px solid var(--border)',
-  display: 'flex', gap: 8, flexShrink: 0,
-};
-
 const inputStyle: React.CSSProperties = {
   flex: 1, background: 'var(--panel2)', border: '1px solid var(--border2)',
   color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: 10,
   padding: '4px 8px', outline: 'none',
 };
 
-// Compact per-item supplier/delivery controls on each MY ORDER staging row.
-const stagedFieldStyle: React.CSSProperties = {
-  flex: 1, background: 'var(--panel2)', border: '1px solid var(--border2)',
-  color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: 9,
-  padding: '3px 6px', outline: 'none', minWidth: 0,
+// Bulk assignment bar — sits below the staged list, above Order Details.
+const bulkBarStyle: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 8,
+  padding: '8px 12px', borderTop: '1px solid var(--border)',
+  background: 'var(--panel2)', flexShrink: 0,
 };
