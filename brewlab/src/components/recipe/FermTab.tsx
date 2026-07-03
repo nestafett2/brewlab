@@ -300,7 +300,7 @@ export default function FermTab({ recipeId }: Props) {
           </div>
 
           {/* Bottom — DH buttons + Harvest + Carbonation */}
-          <div style={{ padding: '8px 10px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ padding: '8px 10px', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 4, overflowY: 'auto' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 2 }}>
               {([1, 2, 3] as const).map(n => (
                 <div
