@@ -948,6 +948,13 @@ export default function Desktop() {
     });
   };
 
+  // Print Full Brew Packet — calls all three print sheets in sequence.
+  const handlePrintFullPacket = () => {
+    handlePrintPrepSheet();
+    handlePrintBrewDaySheet();
+    handlePrintFermPackagingSheet();
+  };
+
   return (
     <div className="desktop-layout">
       {/* ═══ Menu Bar ═══ */}
@@ -1375,6 +1382,10 @@ export default function Desktop() {
                   className="menu-dd-item"
                   onClick={() => { handlePrintFermPackagingSheet(); setPrintMenuOpen(false); }}
                 >Ferm &amp; Packaging Sheet</div>
+                <div
+                  className="menu-dd-item"
+                  onClick={() => { handlePrintFullPacket(); setPrintMenuOpen(false); }}
+                >Print Full Packet</div>
               </div>
             )}
           </div>
