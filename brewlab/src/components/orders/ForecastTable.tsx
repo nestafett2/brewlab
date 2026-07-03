@@ -39,6 +39,7 @@ const BREW_TINTS = ['rgba(255,255,255,0.03)', 'rgba(255,255,255,0.07)'];
 export default function ForecastTable({ section, dayLimit }: Props) {
   const plannerBrews   = useStore(s => s.plannerBrews);
   const orders         = useStore(s => s.orders);
+  const recurringOrders = useStore(s => s.recurringOrders);
   const inventoryStock = useStore(s => s.inventoryStock);
   const ledgerData     = useStore(s => s.ledgerData);
   const ingredientsByRecipe = useStore(s => s.ingredientsByRecipe);
@@ -82,8 +83,8 @@ export default function ForecastTable({ section, dayLimit }: Props) {
   const libBySection: LibBySection = { malts: maltLib, hops: hopLib, yeast: yeastLib, misc: miscLib };
 
   const timeline = useMemo<TimelineColumn[]>(
-    () => deriveTimeline(plannerBrews, orders),
-    [plannerBrews, orders],
+    () => deriveTimeline(plannerBrews, orders, recurringOrders),
+    [plannerBrews, orders, recurringOrders],
   );
 
   const today = new Date();

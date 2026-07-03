@@ -1052,6 +1052,31 @@ export interface OrderEntry {
   orderDate?: string;
 }
 
+// === Recurring Orders ===
+
+/**
+ * A recurring order template — auto-generates synthetic delivery-column
+ * entries in the Order Planner forecast on a schedule (weekly/biweekly/
+ * monthly), so routine ingredient buys don't need a real OrderEntry
+ * logged every time. Persisted at `bl_recurring_orders` (same lsSet /
+ * settings-table sync mechanism as `orders` — no dedicated table).
+ */
+export interface RecurringOrder {
+  id: string;
+  /** Section: 'malts' | 'hops' | 'yeast' | 'misc' — matches OrderEntry.type. */
+  type: 'malts' | 'hops' | 'yeast' | 'misc';
+  /** Library entry name, free text — matches OrderEntry.ingredient. */
+  ingredient: string;
+  qty: number;
+  supplier?: string;
+  cadence: 'weekly' | 'biweekly' | 'monthly';
+  /** ISO date (YYYY-MM-DD) — first occurrence. */
+  startDate: string;
+  /** ISO date (YYYY-MM-DD) — optional last occurrence. */
+  endDate?: string;
+  notes?: string;
+}
+
 // === Harvested Yeast ===
 //
 // Strain-keyed dict matching HTML's bl_harvested_yeast shape (HTML

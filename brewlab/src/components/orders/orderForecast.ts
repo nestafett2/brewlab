@@ -11,12 +11,13 @@
  */
 
 import type {
-  PlannerBrew, OrderEntry, LedgerData, LedgerEntry,
+  PlannerBrew, OrderEntry, LedgerData, LedgerEntry, RecurringOrder,
   Ingredient, MaltLib, HopLib, YeastLib, MiscLib,
 } from '../../types';
 import { ingNamesMatch } from '../../lib/ingredient-matcher';
 import { sectionToIngType } from '../../lib/units';
 import { getLedgerBalance } from '../../lib/ledger';
+import { dateToStr } from '../../lib/dates';
 
 /**
  * Has this brew already been recorded against this ledger key?
@@ -59,6 +60,58 @@ export interface DeliveryColumn {
 export type TimelineColumn = BrewColumn | DeliveryColumn;
 
 /**
+ * Expand recurring order templates into synthetic OrderEntry-shaped
+ * delivery rows within a window from today. Each occurrence gets a
+ * stable, unique id (`${ro.id}_${date}`) so re-deriving the timeline on
+ * every render doesn't churn keys.
+ *
+ * Per-order start: if `startDate` is still in the future, occurrences
+ * begin there; if it's already in the past, occurrences begin today
+ * (we don't walk the full history — recurring orders are a forward-
+ * looking shopping schedule, not a log). `endDate` (if set) or the
+ * window's end, whichever is sooner, bounds the last occurrence.
+ */
+export function expandRecurringOrders(
+  recurringOrders: RecurringOrder[],
+  windowDays: number = 90,
+): Pick<OrderEntry, 'id' | 'type' | 'ingredient' | 'qty' | 'supplier' | 'delivery' | 'status' | 'notes' | 'orderDate'>[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const windowEnd = new Date(today.getTime() + windowDays * 86400000);
+
+  const out: Pick<OrderEntry, 'id' | 'type' | 'ingredient' | 'qty' | 'supplier' | 'delivery' | 'status' | 'notes' | 'orderDate'>[] = [];
+
+  for (const ro of recurringOrders) {
+    const start = new Date(ro.startDate);
+    if (isNaN(start.getTime())) continue;
+    const end = ro.endDate ? new Date(ro.endDate) : null;
+    const stopAt = end && end.getTime() < windowEnd.getTime() ? end : windowEnd;
+
+    let cursor = start.getTime() < today.getTime() ? new Date(today) : start;
+    while (cursor.getTime() <= stopAt.getTime()) {
+      if (cursor.getTime() >= today.getTime()) {
+        const dateStr = dateToStr(cursor);
+        out.push({
+          id: `${ro.id}_${dateStr}`,
+          type: ro.type,
+          ingredient: ro.ingredient,
+          qty: ro.qty,
+          supplier: ro.supplier,
+          delivery: dateStr,
+          status: 'pending',
+          notes: ro.notes,
+          orderDate: dateStr,
+        });
+      }
+      if (ro.cadence === 'weekly')        cursor = new Date(cursor.getTime() + 7 * 86400000);
+      else if (ro.cadence === 'biweekly') cursor = new Date(cursor.getTime() + 14 * 86400000);
+      else { const next = new Date(cursor); next.setMonth(next.getMonth() + 1); cursor = next; }
+    }
+  }
+  return out;
+}
+
+/**
  * Build the forecast's timeline of columns: brews + deliveries
  * interleaved by date. Mirrors HTML 15485–15493.
  *
@@ -67,10 +120,17 @@ export type TimelineColumn = BrewColumn | DeliveryColumn;
  * up as delivery columns — received orders are already deducted from
  * stock via the ledger IN entry written at confirm-and-log time, so
  * showing them again would double-count.
+ *
+ * `recurringOrders` (optional) are expanded via `expandRecurringOrders`
+ * and merged into the same delivery-date buckets as real orders. Real
+ * orders are added first; recurring occurrences are appended alongside
+ * them (not deduped) so a real order logged for the same ingredient and
+ * date as a recurring occurrence still shows both.
  */
 export function deriveTimeline(
   plannerBrews: PlannerBrew[],
   orders: OrderEntry[],
+  recurringOrders: RecurringOrder[] = [],
 ): TimelineColumn[] {
   const brews = plannerBrews
     .filter(b => b.recipeId)
@@ -84,6 +144,12 @@ export function deriveTimeline(
     if (!dk) continue;
     if (!deliveryDates[dk]) deliveryDates[dk] = [];
     deliveryDates[dk].push(o);
+  }
+  for (const synthetic of expandRecurringOrders(recurringOrders)) {
+    const dk = synthetic.delivery || synthetic.orderDate;
+    if (!dk) continue;
+    if (!deliveryDates[dk]) deliveryDates[dk] = [];
+    deliveryDates[dk].push(synthetic);
   }
 
   const allBrewDates = brews.map(b => b.start);

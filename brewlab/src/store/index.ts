@@ -31,7 +31,7 @@ import type {
   MaltLib, HopLib, YeastLib, MiscLib, TankCalibration, CustomStyle, StyleOverlay, EquipmentProfile,
   WaterProfile, MashProfile, PitchProfile, BreweryNote, Folder,
   BrewSettings, TabVisibility, PlannerBrew, YearlyData, HarvestedYeast,
-  LedgerData, OrderEntry,
+  LedgerData, OrderEntry, RecurringOrder,
   TaxRecord, TaxMasterRow, Classification, NtaSubmission,
   RecipeProfileSelections, RecipeProfileKind,
   Template, TariffData,
@@ -186,6 +186,10 @@ export interface BrewLabState {
   /** bl_orders — Order Planner entries. Synced via the settings table —
    *  bl_orders is in SETTINGS_KEYS. */
   orders: OrderEntry[];
+  /** bl_recurring_orders — recurring order templates that auto-generate
+   *  synthetic delivery columns in the forecast. Synced via the settings
+   *  table like `orders` (see lib/supabase.ts SETTINGS_KEYS). */
+  recurringOrders: RecurringOrder[];
   /** bl_templates — recipe templates. Synced via the settings table —
    *  bl_templates is in SETTINGS_KEYS. Mirrors HTML brewlab-desktop.html:5119. */
   templates: Template[];
@@ -428,6 +432,10 @@ export interface BrewLabState {
    *  Used by the Orders panel's bulk Mark Ordered / Mark Received actions. */
   bulkUpdateOrders: (ids: string[], updates: Partial<OrderEntry>) => void;
   deleteOrder: (id: string) => void;
+  setRecurringOrders: (orders: RecurringOrder[]) => void;
+  addRecurringOrder: (order: RecurringOrder) => void;
+  updateRecurringOrder: (id: string, updates: Partial<RecurringOrder>) => void;
+  deleteRecurringOrder: (id: string) => void;
 
   // Actions — per-recipe profile selections
   /** Lazy-load the selections blob for a recipe. Mirrors getIngredients. */
@@ -560,6 +568,7 @@ export const useStore = create<BrewLabState>((set, get) => ({
   harvestedYeast: lsGet<HarvestedYeast>('bl_harvested_yeast', {}),
   ledgerData: lsGet<LedgerData>('bl_ledger', {}),
   orders: lsGet<OrderEntry[]>('bl_orders', []),
+  recurringOrders: lsGet<RecurringOrder[]>('bl_recurring_orders', []),
   templates: lsGet<Template[]>('bl_templates', []),
   tariffByYear: {},
 
@@ -1275,6 +1284,22 @@ export const useStore = create<BrewLabState>((set, get) => ({
     lsSet('bl_orders', next);
     set({ orders: next });
   },
+  setRecurringOrders: (orders) => { lsSet('bl_recurring_orders', orders); set({ recurringOrders: orders }); },
+  addRecurringOrder: (order) => {
+    const next = [...get().recurringOrders, order];
+    lsSet('bl_recurring_orders', next);
+    set({ recurringOrders: next });
+  },
+  updateRecurringOrder: (id, updates) => {
+    const next = get().recurringOrders.map(o => o.id === id ? { ...o, ...updates } : o);
+    lsSet('bl_recurring_orders', next);
+    set({ recurringOrders: next });
+  },
+  deleteRecurringOrder: (id) => {
+    const next = get().recurringOrders.filter(o => o.id !== id);
+    lsSet('bl_recurring_orders', next);
+    set({ recurringOrders: next });
+  },
 
   // --- Per-recipe profile selections ---
   getRecipeProfiles: (recipeId) => {
@@ -1716,6 +1741,7 @@ export const useStore = create<BrewLabState>((set, get) => ({
         harvestedYeast: lsGet<HarvestedYeast>('bl_harvested_yeast', {}),
         ledgerData: lsGet<LedgerData>('bl_ledger', {}),
         orders: lsGet<OrderEntry[]>('bl_orders', []),
+        recurringOrders: lsGet<RecurringOrder[]>('bl_recurring_orders', []),
         templates: lsGet<Template[]>('bl_templates', []),
         // Per-FY blobs are lazy-loaded — clear the cache so getTariff()
         // re-reads from localStorage (which sbHydrate has populated from

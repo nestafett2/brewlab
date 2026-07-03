@@ -1252,7 +1252,7 @@ const SETTINGS_KEYS = new Set([
   'bl_brew_settings', 'bl_lib_malts', 'bl_lib_hops', 'bl_lib_yeast', 'bl_lib_misc',
   'bl_lib_next_id',
   'bl_tank_calib', 'bl_folder_list', 'bl_planner_brews', 'bl_yearly', 'bl_brewery_notes',
-  'bl_inv_stock', 'bl_ledger', 'bl_orders',
+  'bl_inv_stock', 'bl_ledger', 'bl_orders', 'bl_recurring_orders',
   'bl_equip_profiles', 'bl_water_profiles', 'bl_mash_profiles',
   'bl_pitch_profiles', 'bl_custom_styles', 'bl_style_overlays', 'bl_suppliers', 'bl_tab_visibility',
   'bl_nta_register', 'bl_nta_basis_default', 'bl_nta_basis_current',
