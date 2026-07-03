@@ -49,7 +49,6 @@ import {
   downloadXmlFile,
 } from '../lib/recipeExport';
 import { newRecipeId, today } from '../lib/utils';
-import { dateToStr, todayDate } from '../lib/dates';
 import { fmtNum } from '../lib/format';
 import { lsSet } from '../lib/storage';
 import { isWaterChem } from '../lib/waterChem';
@@ -422,32 +421,40 @@ export default function Desktop() {
   // as a single BeerXML file — one <RECIPES> document wrapping one
   // <RECIPE> block per selected recipe. Same serialisation path as
   // handleExportCurrentRecipe, just fed multiple recipes at once.
-  const handleExportSelected = () => {
+  const handleExportSelected = async () => {
     const ids = folderSelectionRef.current();
     if (!ids.length) {
       pushToast({ message: 'No recipes selected. Click recipes in the sidebar to select them.', variant: 'info' });
       return;
     }
     try {
-      const xmlParts = ids.flatMap(id => {
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      let count = 0;
+      for (const id of ids) {
         const recipe = recipes.find(r => r.id === id);
-        if (!recipe) return [];
+        if (!recipe) continue;
         const ings = getIngredients(id);
         const mash = getMash(id);
-        return [recipeToBeerXML(recipe, ings, mash)];
-      });
-      if (!xmlParts.length) return;
-      const xml = wrapRecipesDocument(xmlParts);
-      downloadXmlFile(xml, `Selected_Recipes_${xmlParts.length}_${dateToStr(todayDate())}.xml`);
-      pushToast({
-        message: `Exported ${xmlParts.length} recipe${xmlParts.length === 1 ? '' : 's'}`,
-        variant: 'success',
-      });
+        const xml = wrapRecipesDocument([recipeToBeerXML(recipe, ings, mash)]);
+        const filename = buildExportFilename(recipe);
+        zip.file(filename, xml);
+        count++;
+      }
+      if (!count) return;
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const date = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = count === 1
+        ? buildExportFilename(recipes.find(r => r.id === ids[0])!).replace('.xml', '.zip')
+        : `brewlab-recipes-${count}-${date}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      pushToast({ message: `Exported ${count} recipe${count > 1 ? 's' : ''} as zip.`, variant: 'success' });
     } catch (err) {
-      pushToast({
-        message: 'Error exporting selected recipes: ' + (err as Error).message,
-        variant: 'error',
-      });
+      pushToast({ message: 'Export failed: ' + (err as Error).message, variant: 'error' });
     }
   };
 
