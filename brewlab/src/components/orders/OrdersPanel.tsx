@@ -10,14 +10,15 @@
  * range across its items (delivery is per-item now, not shared).
  *
  * Bulk actions (checkbox per row, action bar fixed at panel bottom when
- * anything's checked):
- *   • Mark Ordered  — bulkUpdateOrders(ids, { status: 'ordered' }).
- *   • Mark Received — bulkUpdateOrders(ids, { status: 'received' }) PLUS
- *     the same ledger-entry-creation logic EditOrderModal used to run
- *     on its own not-received→received transition (buildOrderLedgerEntry
- *     + applyLedgerInserts). That transition no longer happens in
- *     EditOrderModal — status isn't editable there anymore — so this is
- *     the one place new 'received' ledger entries get created.
+ * anything's checked): "N selected" + a pending/ordered/received
+ * dropdown (defaults to 'ordered') + APPLY + ✕ (deselect all). APPLY
+ * calls bulkUpdateOrders(ids, { status }); when the target status is
+ * 'received' it also runs the same ledger-entry-creation logic
+ * EditOrderModal used to run on its own not-received→received
+ * transition (buildOrderLedgerEntry + applyLedgerInserts). That
+ * transition no longer happens in EditOrderModal — status isn't
+ * editable there anymore — so this is the one place new 'received'
+ * ledger entries get created.
  *
  * Clicking a row (not its checkbox) still opens EditOrderModal, which
  * now only edits qty/supplier/delivery/notes.
@@ -70,6 +71,9 @@ export default function OrdersPanel({ onClose }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [checked, setChecked] = useState<Record<string, boolean>>({});
+  // Bulk-apply status dropdown — defaults to 'ordered' since that's the
+  // most common action right after creating an order.
+  const [bulkStatus, setBulkStatus] = useState<OrderEntry['status']>('ordered');
 
   // ESC closes
   useEffect(() => {
@@ -153,19 +157,26 @@ export default function OrdersPanel({ onClose }: Props) {
 
   const selectedIds = useMemo(() => Object.keys(checked).filter(id => checked[id]), [checked]);
 
-  const markOrdered = () => {
+  // Applies `bulkStatus` to every checked item. Setting 'received' also
+  // runs the same ledger-entry-creation logic EditOrderModal used to run
+  // on its own not-received→received transition (that transition no
+  // longer happens there — status isn't editable in EditOrderModal
+  // anymore — so this is the one remaining place new 'received' ledger
+  // entries get created).
+  const applyBulkStatus = () => {
     if (!selectedIds.length) return;
-    const beforeOrders = orders;
-    bulkUpdateOrders(selectedIds, { status: 'ordered' });
-    pushToast({
-      message: `Marked ${selectedIds.length} item${selectedIds.length !== 1 ? 's' : ''} ordered`,
-      undo: () => setOrders(beforeOrders),
-    });
-    setChecked({});
-  };
 
-  const markReceived = () => {
-    if (!selectedIds.length) return;
+    if (bulkStatus !== 'received') {
+      const beforeOrders = orders;
+      bulkUpdateOrders(selectedIds, { status: bulkStatus });
+      pushToast({
+        message: `Marked ${selectedIds.length} item${selectedIds.length !== 1 ? 's' : ''} ${bulkStatus}`,
+        undo: () => setOrders(beforeOrders),
+      });
+      setChecked({});
+      return;
+    }
+
     const idSet = new Set(selectedIds);
     // Only build ledger entries for items not already received — avoids
     // double-inserting a ledger row if the selection includes items
@@ -295,12 +306,30 @@ export default function OrdersPanel({ onClose }: Props) {
 
         {selectedIds.length > 0 && (
           <div style={bulkBarStyle}>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-muted)' }}>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)', whiteSpace: 'nowrap' as const, flexShrink: 0 }}>
               {selectedIds.length} selected
             </span>
-            <button className="btn sm" onClick={markOrdered}>Mark Ordered</button>
-            <button className="btn sm primary" onClick={markReceived}>Mark Received</button>
-            <button className="btn sm" onClick={() => setChecked({})}>Deselect</button>
+            <select
+              value={bulkStatus}
+              onChange={e => setBulkStatus(e.target.value as OrderEntry['status'])}
+              style={bulkSelectStyle}
+              title="Mark as"
+            >
+              <option value="pending">pending</option>
+              <option value="ordered">ordered</option>
+              <option value="received">received</option>
+            </select>
+            <button
+              className="btn sm primary"
+              style={{ flexShrink: 0, fontSize: 9, padding: '4px 8px' }}
+              onClick={applyBulkStatus}
+            >APPLY</button>
+            <button
+              className="btn sm"
+              style={{ flexShrink: 0, fontSize: 9, padding: '4px 6px' }}
+              title="Deselect all"
+              onClick={() => setChecked({})}
+            >✕</button>
           </div>
         )}
       </div>
@@ -361,4 +390,11 @@ const bulkBarStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 6,
   padding: '8px 10px', borderTop: '1px solid var(--border2)',
   background: 'var(--panel2)', boxShadow: '0 -4px 12px rgba(0,0,0,0.2)',
+};
+
+const bulkSelectStyle: React.CSSProperties = {
+  flex: 1, minWidth: 0,
+  background: 'var(--panel)', border: '1px solid var(--border2)',
+  color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: 10,
+  padding: '4px 6px', outline: 'none', borderRadius: 4,
 };
