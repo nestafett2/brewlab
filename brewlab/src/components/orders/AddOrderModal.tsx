@@ -117,14 +117,17 @@ export default function AddOrderModal({ onClose }: Props) {
   const [manualIng, setManualIng]    = useState<string>('');
   const [manualQty, setManualQty]    = useState<string>('25');
   const [manualSupp, setManualSupp]  = useState<string>('');
-  const [manualDel, setManualDel]    = useState<string>('');
-  const [manualStatus, setManualStatus] = useState<'pending'|'ordered'|'received'>('pending');
-  const [manualNotes, setManualNotes] = useState<string>('');
 
-  // Log-order panel state.
+  // Log-order panel state. Delivery/status/notes are now set once here
+  // (ORDER DETAILS) rather than per-item — every staged item, whether
+  // added from suggestions or manually, is created with these same
+  // values at confirm time.
   const [logPanelOpen, setLogPanelOpen] = useState(false);
   const [globalSupplier, setGlobalSupplier] = useState<string>('');
   const [orderDate, setOrderDate] = useState<string>(dateToStr(todayDate()));
+  const [globalDelivery, setGlobalDelivery] = useState<string>('');
+  const [globalStatus, setGlobalStatus] = useState<'pending'|'ordered'|'received'>('pending');
+  const [globalNotes, setGlobalNotes] = useState<string>('');
 
   // Re-seed manual ingredient when type changes.
   useEffect(() => {
@@ -181,9 +184,9 @@ export default function AddOrderModal({ onClose }: Props) {
       ingredient: manualIng,
       qty,
       supplier: manualSupp.trim(),
-      delivery: manualDel,
-      status: manualStatus,
-      notes: manualNotes.trim(),
+      delivery: globalDelivery,
+      status: globalStatus,
+      notes: globalNotes,
     }]);
     // Reset for next item, keep type/supplier/delivery.
     setManualQty('25');
@@ -217,9 +220,9 @@ export default function AddOrderModal({ onClose }: Props) {
         ingredient: it.ingredient,
         qty: it.qty,
         supplier,
-        delivery: it.delivery || date,
-        status: it.status,
-        notes: it.notes,
+        delivery: globalDelivery || date,
+        status: globalStatus,
+        notes: globalNotes,
         orderDate: date,
       };
       newOrders.push(order);
@@ -228,7 +231,7 @@ export default function AddOrderModal({ onClose }: Props) {
       // are logged pending/ordered and only flip to received later via
       // the Edit Order modal — at which point the ledger entry is
       // created. This keeps the ledger == received-orders invariant.
-      if (it.status === 'received') {
+      if (order.status === 'received') {
         const built = buildOrderLedgerEntry(order, libBySection);
         if (built) ledgerInserts.push(built);
       }
@@ -454,6 +457,32 @@ export default function AddOrderModal({ onClose }: Props) {
               <Row label="ORDER DATE">
                 <input type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)} style={inputStyle} />
               </Row>
+              <Row label="EXP. DELIVERY">
+                <input type="date" value={globalDelivery} onChange={e => setGlobalDelivery(e.target.value)} style={inputStyle} />
+              </Row>
+              <Row label="STATUS">
+                <div style={{ display: 'flex', gap: 10 }}>
+                  {(['pending', 'ordered', 'received'] as const).map(s => (
+                    <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                      <input
+                        type="radio" name="global-status" value={s}
+                        checked={globalStatus === s}
+                        onChange={() => setGlobalStatus(s)}
+                        style={{ accentColor: 'var(--amber)' }}
+                      />
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10 }}>{s}</span>
+                    </label>
+                  ))}
+                </div>
+              </Row>
+              <Row label="NOTES">
+                <input
+                  type="text" value={globalNotes}
+                  onChange={e => setGlobalNotes(e.target.value)}
+                  placeholder="optional"
+                  style={inputStyle}
+                />
+              </Row>
               <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
                 <button className="btn primary" style={{ flex: 1, fontSize: 10 }} onClick={confirmAndLog}>
                   ✓ CREATE ORDER
@@ -534,32 +563,6 @@ export default function AddOrderModal({ onClose }: Props) {
                     <option value="">— None —</option>
                     {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
-                </Row>
-                <Row label="EXP. DELIVERY">
-                  <input type="date" value={manualDel} onChange={e => setManualDel(e.target.value)} style={inputStyle} />
-                </Row>
-                <Row label="STATUS">
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    {(['pending', 'ordered', 'received'] as const).map(s => (
-                      <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                        <input
-                          type="radio" name="manual-status" value={s}
-                          checked={manualStatus === s}
-                          onChange={() => setManualStatus(s)}
-                          style={{ accentColor: 'var(--amber)' }}
-                        />
-                        <span style={{ fontFamily: 'var(--mono)', fontSize: 10 }}>{s}</span>
-                      </label>
-                    ))}
-                  </div>
-                </Row>
-                <Row label="NOTES">
-                  <input
-                    type="text" value={manualNotes}
-                    onChange={e => setManualNotes(e.target.value)}
-                    placeholder="optional"
-                    style={inputStyle}
-                  />
                 </Row>
                 <button
                   className="btn primary"
