@@ -15,7 +15,7 @@ import {
   buildForecastRows, computeRowStatus, deriveTimeline,
   type LibSection, type LibBySection,
 } from './orderForecast';
-import type { PlannerBrew, OrderEntry, LedgerData, Ingredient } from '../../types';
+import type { PlannerBrew, OrderEntry, RecurringOrder, LedgerData, Ingredient } from '../../types';
 
 const SECTION_LABEL: Record<LibSection, string> = {
   malts: 'MALTS', hops: 'HOPS', yeast: 'YEAST', misc: 'ADJUNCTS',
@@ -63,6 +63,7 @@ export function printForecastTable(args: {
   section: LibSection | 'all';
   plannerBrews: PlannerBrew[];
   orders: OrderEntry[];
+  recurringOrders: RecurringOrder[];
   libBySection: LibBySection;
   inventoryStock: Record<string, number>;
   ledgerData: LedgerData;
@@ -72,13 +73,13 @@ export function printForecastTable(args: {
   breweryName?: string | null;
 }): void {
   const {
-    section, plannerBrews, orders, libBySection, inventoryStock, ledgerData,
+    section, plannerBrews, orders, recurringOrders, libBySection, inventoryStock, ledgerData,
     getIngredients, recipeById, dayLimit, breweryName,
   } = args;
 
   const getTaxBatch = (recipeId: string): string => recipeById.get(recipeId)?.taxBatch ?? '';
 
-  const timeline = deriveTimeline(plannerBrews, orders);
+  const timeline = deriveTimeline(plannerBrews, orders, recurringOrders);
   const today = new Date();
   const filtered = dayLimit === 0 ? timeline : timeline.filter(col => {
     const colDate = new Date(col.kind === 'brew' ? col.brew.start : col.date);

@@ -37,6 +37,7 @@ export default function OrderPlannerPage() {
   const settings    = useStore(s => s.settings);
   const plannerBrews    = useStore(s => s.plannerBrews);
   const orders          = useStore(s => s.orders);
+  const recurringOrders = useStore(s => s.recurringOrders);
   const inventoryStock  = useStore(s => s.inventoryStock);
   const ledgerData      = useStore(s => s.ledgerData);
   const ingredientsByRecipe = useStore(s => s.ingredientsByRecipe);
@@ -83,6 +84,7 @@ export default function OrderPlannerPage() {
       section,
       plannerBrews,
       orders,
+      recurringOrders,
       libBySection: { malts: maltLib, hops: hopLib, yeast: yeastLib, misc: miscLib },
       inventoryStock,
       ledgerData,
