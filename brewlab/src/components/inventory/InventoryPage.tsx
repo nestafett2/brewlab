@@ -137,18 +137,11 @@ export default function InventoryPage() {
         {!showHarvested && (
           <>
             {/* View toggle */}
-            <div style={viewToggleStyle}>
-              <button
-                className={`btn sm ${view === 'current' ? 'active' : ''}`}
-                onClick={() => setView('current')}
-                style={{ border: 'none' }}
-              >CURRENT</button>
-              <button
-                className={`btn sm ${view === 'ledger' ? 'active' : ''}`}
-                onClick={() => setView('ledger')}
-                style={{ border: 'none' }}
-              >TAX LEDGER</button>
-            </div>
+            <button
+              className={`btn sm ${view === 'ledger' ? 'active' : ''}`}
+              onClick={() => setView(v => v === 'ledger' ? 'current' : 'ledger')}
+              style={{ marginLeft: 16 }}
+            >TAX LEDGER</button>
 
             {view === 'current' && (
               <button
@@ -270,11 +263,6 @@ const sectionSelectStyle: React.CSSProperties = {
   fontFamily: 'var(--mono)', fontSize: 10,
   background: 'var(--panel2)', border: '1px solid var(--border2)',
   color: 'var(--text)', padding: '3px 8px',
-};
-
-const viewToggleStyle: React.CSSProperties = {
-  display: 'flex', gap: 2, marginLeft: 16,
-  border: '1px solid var(--border2)', padding: 2,
 };
 
 const exportMenuStyle: React.CSSProperties = {
