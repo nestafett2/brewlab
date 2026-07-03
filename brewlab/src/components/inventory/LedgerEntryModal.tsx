@@ -19,6 +19,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store';
 import { dateToStr, todayDate } from '../../lib/dates';
 import type { LedgerEntry } from '../../types';
+import {
+  gsheetsGetToken, gsheetsAppendRow, gsheetsEnsureHeaders,
+  gsheetsSheetIdForSection, gsheetsTabNameFor, getGSheetsConfig,
+} from '../../lib/gsheets';
 
 interface Props {
   ledgerKey: string;
@@ -29,6 +33,21 @@ interface Props {
 
 type EntryType = 'got' | 'used';
 
+/** Same header row as LedgerExportModal's XLSX sheets — keeps the audit
+ *  trail column-compatible whether a row came from bulk export or a
+ *  single entry's auto-push. */
+const LEDGER_SHEET_HEADERS = ['Date', 'Type', 'Qty (kg)', 'Beer / Note', 'Received Date', 'Used Date', 'Balance', 'Supplier'];
+
+type GSheetsSection = 'malts' | 'hops' | 'yeast' | 'misc';
+
+function sectionFromLedgerKey(key: string): GSheetsSection | null {
+  if (key.startsWith('malts_')) return 'malts';
+  if (key.startsWith('hops_'))  return 'hops';
+  if (key.startsWith('yeast_')) return 'yeast';
+  if (key.startsWith('misc_'))  return 'misc';
+  return null;
+}
+
 export default function LedgerEntryModal({ ledgerKey, editIdx, onClose }: Props) {
   const ledgerData         = useStore(s => s.ledgerData);
   const setLedgerData      = useStore(s => s.setLedgerData);
@@ -36,6 +55,10 @@ export default function LedgerEntryModal({ ledgerKey, editIdx, onClose }: Props)
   const updateLedgerEntry  = useStore(s => s.updateLedgerEntry);
   const deleteLedgerEntry  = useStore(s => s.deleteLedgerEntry);
   const pushToast          = useStore(s => s.pushToast);
+  const maltLib            = useStore(s => s.maltLib);
+  const hopLib             = useStore(s => s.hopLib);
+  const yeastLib           = useStore(s => s.yeastLib);
+  const miscLib            = useStore(s => s.miscLib);
 
   const isEdit = editIdx != null;
   const existing: LedgerEntry | null = useMemo(
@@ -62,6 +85,30 @@ export default function LedgerEntryModal({ ledgerKey, editIdx, onClose }: Props)
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
+  const ingredientNameForKey = (key: string, section: GSheetsSection): string => {
+    const id = key.slice(section.length + 1);
+    const lib = section === 'malts' ? maltLib : section === 'hops' ? hopLib : section === 'yeast' ? yeastLib : miscLib;
+    return lib.find(e => String(e.id) === id)?.name ?? '';
+  };
+
+  // Best-effort background push of one audit-trail row to Google Sheets.
+  // Never throws — a Sheets failure must never block save/delete.
+  const pushLedgerRowToSheets = async (
+    row: (string | number)[], section: GSheetsSection, ingredientName: string,
+  ): Promise<void> => {
+    try {
+      const token = gsheetsGetToken();
+      if (!token) return;
+      const sheetId = gsheetsSheetIdForSection(section, getGSheetsConfig().sheetIds);
+      if (!sheetId) return;
+      const tabName = gsheetsTabNameFor(ingredientName);
+      await gsheetsEnsureHeaders(token, sheetId, tabName, LEDGER_SHEET_HEADERS);
+      await gsheetsAppendRow(token, sheetId, tabName, row);
+    } catch {
+      // Best-effort — silent background push only.
+    }
+  };
+
   const save = () => {
     const n = parseFloat(qty) || 0;
     if (n <= 0) return;
@@ -78,8 +125,38 @@ export default function LedgerEntryModal({ ledgerKey, editIdx, onClose }: Props)
       entry.used = n;
       entry.usedDate = usedDate;
     }
-    if (isEdit && editIdx != null) updateLedgerEntry(ledgerKey, editIdx, entry);
-    else addLedgerEntry(ledgerKey, entry);
+
+    const section = sectionFromLedgerKey(ledgerKey);
+    if (isEdit && editIdx != null) {
+      updateLedgerEntry(ledgerKey, editIdx, entry);
+      if (section) {
+        const oldQty = existing?.got ?? existing?.used ?? 0;
+        const newQty = n;
+        pushLedgerRowToSheets(
+          [date, 'CORRECTION', newQty - oldQty, `Corrected: ${oldQty} → ${newQty} kg`, '', '', '', ''],
+          section, ingredientNameForKey(ledgerKey, section),
+        ).catch(() => {});
+      }
+    } else {
+      addLedgerEntry(ledgerKey, entry);
+      if (section) {
+        pushLedgerRowToSheets(
+          [
+            date,
+            type === 'got' ? 'IN' : 'OUT',
+            n,
+            type === 'used'
+              ? (entry.taxBatch ? `${entry.taxBatch} — ${entry.beer ?? ''}` : (entry.beer ?? ''))
+              : (entry.supplier ?? ''),
+            entry.receivedDate ?? '',
+            entry.usedDate ?? '',
+            '',
+            entry.supplier ?? '',
+          ],
+          section, ingredientNameForKey(ledgerKey, section),
+        ).catch(() => {});
+      }
+    }
     onClose();
   };
 
@@ -90,11 +167,27 @@ export default function LedgerEntryModal({ ledgerKey, editIdx, onClose }: Props)
     // removal; restoring via setLedgerData with the pre-delete blob
     // is the safe round-trip.)
     const before = ledgerData;
+    const removedEntry = existing;
     deleteLedgerEntry(ledgerKey, editIdx);
     pushToast({
       message: 'Deleted ledger entry',
       undo: () => setLedgerData(before),
     });
+
+    const section = sectionFromLedgerKey(ledgerKey);
+    if (section && removedEntry) {
+      const qty = removedEntry.got ?? removedEntry.used ?? 0;
+      pushLedgerRowToSheets(
+        [
+          removedEntry.date,
+          'CORRECTION',
+          -qty,
+          `Deleted entry (${removedEntry.got != null ? 'IN' : 'OUT'} ${removedEntry.got ?? removedEntry.used} kg)`,
+          '', '', '', '',
+        ],
+        section, ingredientNameForKey(ledgerKey, section),
+      ).catch(() => {});
+    }
     onClose();
   };
 

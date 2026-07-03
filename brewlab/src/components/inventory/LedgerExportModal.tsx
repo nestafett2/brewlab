@@ -21,7 +21,6 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../../store';
 import { exportWorkbook, type SheetSpec, type CellValue } from '../../lib/excel';
-import { gsheetsPushLedger, gsheetsGetToken } from '../../lib/gsheets';
 import type { InvSection } from './inventoryShared';
 
 interface Props {
@@ -138,25 +137,6 @@ export default function LedgerExportModal({ defaultSection, onClose }: Props) {
     onClose();
   };
 
-  const syncToSheets = async () => {
-    if (section === ALL_OPTION) {
-      pushToast({ message: 'Select a specific section to sync to Google Sheets.', variant: 'error' });
-      return;
-    }
-    const sheets = buildSheets();
-    if (!sheets.length) {
-      pushToast({ message: 'No ledger entries in that date range.', variant: 'info' });
-      return;
-    }
-    const gsheetsResult = await gsheetsPushLedger(sheets, section);
-    if (gsheetsResult === 'ok') {
-      pushToast({ message: 'Synced to Google Sheets', variant: 'success' });
-    } else if (gsheetsResult != null) {
-      pushToast({ message: gsheetsResult, variant: 'error' });
-    }
-    onClose();
-  };
-
   return (
     <div style={overlayStyle} onMouseDown={onClose}>
       <div style={modalStyle} onMouseDown={e => e.stopPropagation()}>
@@ -185,9 +165,6 @@ export default function LedgerExportModal({ defaultSection, onClose }: Props) {
 
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
           <button className="btn primary" style={{ flex: 1 }} onClick={run}>EXPORT</button>
-          {gsheetsGetToken() !== null && (
-            <button className="btn" style={{ flex: 1 }} onClick={syncToSheets}>SYNC TO SHEETS</button>
-          )}
           <button className="btn" onClick={onClose}>CANCEL</button>
         </div>
       </div>
