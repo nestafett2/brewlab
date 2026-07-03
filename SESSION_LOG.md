@@ -1,3 +1,40 @@
+## 03 July 2026 (afternoon) — Inventory polish, Export Selected, Record Usage resolver, Overview reminders
+
+### Commits this session
+`3b91dce` → `f14b505` → `c727a5a` → `bd9ffa3` → `3f32351` → `d2e2082` → `118c95d` → `a3e22d0` → `7844310` → `29ba726` → `09a61eb` → `dbb2f58` → `192711e` → `8f7e4f4` (plus the docs/WORKFLOWS.md creation and START_HERE.md handoff commits either side of this range)
+
+### What got built
+
+**Inventory toolbar** — MALTS/HOPS/YEAST/ADJUNCTS/HARVESTED buttons collapsed into a single dropdown matching the Order Planner pattern. CURRENT button removed; TAX LEDGER is now a standalone toggle. Toolbar was too wide and visually cluttered.
+
+**Inventory layout** — page constrained to 1024px max-width, centered, with auto margins. INGREDIENT column capped at 260px with ellipsis truncation and full-name tooltip on hover. Table was stretching full screen width with no visual containment.
+
+**Recurring orders print gap fixed** — `forecastPrint.ts` was calling `deriveTimeline(plannerBrews, orders)` without `recurringOrders`, so printed forecasts were missing recurring delivery columns. Added `recurringOrders` to the function args and passed it through; `OrderPlannerPage.tsx` now pulls `recurringOrders` from the store and passes it to `printForecastTable`.
+
+**Export Selected** — File → Export Selected now exports all highlighted sidebar recipes as a zip file (one BeerXML per recipe) via jszip, replacing a no-op placeholder. Multi-recipe BeerXML in a single file is poorly supported by most apps (BeerSmith etc.), so one file per recipe in a zip is the right approach. jszip installed and imported statically (~95KB bundle addition, accepted since export is a common action). Filename: `brewlab-recipes-N-YYYY-MM-DD.zip` for multiple recipes, or the single-recipe filename with a `.zip` extension for one.
+
+**File menu stay-open bug** — File/View/Libraries/Settings menu items were re-opening their dropdown right after being clicked, because the click bubbled up to the wrapper's `onClick={() => toggleMenu(...)}` and re-toggled it open. Fixed by guarding each wrapper's onClick with `e.target === e.currentTarget` so it only fires on a direct click on the menu label, not on a bubbled click from a dropdown item — cheaper than adding `stopPropagation` to every one of the ~15 menu-dd-item handlers.
+
+**Record Usage — "not in library" resolver** — ingredients that don't fuzzy-match any library entry showed a static warning. Clicking "⚠ not in library — click to fix" now opens an inline resolver panel with a search input filtered to that section's library, plus a "+ Add to library" button. On link: saves `libId` onto the recipe ingredient via `updateIngredient` so `ingNamesMatch` finds it on all future brews. On add: creates a new library entry then auto-links. `e.preventDefault()` added to the resolver's interactive elements (search input, library-entry rows, add button) to stop the parent `<label>` from also toggling the row checkbox.
+
+**Record Usage — checkbox reset bug** — `resolveLink` calling `updateIngredient` triggered a `rows` recompute; `lastRowsRef` detected the change and `setChecked(initialChecked)` wiped every user checkbox selection. Fixed with two changes: (1) stable UIDs based on `section_name` instead of an incrementing counter, so a row's identity survives a recompute; (2) brewId-aware reseed — full reset to defaults only when the brew actually changes, merge-only (add missing UIDs, preserve existing values) when rows change for the same brew.
+
+**Overview recording reminders** — each reminder row now has a clickable brew name (calls `onOpenRecipe`) and a Dismiss button. Dismissed IDs persist to `bl_dismissed_rec_reminders` in localStorage so they don't reappear. Previously reminders were display-only with no way to act on or clear them.
+
+**WORKFLOWS.md updated** — new Workflow 3 (Managing Inventory) added, covering opening balances, recording usage (including the "not in library" resolver), reading the inventory table, Overview reminders, and Export Selected. First line changed from pointing to a separate user manual to stating this doc is the user manual. Workflows 3–7 renumbered to 4–8.
+
+### Key decisions
+- File menu bug fixed via an `e.target === e.currentTarget` guard on each wrapper's onClick, not `stopPropagation` on every dropdown item — touches 4 call sites instead of ~15.
+- One BeerXML file per recipe in a zip (not one combined multi-recipe XML) for Export Selected — most BeerXML-consuming apps don't handle multi-recipe documents well.
+- jszip imported statically rather than dynamically — simpler code; the ~95KB bundle cost was accepted since export is a common action, not a rare one.
+- Record Usage row UIDs keyed on `section_name` instead of an incrementing counter so identity survives store-triggered recomputes — required for the checkbox-preservation fix to work at all.
+
+### Noted for future
+- Recurring orders print gap and the inventory too-wide layout bug — both carried over from the morning session's pending list — are now fixed.
+- If a second bulk-export need arises, "Export Recipe (BeerXML)" and other single-item exports could unify on the same zip helper Export Selected uses.
+
+---
+
 ## 03 July 2026 — Recipe UI, sync fixes, Order Planner overhaul, recurring orders
 
 ### Commits this session
