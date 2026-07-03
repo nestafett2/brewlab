@@ -38,6 +38,7 @@ export default function EditIngredientModal({ recipeId, ingredient, allIngredien
   const miscLib = useStore(s => s.miscLib);
   const recipes = useStore(s => s.recipes);
   const settings = useStore(s => s.settings);
+  const pitchProfiles = useStore(s => s.pitchProfiles);
 
   const recipe = recipes.find(r => r.id === recipeId);
   const type = ingredient.type;
@@ -318,6 +319,28 @@ export default function EditIngredientModal({ recipeId, ingredient, allIngredien
             {/* Yeast-specific fields */}
             {type === 'yeast' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {pitchProfiles.length > 0 && (
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <div className="form-group" style={{ flex: 1 }}>
+                      <label>Profile</label>
+                      <select
+                        defaultValue=""
+                        style={{ width: '100%' }}
+                        onChange={e => {
+                          const p = pitchProfiles.find(x => x.id === e.target.value);
+                          if (!p) return;
+                          if (p.o2Lpm  != null) setRecipeO2Lpm(String(p.o2Lpm));
+                          if (p.o2Time != null) setRecipeO2Time(String(p.o2Time));
+                        }}
+                      >
+                        <option value="">— select —</option>
+                        {pitchProfiles.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div className="form-group" style={{ flex: 1 }}>
                     <label>Form</label>
