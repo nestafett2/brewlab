@@ -1227,6 +1227,8 @@ export interface DhPhPrediction {
   measuredResidualPh:  number;
   /** mL of acid stock to drop the beer to target. null when no residual or no volume. */
   measuredResidualMl:  number | null;
+  /** currentPh + predictedRise (or currentPh alone when no predicted rise). null when no currentPh. */
+  predictedFinalPh:    number | null;
 }
 
 /**
@@ -1327,9 +1329,15 @@ export function calcDhPhPrediction(opts: {
   const coefficient = janishCoefficientForTemp(dhTempC);
   const predictedRise = gPerL != null ? coefficient * gPerL : null;
 
-  // Measured-pH residual — fires when current beer pH > target.
-  const measuredResidualPh = currentPh != null && isFinite(currentPh) && currentPh > targetFinalPh
-    ? currentPh - targetFinalPh
+  // Measured-pH residual — fires when current pH + predicted DH rise will exceed target.
+  // Even if current pH equals target, the predicted rise means acid is needed pre-DH.
+  const predictedFinalPh = currentPh != null && isFinite(currentPh) && predictedRise != null
+    ? currentPh + predictedRise
+    : currentPh != null && isFinite(currentPh)
+      ? currentPh
+      : null;
+  const measuredResidualPh = predictedFinalPh != null && predictedFinalPh > targetFinalPh
+    ? predictedFinalPh - targetFinalPh
     : 0;
   const measuredResidualMl = acidMlForPhDrop(
     measuredResidualPh, volumeL ?? 0, acidType, acidPct, beerBufferPhPerMeqL,
@@ -1345,5 +1353,6 @@ export function calcDhPhPrediction(opts: {
     currentPh: currentPh != null && isFinite(currentPh) ? currentPh : null,
     measuredResidualPh,
     measuredResidualMl,
+    predictedFinalPh: predictedFinalPh,
   };
 }
