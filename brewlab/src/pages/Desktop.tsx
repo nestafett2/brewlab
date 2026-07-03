@@ -56,6 +56,7 @@ import { isWaterChem } from '../lib/waterChem';
 import { computeRecipeStats, calcBrewDayTargets, DEFAULT_MASH_PROFILE } from '../lib/calculations';
 import { printPrepSheet } from '../components/recipe/prepSheetPrint';
 import { printBrewDaySheet } from '../components/recipe/brewDaySheetPrint';
+import { printFermPackagingSheet } from '../components/recipe/fermPackagingSheetPrint';
 
 export type RecipeSubTab = 'ingredients' | 'brewday' | 'ferm' | 'cold' | 'tax'
   | 'taxsummary' | 'analysis' | 'water' | 'history' | 'checklist';
@@ -117,6 +118,8 @@ export default function Desktop() {
   const tankCalib                = useStore(s => s.tankCalib);
   const getWaterChem             = useStore(s => s.getWaterChem);
   const getBrewDay               = useStore(s => s.getBrewDay);
+  const getFermMeta              = useStore(s => s.getFermMeta);
+  const getColdSide              = useStore(s => s.getColdSide);
   const [printMenuOpen, setPrintMenuOpen] = useState(false);
   const printMenuRef = useRef<HTMLDivElement>(null);
 
@@ -926,6 +929,25 @@ export default function Desktop() {
     });
   };
 
+  // Print Ferm & Packaging Sheet — combined A4 handwriting sheet covering
+  // fermentation log, harvest, and packaging. Same getter-at-click-time
+  // pattern as the two handlers above.
+  const handlePrintFermPackagingSheet = () => {
+    const recipe = activeRecipeId ? recipes.find(r => r.id === activeRecipeId) : null;
+    if (!recipe) { pushToast({ message: 'Open a recipe first.', variant: 'info' }); return; }
+    const ingredients = ingredientsByRecipe[recipe.id] ?? [];
+    const tankName = recipe.bdFv ? (tankCalib[recipe.bdFv]?.name ?? recipe.bdFv) : '';
+    printFermPackagingSheet({
+      recipe, ingredients,
+      fermMeta: getFermMeta(recipe.id),
+      coldSide: getColdSide(recipe.id),
+      brewDay: getBrewDay(recipe.id),
+      tankName,
+      // Per-recipe brewer wins; falls back to brewery-wide setting.
+      brewerName: (recipe.brewer || '').trim() || settings.breweryName || '',
+    });
+  };
+
   return (
     <div className="desktop-layout">
       {/* ═══ Menu Bar ═══ */}
@@ -1349,6 +1371,10 @@ export default function Desktop() {
                   className="menu-dd-item"
                   onClick={() => { handlePrintBrewDaySheet(); setPrintMenuOpen(false); }}
                 >Brew Day Sheet</div>
+                <div
+                  className="menu-dd-item"
+                  onClick={() => { handlePrintFermPackagingSheet(); setPrintMenuOpen(false); }}
+                >Ferm &amp; Packaging Sheet</div>
               </div>
             )}
           </div>
