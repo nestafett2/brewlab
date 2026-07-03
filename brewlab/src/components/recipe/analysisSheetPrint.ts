@@ -333,10 +333,13 @@ function buildProcessNotes(inputs: AnalysisSheetInputs): string {
 }
 
 function buildFreeNotes(title: string, text: string): string {
+  const body = text
+    ? `<div class="as-notes-text" style="white-space:pre-wrap;">${escapeHtml(text)}</div>`
+    : `<div class="as-notes-box"></div>`;
   return `
     <section class="as-section">
       <div class="as-section-title">${escapeHtml(title.toUpperCase())}</div>
-      <div class="as-notes-text" style="white-space:pre-wrap;">${escapeHtml(text)}</div>
+      ${body}
     </section>
   `;
 }
@@ -379,6 +382,15 @@ const EXTRA_STYLES = `
   .as-notes-source { font-size: 9px; color: #888; padding: 5px 8px; font-variant: small-caps; }
   .as-notes-text { font-size: 11px; padding: 5px 8px; white-space: pre-wrap; }
 
+  .as-notes-box {
+    border: 1px solid #999;
+    height: 80px;
+    background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 21px, #eee 21px, #eee 22px);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    margin-top: 4px;
+  }
+
   @media print { .as-section { page-break-inside: avoid; } }
 `;
 
@@ -392,9 +404,9 @@ export function printAnalysisSheet(inputs: AnalysisSheetInputs): void {
     buildFermAndPackaging(inputs),
     buildProcessNotes(inputs),
   ];
-  if (inputs.coldSide['cs-tasting-notes']) sections.push(buildFreeNotes('Tasting Notes', inputs.coldSide['cs-tasting-notes']!));
-  if (inputs.coldSide['cs-changes-notes']) sections.push(buildFreeNotes('Changes for Next Time', inputs.coldSide['cs-changes-notes']!));
-  if (inputs.coldSide['cs-analysis-notes']) sections.push(buildFreeNotes('Analysis Notes', inputs.coldSide['cs-analysis-notes']!));
+  sections.push(buildFreeNotes('Tasting Notes', inputs.coldSide['cs-tasting-notes'] || ''));
+  sections.push(buildFreeNotes('Changes for Next Time', inputs.coldSide['cs-changes-notes'] || ''));
+  sections.push(buildFreeNotes('Analysis Notes', inputs.coldSide['cs-analysis-notes'] || ''));
 
   const beerName = inputs.recipe.beerName || inputs.recipe.name || 'Recipe';
   printHtml(sections.join('\n'), {
