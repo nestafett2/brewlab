@@ -350,13 +350,14 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
                                 placeholder={`Search ${r.section}…`}
                                 value={resolveSearch}
                                 onChange={e => setResolveSearch(e.target.value)}
+                                onClick={e => e.preventDefault()}
                                 style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border2)', color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: 9, padding: '3px 6px', outline: 'none', marginBottom: 4 }}
                               />
                               <div style={{ maxHeight: 120, overflowY: 'auto' }}>
                                 {filtered.map(le => (
                                   <div
                                     key={String(le.id)}
-                                    onClick={() => resolveLink(r, le)}
+                                    onClick={e => { e.preventDefault(); resolveLink(r, le); }}
                                     style={{ padding: '3px 6px', fontFamily: 'var(--mono)', fontSize: 9, cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
                                     onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--panel)'}
                                     onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = ''}
@@ -369,7 +370,7 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
                               <button
                                 className="btn sm"
                                 style={{ marginTop: 6, width: '100%' }}
-                                onClick={() => addToLibrary(r)}
+                                onClick={e => { e.preventDefault(); addToLibrary(r); }}
                               >+ Add "{r.ingName}" to library</button>
                             </div>
                           );
