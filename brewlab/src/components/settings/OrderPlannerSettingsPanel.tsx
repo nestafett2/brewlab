@@ -84,6 +84,9 @@ export default function OrderPlannerSettingsPanel() {
   const [formOpen, setFormOpen]   = useState(false);
   const [draft, setDraft]         = useState<RecurringDraft>(emptyDraft());
 
+  const libForType = (t: RecurringOrder['type']): { name: string }[] =>
+    t === 'malts' ? maltLib : t === 'hops' ? hopLib : t === 'yeast' ? yeastLib : miscLib;
+
   const openNewRecurring = () => {
     setDraft(emptyDraft());
     setEditingId(null);
@@ -239,19 +242,26 @@ export default function OrderPlannerSettingsPanel() {
                 <label>Type</label>
                 <select
                   value={draft.type}
-                  onChange={e => setDraft({ ...draft, type: e.target.value as RecurringOrder['type'] })}
+                  onChange={e => {
+                    const type = e.target.value as RecurringOrder['type'];
+                    const firstName = libForType(type)[0]?.name ?? '';
+                    setDraft({ ...draft, type, ingredient: firstName });
+                  }}
                 >
                   {TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
               <div className="settings-field">
                 <label>Ingredient</label>
-                <input
-                  type="text"
+                <select
                   value={draft.ingredient}
                   onChange={e => setDraft({ ...draft, ingredient: e.target.value })}
-                  placeholder="Library entry name"
-                />
+                >
+                  <option value="">— Select —</option>
+                  {libForType(draft.type).map(entry => (
+                    <option key={entry.name} value={entry.name}>{entry.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="settings-field">
                 <label>Qty</label>
@@ -309,7 +319,7 @@ export default function OrderPlannerSettingsPanel() {
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 16, justifyContent: 'flex-end' }}>
               <button className="btn sm" onClick={() => setFormOpen(false)}>Cancel</button>
-              <button className="btn sm primary" onClick={saveRecurring}>Save</button>
+              <button className="btn sm primary" disabled={!draft.ingredient} onClick={saveRecurring}>Save</button>
             </div>
           </div>
         </div>
