@@ -25,7 +25,7 @@ import type {
   MiscLib,
   MaltLib,
 } from '../types';
-import { iterTaxIngredients, isWaterChem } from './waterChem';
+import { iterTaxIngredients, isWaterChem, WATER_CHEM_KW } from './waterChem';
 import { waterLitresForTax } from './tax';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -143,7 +143,7 @@ export function ntaNormalise(ctx: NtaContext): NtaRaw {
   const miscList: NtaMiscEntry[] = [];
   for (const m of ings) {
     if (m.type !== 'misc') continue;
-    if (isWaterChem(m)) continue;
+    if (isWaterChem(m) || WATER_CHEM_KW.test(m.name || '')) continue;
     const libE = miscLib.find(e => e.id === m.libId || e.name === m.name);
     const amt = parseFloat(String(m.amt)) || 0;
     const kgRaw = m.unit === 'kg' ? amt : amt / 1000;
