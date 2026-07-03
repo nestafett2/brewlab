@@ -20,7 +20,7 @@
  * buildForecastRows) — see CLAUDE.md note on shared brewUsage logic.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useStore } from '../../store';
 import type { PlannerBrew, Recipe, OrderEntry, PlannerAction } from '../../types';
 import { addDays, dateToStr, diffDays, fmtDate, strToDate, todayDate } from '../../lib/dates';
@@ -76,6 +76,13 @@ export default function BreweryOverviewPanel({ onOpenRecipe }: Props) {
   const yeastLib       = useStore(s => s.yeastLib);
   const miscLib        = useStore(s => s.miscLib);
   const getIngredients = useStore(s => s.getIngredients);
+
+  const [dismissed, setDismissed] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('bl_dismissed_rec_reminders');
+      return new Set(saved ? JSON.parse(saved) : []);
+    } catch { return new Set(); }
+  });
 
   const recipeById = useMemo<Record<string, Recipe>>(() => {
     const out: Record<string, Recipe> = {};
@@ -196,6 +203,8 @@ export default function BreweryOverviewPanel({ onOpenRecipe }: Props) {
     return out;
   }, [plannerBrews, ledgerData, maltLib, hopLib, yeastLib, miscLib, today]);
 
+  const visibleReminders = pendingRecording.filter(p => !dismissed.has(p.brew.id));
+
   // ── Schedule (HTML 4639–4674) — reuse OrderPlanner forecast ──────────
   const schedule = useMemo(() => {
     const filteredBrews = plannerBrews.filter(b => b.recipeId && !b.fullyRecorded);
@@ -228,19 +237,34 @@ export default function BreweryOverviewPanel({ onOpenRecipe }: Props) {
         </div>
       </div>
 
-      {pendingRecording.length > 0 && (
+      {visibleReminders.length > 0 && (
         <div className="ov-section ov-section-warn">
           <div className="ov-section-title">⚠ Inventory Recording Reminders</div>
-          {pendingRecording.map(p => {
+          {visibleReminders.map(p => {
             const recipe = p.brew.recipeId ? recipeById[p.brew.recipeId] : null;
             const line = formatBrewLine(p.brew, recipe);
             return (
-              <div key={p.brew.id} className="ov-row">
-                <span className="ov-row-label">
+              <div key={p.brew.id} className="ov-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <span
+                  className="ov-row-label"
+                  style={{ cursor: p.brew.recipeId ? 'pointer' : 'default', textDecoration: p.brew.recipeId ? 'underline' : 'none' }}
+                  onClick={() => p.brew.recipeId && onOpenRecipe(p.brew.recipeId)}
+                >
                   <b>{line.primary}</b>
                   {!line.fallbackOnly && line.version && <span className="ov-card-version"> {line.version}</span>}
                   {' '}— ended {p.daysSinceEnd}d ago
                 </span>
+                <button
+                  className="btn sm"
+                  title="Dismiss this reminder"
+                  onClick={() => setDismissed(prev => {
+                    const next = new Set(prev);
+                    next.add(p.brew.id);
+                    localStorage.setItem('bl_dismissed_rec_reminders', JSON.stringify([...next]));
+                    return next;
+                  })}
+                  style={{ flexShrink: 0, fontSize: 10, padding: '2px 8px' }}
+                >✕ Dismiss</button>
               </div>
             );
           })}
