@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import JSZip from 'jszip';
 import { useStore, type RecipeDeleteSnapshot } from '../store';
 import RecipeTab from '../components/recipe/RecipeTab';
 import BrewDayTab from '../components/recipe/BrewDayTab';
@@ -428,7 +429,6 @@ export default function Desktop() {
       return;
     }
     try {
-      const JSZip = (await import('jszip')).default;
       const zip = new JSZip();
       let count = 0;
       for (const id of ids) {
