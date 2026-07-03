@@ -301,7 +301,12 @@ This permanently snapshots all tax figures. Editing recipe or packaging data aft
 Click TAX MASTER in the top tab bar. Filter by date range and classification, print individual sub-tabs, or export the full three-tab Excel workbook.
 
 **5. Generate NTA submission form (if required)**
-Click SUBMITTER in the top tab bar. Select the beer name. The app normalises all ingredients to per-1000L quantities and generates the CC1-5610-6 form. Click Print.
+Click SUBMITTER in the top tab bar. Select the beer name. The app normalises all ingredients to per-1000L quantities and checks it against your submission register.
+
+- Click **🔍 Check** to run the comparison. If a match is found, the recipe is already on file and no new submission is needed.
+- If no match is found, click **✓ Mark as Submitted** to add it to your register.
+- Click **🖨 Print Form** to print selected recipes in the official CC1-5610-6 horizontal layout (4 per A4 page). This button only appears after a Check has confirmed a match.
+- Click **🖨 Print All** in the Submitted Recipes Register to print your full submission history as a compact summary table (~50 recipes per A4 page). Use this when the tax office asks for a complete record.
 
 ---
 
@@ -328,6 +333,64 @@ If data doesn't appear after changes on another device:
 - **Desktop only writes:** recipes, ingredients, settings, tax records.
 - **Tablet and mobile write:** brew day data, fermentation log, packaging data, brewery notes.
 - **Tax records:** desktop only.
+
+---
+
+## Workflow 9: Google Sheets Ledger Sync
+
+BrewLab automatically pushes your ingredient tax ledger to Google Sheets as a live running log. This gives you a permanent record outside the app — useful as a backup and for sharing with your accountant or the tax office.
+
+Three separate Google Sheets workbooks are used:
+- **Malts** — one tab per malt
+- **Hops** — one tab per hop variety
+- **Yeast & Misc** — one tab per yeast strain and misc ingredient
+
+Each tab is an append-only log. New entries are added automatically — nothing is ever overwritten or deleted.
+
+### One-time setup
+
+**1. Create three Google Sheets in your Google Drive**
+Name them something recognisable (e.g. BrewLab Malts, BrewLab Hops, BrewLab Yeast & Misc).
+
+**2. Copy each Sheet ID**
+Open each Sheet in your browser. The ID is the long string in the URL between `/d/` and `/edit`:
+`https://docs.google.com/spreadsheets/d/SHEET_ID_HERE/edit`
+
+**3. Open BrewLab Settings → Google Sheets**
+Enter your OAuth Client ID and the three Sheet IDs. Click Save.
+
+**4. Click Connect**
+A Google sign-in popup appears. Sign in and approve access. BrewLab stores the token locally — it never leaves your device or syncs to Supabase.
+
+> You need to connect separately on each device (desktop, tablet, mobile) since the token is stored locally per device. Google tokens expire after one hour — click Connect again in Settings → Google Sheets if a push fails.
+
+### How entries are pushed
+
+Once connected, BrewLab pushes ledger rows automatically:
+
+- **Record Usage after a brew** — one OUT row per ingredient appended to the correct tab
+- **Add Entry manually** — one row appended immediately on save
+- **Edit an entry** — one CORRECTION row appended showing the delta (e.g. `Corrected: 100 → 75 kg`)
+- **Delete an entry** — one CORRECTION row appended with the negative quantity (e.g. `-100 kg`)
+
+Nothing is ever overwritten. Corrections appear as additional rows so the full history is always preserved — this is intentional for tax audit purposes.
+
+### Column structure
+
+Each row has these columns in order: Date · Type (IN / OUT / CORRECTION) · Qty (kg) · Beer / Note · Received Date · Used Date · Balance · Supplier
+
+OUT rows from Record Usage show the tax batch number and beer name in the Beer / Note column (e.g. `453 Sansho Lager — Solar Storm`).
+
+### Exporting the ledger as XLSX
+
+The Google Sheets sync and the XLSX export are independent. To download a formatted Excel file with running balances:
+
+**1. Open the Inventory tab → TAX LEDGER**
+**2. Click EXPORT ▾ → Export Tax Ledger XLSX**
+**3. Set a date range and select a section (Malts / Hops / Yeast / Adjuncts)**
+**4. Click EXPORT**
+
+The downloaded file has one sheet per ingredient with correct running balances carried over from before the date range.
 
 ---
 
