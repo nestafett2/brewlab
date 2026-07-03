@@ -1,3 +1,26 @@
+## 03 July 2026 (late afternoon) — Analysis Sheet, Print Full Packet, OEM/Collab field
+
+### Analysis Sheet print artifact
+New `src/components/recipe/analysisSheetPrint.ts`. A4 portrait, black-on-white. Sections: header (beer name large, style/recipe#/tax batch grid top-right), stats row (brew date, package date, brewer, classification, ABV, batch size, sellable litres, IBU, IBU/SG ratio, price, per litre), cost breakdown, yeast & fermentation (real vs plan table), packaging (kegs/cans/waste + pitch pH/final pH), process notes (aggregated from all sources), tasting notes, changes for next time, analysis notes. All notes sections always render as blank ruled boxes when empty — unconditional, not gated on content. Replaces the old dark-theme DOM print on the Analysis tab (printHtml(node.outerHTML) removed). Handler in `AnalysisTab.tsx` replaced with call to `printAnalysisSheet`. `#analysis-printable` wrapper div removed. Commits: `ba5ec5d` (initial), follow-up fix for unconditional notes sections.
+
+Spec deviations flagged by CC:
+- `Settings` type → `BrewSettings` (actual export name)
+- `recipe.ibuSg` doesn't exist on Recipe — IBU/SG ratio replicated inline from `calcRecipeStats` formula
+- `coldSide['cs-pitch-ph']`/`['cs-final-ph']` don't exist — used `brewDay.pitchPh` and `coldSide['cs-ph']` instead
+
+### Print Full Packet
+"Print Full Packet" added to the Print ▾ dropdown in `Desktop.tsx`. Calls `handlePrintPrepSheet`, `handlePrintBrewDaySheet`, `handlePrintFermPackagingSheet` in sequence. Commit: part of same push.
+
+### OEM/Collab/Own Brand recipe origin field
+New `RecipeOrigin` type (`'own' | 'collab' | 'oem' | null`) added to `src/types/index.ts`. `recipeOrigin` and `oemFor` fields added to `Recipe` interface. UI in `RecipeTab.tsx`: three toggle buttons (Own Brand / Collab / OEM) on same row as Brewer; conditional partner name input below when Collab or OEM selected. Badge in `FolderTree.tsx` sidebar row for collab/OEM recipes showing type and partner name. Sync wiring in `src/lib/supabase.ts`: `recipeOrigin → recipe_origin`, `oemFor → oem_for` in both `recipeToRow` and `rowToRecipe`. Migration file created: `migrations/2026-07-03-recipe-origin.sql`. **Migration applied to Supabase.** Commits: `39ef19a` + origin button layout fix.
+
+### Key decisions
+- Analysis Sheet notes sections always render (blank ruled box when empty) — print sheet must be useful even for recipes with no notes yet.
+- OEM/Own Brand badge suppressed in sidebar for Own Brand — not useful information in a list context. Only Collab and OEM show badges.
+- Migration SQL provided directly in session rather than relying on CC-generated file — new rule going forward.
+
+---
+
 ## 03 July 2026 (afternoon) — Recipe planning fields, DH pH fix, Explorer filtering, Ferm & Packaging sheet
 
 ### Recipe-level planning fields

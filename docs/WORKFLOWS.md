@@ -19,6 +19,7 @@ In the header bar, enter:
 - **Beer Name** — the brand/label name your customers will see.
 - **Recipe Name (仕込記号)** — the internal tax identifier used in NTA filings.
 - Style, Brew Date, Fermentation Vessel (FV), Brewer.
+- **Origin (Own Brand / Collab / OEM)** — click to toggle. If the recipe is a Collab or OEM, a partner name field appears below.
 
 **4. Add ingredients**
 Use the right sidebar buttons to add fermentables, hops, yeast, and misc ingredients. Click each ingredient row to select it, then use Edit in the sidebar to adjust amounts, use, and timing.
@@ -235,6 +236,9 @@ Click Print ▾ on the right end of the recipe sub-tab bar → select Prep Sheet
 
 **3. Print the Brew Day Sheet**
 Click Print ▾ → Brew Day Sheet. Fill it in as you brew — mash readings, lauter flowmeter, boil additions (tick each one as you add it), knockout, pitch.
+
+**To print all three sheets at once:**
+Click Print ▾ → Print Full Packet. This prints the Prep Sheet, Brew Day Sheet, and Ferm & Packaging Sheet in one go.
 
 ### After brewing — log the data
 
