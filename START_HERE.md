@@ -1,6 +1,6 @@
 # BrewLab — START HERE
 
-**Last session: 03 July 2026 (Recipe planning fields, DH pH fix, Ferm & Packaging sheet)**
+**Last session: 03 July 2026 (afternoon — print sheets, OEM/Collab field)**
 **Read this first. Everything else is reference.**
 
 ---
@@ -56,21 +56,13 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 
 ---
 
-## What Got Done Last Session (03 July 2026 — afternoon)
+## What Got Done Last Session
 
-**Recipe-level planning fields** — added `recipePitchTemp`, `recipeFermTemp`, `recipeO2Lpm`, `recipeO2Time`, `targetFinishPh`, `plannedCarb` to the Recipe type and Supabase (`migrations/2026-07-03-recipe-planning-fields.sql`). Pitch/ferm/O₂ fields appear in the yeast edit modal (with pitch profile selector to auto-fill O₂ fields). Target finish pH and planned carb appear alongside the Extra Additions box on the Recipe tab. All pre-fill their respective destination tabs (Brew Day, Ferm, Packaging) when empty, overrideable on each tab.
+**Analysis Sheet print artifact** — new `src/components/recipe/analysisSheetPrint.ts`. A4 portrait, clean black-on-white. Sections: header, stats row, cost breakdown, yeast & fermentation (real vs plan), packaging (kegs/cans/waste, pitch pH, final pH), process notes, tasting notes, changes for next time, analysis notes. Notes sections always render as blank ruled boxes when empty. Replaces the old dark-theme DOM print on the Analysis tab. Tasting/changes/analysis notes fixed to always render unconditionally.
 
-**DH pH calculation bug fix** — `calcDhPhPrediction` was comparing `currentPh > targetFinalPh` to decide whether to recommend acid, ignoring the predicted DH rise entirely. Fixed to use `currentPh + predictedRise > targetFinalPh` — so if the beer is at target now but the DH will push it above target, acid is correctly recommended. `predictedFinalPh` added to the return object.
+**Print Full Packet** — "Print Full Packet" added to the Print ▾ dropdown. Calls Prep Sheet + Brew Day Sheet + Ferm & Packaging Sheet in sequence.
 
-**Ferm tab scroll fix** — bottom section (DH buttons + DH pH Prediction + Harvest + Carbonation) was clipping when DH pH Prediction card expanded. Added `overflowY: 'auto'` to the container.
-
-**Recipe Explorer folder filtering** — Explorer now filters to the selected folder's contents by default. A toggle button shows the folder name (click to expand to All). Count shows "N of Total" when filtered. Resets to folder view when the selected folder changes.
-
-**Pitch profile selector in yeast popup** — Edit Yeast modal now has a Profile dropdown (when pitch profiles exist) that auto-fills O₂ LPM and O₂ Time into the recipe-level fields.
-
-**Ferm & Packaging Sheet** — new print artifact `src/components/recipe/fermPackagingSheetPrint.ts`. A4 portrait, same visual language as Brew Day Sheet. Sections: header (beer name, brew #, targets), fermentation log (15 blank rows + DH date chips), harvest (single row), packaging (two-column: dates/readings left, volume grid right), notes box. Accessible via Print ▾ → "Ferm & Packaging Sheet". Layout polish deferred.
-
-**Retroactive migration files** — created `migrations/2026-05-12-add-extra-additions.sql` and `migrations/2026-05-12-add-brewer.sql` to document columns already live in Supabase.
+**OEM/Collab/Own Brand field** — `recipeOrigin` (own/collab/oem) and `oemFor` (partner name) added to `Recipe` type, `RecipeTab` (toggle buttons + conditional partner name input), `FolderTree` (badge on sidebar row for collab/OEM recipes), and Supabase sync mapping. Migration `2026-07-03-recipe-origin.sql` created. **Migration applied to Supabase.**
 
 ---
 
@@ -108,8 +100,8 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 
 ## Next Session Focus
 
-1. **Ferm & Packaging Sheet layout polish.**
-2. **Smoke tests** — brewer/extra additions cross-device sync, BeerXML round-trip, backup round-trip.
+1. Ferm & Packaging Sheet layout polish.
+2. Analysis Sheet layout tweaks (NTA Submitter print layout tweak also pending).
 
 ---
 
