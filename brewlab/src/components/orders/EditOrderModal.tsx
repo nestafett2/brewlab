@@ -4,19 +4,25 @@
  * that was never defined. We give the user a real edit surface:
  *   • Ingredient, type — read-only (changing them would orphan the
  *     forecast match).
- *   • Qty, supplier, expected delivery, status, notes — editable.
+ *   • Qty, supplier, expected delivery, notes — editable.
  *   • Delete button.
  *
+ * Status is no longer editable here — it's managed via checkboxes and
+ * the bulk Mark Ordered / Mark Received actions in OrdersPanel.tsx.
+ * That means the old prevStatus → nextStatus transition branches
+ * (not-received → received, received → not-received) can't happen from
+ * this modal anymore and have been removed; OrdersPanel's bulk actions
+ * own that logic now (including the new-ledger-entry-on-receive path).
+ *
  * Ledger sync invariant — the ledger reflects status='received' orders
- * only. Save / delete branches:
- *   • not-received → not-received  : save order; no ledger touch
- *   • not-received → received      : create tagged IN ledger entry
- *                                    (warns if no library match)
- *   • received     → received      : update tagged ledger entry
- *                                    (qty / supplier / date / notes)
- *   • received     → not-received  : confirm; remove tagged ledger entry
- *   • delete received order        : confirm; delete order + tagged entry
- *   • delete pending/ordered order : single-confirm delete; no ledger
+ * only. This modal never flips status, but an already-received order
+ * can still have its qty/supplier/delivery/notes edited here, so:
+ *   • order.status !== 'received' : save order; no ledger touch
+ *   • order.status === 'received' : save order; also update the tagged
+ *                                    ledger entry (qty/supplier/date/notes)
+ *                                    so it doesn't drift from the order
+ *   • delete received order       : confirm; delete order + tagged entry
+ *   • delete pending/ordered order: single-confirm delete; no ledger
  *
  * Pre-fix legacy ledger entries (Phase 2 initial release) lack
  * `orderId` so the lookup helpers skip them — the modal won't auto-
@@ -27,10 +33,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../../store';
 import type { LedgerData, OrderEntry } from '../../types';
-import {
-  buildOrderLedgerEntry, findOrderLedgerLocation,
-} from './orderLedgerSync';
-import type { LibBySection } from './orderForecast';
+import { findOrderLedgerLocation } from './orderLedgerSync';
 
 interface Props {
   orderId: string;
@@ -46,17 +49,12 @@ export default function EditOrderModal({ orderId, onClose }: Props) {
   const ledgerData    = useStore(s => s.ledgerData);
   const setLedgerData = useStore(s => s.setLedgerData);
   const pushToast     = useStore(s => s.pushToast);
-  const maltLib  = useStore(s => s.maltLib);
-  const hopLib   = useStore(s => s.hopLib);
-  const yeastLib = useStore(s => s.yeastLib);
-  const miscLib  = useStore(s => s.miscLib);
 
   const order = orders.find(o => o.id === orderId);
 
   const [qty, setQty]           = useState<string>(order ? String(order.qty) : '');
   const [supplier, setSupplier] = useState<string>(order?.supplier ?? '');
   const [delivery, setDelivery] = useState<string>(order?.delivery ?? '');
-  const [status, setStatus]     = useState<OrderEntry['status']>(order?.status ?? 'pending');
   const [notes, setNotes]       = useState<string>(order?.notes ?? '');
 
   useEffect(() => {
@@ -81,69 +79,24 @@ export default function EditOrderModal({ orderId, onClose }: Props) {
     );
   }
 
-  const libBySection: LibBySection = { malts: maltLib, hops: hopLib, yeast: yeastLib, misc: miscLib };
-
   const save = () => {
     const n = parseFloat(qty);
     const updates: Partial<OrderEntry> = {
       qty: isFinite(n) ? n : 0,
       supplier: supplier.trim(),
       delivery: delivery || undefined,
-      status,
       notes: notes.trim(),
     };
-    // Snapshot the merged-state order BEFORE we mutate the store.
-    // Used by the ledger-sync branches below.
+    // Snapshot the merged-state order BEFORE we mutate the store, for
+    // the ledger-sync check below.
     const merged: OrderEntry = { ...order, ...updates };
-    const prevStatus = order.status;
-    const nextStatus = status;
 
-    // ── Branch on the (prev, next) status transition. ───────────────
-    // received → not-received: confirm + remove the tagged ledger row.
-    if (prevStatus === 'received' && nextStatus !== 'received') {
-      const proceed = window.confirm(
-        'This will remove the tax ledger entry for this delivery — proceed?',
-      );
-      if (!proceed) return;
-      const loc = findOrderLedgerLocation(ledgerData, order.id);
-      if (loc) {
-        const list = ledgerData[loc.key] ?? [];
-        const updatedList = list.slice();
-        updatedList.splice(loc.idx, 1);
-        const next: LedgerData = { ...ledgerData, [loc.key]: updatedList };
-        setLedgerData(next);
-      }
-      updateOrder(orderId, updates);
-      onClose();
-      return;
-    }
-
-    // not-received → received: create a new tagged entry.
-    if (prevStatus !== 'received' && nextStatus === 'received') {
-      const built = buildOrderLedgerEntry(merged, libBySection);
-      if (built) {
-        const next: LedgerData = {
-          ...ledgerData,
-          [built.key]: [...(ledgerData[built.key] ?? []), built.entry],
-        };
-        setLedgerData(next);
-      } else {
-        // No library match — order still flips to received, but no
-        // ledger entry can be written. Brewer's call whether to add
-        // the ingredient to the library and log receipt manually.
-        window.alert(
-          `"${order.ingredient}" isn't in your library — no tax ledger entry was created.\n\n` +
-          'The order is still saved as received. Add the ingredient to the library and ' +
-          'log the receipt manually via the Tax Ledger view if you need it on file.',
-        );
-      }
-      updateOrder(orderId, updates);
-      onClose();
-      return;
-    }
-
-    // received → received: update the tagged entry to match new fields.
-    if (prevStatus === 'received' && nextStatus === 'received') {
+    // Status can't change here anymore, but if this order is already
+    // 'received' (set via OrdersPanel's bulk Mark Received action), its
+    // tagged ledger entry needs to stay in sync with the edited fields —
+    // otherwise the tax ledger would keep showing the pre-edit qty/
+    // supplier/date/notes.
+    if (order.status === 'received') {
       const loc = findOrderLedgerLocation(ledgerData, order.id);
       if (loc) {
         const list = ledgerData[loc.key] ?? [];
@@ -165,12 +118,8 @@ export default function EditOrderModal({ orderId, onClose }: Props) {
       // If loc was null, this is a legacy received order with an
       // untagged ledger entry. Don't touch the legacy entry — leave
       // brewer in control. (The save still goes through.)
-      updateOrder(orderId, updates);
-      onClose();
-      return;
     }
 
-    // not-received → not-received: no ledger work.
     updateOrder(orderId, updates);
     onClose();
   };
@@ -240,21 +189,6 @@ export default function EditOrderModal({ orderId, onClose }: Props) {
         </Row>
         <Row label="DELIVERY">
           <input type="date" value={delivery} onChange={e => setDelivery(e.target.value)} style={inputStyle} />
-        </Row>
-        <Row label="STATUS">
-          <div style={{ display: 'flex', gap: 12 }}>
-            {(['pending', 'ordered', 'received'] as const).map(s => (
-              <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                <input
-                  type="radio" name="ord-status" value={s}
-                  checked={status === s}
-                  onChange={() => setStatus(s)}
-                  style={{ accentColor: 'var(--amber)' }}
-                />
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 10 }}>{s}</span>
-              </label>
-            ))}
-          </div>
         </Row>
         <Row label="NOTES">
           <input

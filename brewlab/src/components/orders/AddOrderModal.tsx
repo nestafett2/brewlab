@@ -29,7 +29,6 @@ import { fmtNum } from '../../lib/format';
 import {
   suggestShortItems, type LibBySection, type LibSection, type Suggestion,
 } from './orderForecast';
-import { applyLedgerInserts, buildOrderLedgerEntry } from './orderLedgerSync';
 import type { OrderEntry } from '../../types';
 
 interface Props {
@@ -42,8 +41,6 @@ interface StagedItem {
   qty: number;
   supplier: string;
   delivery: string;
-  status: 'pending' | 'ordered' | 'received';
-  notes: string;
 }
 
 const TYPE_COLORS: Record<LibSection, string> = {
@@ -58,7 +55,6 @@ export default function AddOrderModal({ onClose }: Props) {
   const orders         = useStore(s => s.orders);
   const setOrders      = useStore(s => s.setOrders);
   const ledgerData     = useStore(s => s.ledgerData);
-  const setLedgerData  = useStore(s => s.setLedgerData);
   const pushToast      = useStore(s => s.pushToast);
   const inventoryStock = useStore(s => s.inventoryStock);
   const ingredientsByRecipe = useStore(s => s.ingredientsByRecipe);
@@ -118,16 +114,16 @@ export default function AddOrderModal({ onClose }: Props) {
   const [manualQty, setManualQty]    = useState<string>('25');
   const [manualSupp, setManualSupp]  = useState<string>('');
 
-  // Log-order panel state. Delivery/status/notes are now set once here
-  // (ORDER DETAILS) rather than per-item — every staged item, whether
-  // added from suggestions or manually, is created with these same
-  // values at confirm time.
+  // Log-order panel state. Supplier here is a bulk-fill action (fills
+  // blank per-item suppliers when changed), not a fallback applied at
+  // confirm time — delivery and supplier are per-item now (see
+  // StagedItem). Notes is the one remaining order-level field, applied
+  // to every item created in this batch. Status is no longer settable
+  // here — new orders always start 'pending'.
   const [logPanelOpen, setLogPanelOpen] = useState(false);
   const [globalSupplier, setGlobalSupplier] = useState<string>('');
   const [orderDate, setOrderDate] = useState<string>(dateToStr(todayDate()));
-  const [globalDelivery, setGlobalDelivery] = useState<string>('');
-  const [globalStatus, setGlobalStatus] = useState<'pending'|'ordered'|'received'>('pending');
-  const [globalNotes, setGlobalNotes] = useState<string>('');
+  const [orderNotes, setOrderNotes] = useState<string>('');
 
   // Re-seed manual ingredient when type changes.
   useEffect(() => {
@@ -168,8 +164,10 @@ export default function AddOrderModal({ onClose }: Props) {
       if (dup) return;
       nextStaged.push({
         type: s.type, ingredient: s.ingredient, qty: s.qty,
-        supplier: s.supplier || '', delivery: s.delivery,
-        status: s.status, notes: s.notes,
+        // s.supplier is already the library entry's own supplier field
+        // (orderForecast.ts). Delivery starts blank — the brewer sets
+        // it per item in MY ORDER, not inherited from the suggestion.
+        supplier: s.supplier || '', delivery: '',
       });
       added++;
     });
@@ -184,70 +182,47 @@ export default function AddOrderModal({ onClose }: Props) {
       ingredient: manualIng,
       qty,
       supplier: manualSupp.trim(),
-      delivery: globalDelivery,
-      status: globalStatus,
-      notes: globalNotes,
+      delivery: '',
     }]);
-    // Reset for next item, keep type/supplier/delivery.
+    // Reset for next item, keep type/supplier.
     setManualQty('25');
   };
 
   const removeStaged = (i: number) =>
     setStaged(prev => prev.filter((_, idx) => idx !== i));
 
+  // Per-item edits from the MY ORDER staging rows (supplier / delivery).
+  const updateStagedField = <K extends keyof StagedItem>(i: number, field: K, value: StagedItem[K]) =>
+    setStaged(prev => prev.map((item, idx) => idx === i ? { ...item, [field]: value } : item));
+
   const confirmAndLog = () => {
     if (!staged.length) { onClose(); return; }
     const date = orderDate || dateToStr(todayDate());
-    const fallback = globalSupplier;
-    // Snapshot before any cascade so the toast's undo restores both
-    // orders AND ledgerData. Ledger touches are conditional on
-    // status==='received' but we capture both unconditionally — the
-    // closure's setLedgerData(beforeLedger) is a safe no-op when the
-    // action didn't actually mutate ledgerData.
     const beforeOrders = orders;
-    const beforeLedger = ledgerData;
 
-    // Build the new orders. Ledger writes are conditional on
-    // status==='received' — see ../orderLedgerSync.ts for the invariant.
-    const newOrders: OrderEntry[] = [];
-    const ledgerInserts: { key: string; entry: import('../../types').LedgerEntry }[] = [];
-    for (const it of staged) {
-      const supplier = it.supplier || fallback;
-      const idSeed = `ord_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-      const order: OrderEntry = {
-        id: idSeed,
-        type: it.type,
-        ingredient: it.ingredient,
-        qty: it.qty,
-        supplier,
-        delivery: globalDelivery || date,
-        status: globalStatus,
-        notes: globalNotes,
-        orderDate: date,
-      };
-      newOrders.push(order);
-      // Only write a ledger IN entry when the order is logged with
-      // status='received' from the start. The vast majority of orders
-      // are logged pending/ordered and only flip to received later via
-      // the Edit Order modal — at which point the ledger entry is
-      // created. This keeps the ledger == received-orders invariant.
-      if (order.status === 'received') {
-        const built = buildOrderLedgerEntry(order, libBySection);
-        if (built) ledgerInserts.push(built);
-      }
-    }
+    // New orders always start 'pending' — no ledger write happens here.
+    // The ledger only reflects status='received' orders (see
+    // orderLedgerSync.ts), and a freshly-created order is never
+    // received-on-creation anymore; that transition now only happens
+    // via the Orders panel's bulk "Mark Received" action.
+    const newOrders: OrderEntry[] = staged.map(it => ({
+      id: `ord_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      type: it.type,
+      ingredient: it.ingredient,
+      qty: it.qty,
+      supplier: it.supplier,
+      delivery: it.delivery || undefined,
+      status: 'pending',
+      notes: orderNotes.trim(),
+      orderDate: date,
+    }));
+
     setOrders([...orders, ...newOrders]);
-    if (ledgerInserts.length) {
-      setLedgerData(applyLedgerInserts(ledgerData, ledgerInserts));
-    }
     pushToast({
       message: newOrders.length === 1
         ? `Created order for "${newOrders[0].ingredient}"`
         : `Created ${newOrders.length} orders`,
-      undo: () => {
-        setOrders(beforeOrders);
-        setLedgerData(beforeLedger);
-      },
+      undo: () => setOrders(beforeOrders),
     });
     onClose();
   };
@@ -269,7 +244,7 @@ export default function AddOrderModal({ onClose }: Props) {
         <td>${escapeHtml(it.ingredient)}</td>
         <td style="text-align:right">${it.qty} kg</td>
         <td>${escapeHtml(it.supplier || supp)}</td>
-        <td>${escapeHtml(it.notes || '')}</td>
+        <td>${escapeHtml(it.delivery || '')}</td>
       </tr>`).join('');
     win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Order List — ${date}</title>
 <style>
@@ -282,9 +257,9 @@ export default function AddOrderModal({ onClose }: Props) {
   .footer{margin-top:24px;font-size:10px;color:#888;}
 </style></head><body>
 <h2>${escapeHtml(brand)} — Order List</h2>
-<p>Date: ${date}${supp ? ' · Supplier: '+escapeHtml(supp) : ''} · ${staged.length} item${staged.length !== 1 ? 's' : ''}</p>
+<p>Date: ${date}${supp ? ' · Supplier: '+escapeHtml(supp) : ''} · ${staged.length} item${staged.length !== 1 ? 's' : ''}${orderNotes ? ' · Notes: '+escapeHtml(orderNotes) : ''}</p>
 <table>
-  <thead><tr><th>Ingredient</th><th style="text-align:right">Qty</th><th>Supplier</th><th>Notes</th></tr></thead>
+  <thead><tr><th>Ingredient</th><th style="text-align:right">Qty</th><th>Supplier</th><th>Delivery</th></tr></thead>
   <tbody>${rows}</tbody>
 </table>
 <div class="footer">Printed from BrewLab</div>
@@ -421,14 +396,23 @@ export default function AddOrderModal({ onClose }: Props) {
                   <div key={i} style={stagedRowStyle}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={brewNameStyle}>{item.ingredient}</div>
-                      <div style={brewDateStyle}>
-                        {item.qty} kg · <span style={{ color: STATUS_COLORS[item.status] }}>{item.status}</span>
+                      <div style={brewDateStyle}>{item.qty} kg</div>
+                      <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                        <select
+                          value={item.supplier}
+                          onChange={e => updateStagedField(i, 'supplier', e.target.value)}
+                          style={stagedFieldStyle}
+                        >
+                          <option value="">— None —</option>
+                          {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <input
+                          type="date"
+                          value={item.delivery}
+                          onChange={e => updateStagedField(i, 'delivery', e.target.value)}
+                          style={stagedFieldStyle}
+                        />
                       </div>
-                      {item.delivery && (
-                        <div style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--text-muted)' }}>
-                          Exp. {item.delivery}
-                        </div>
-                      )}
                     </div>
                     <span
                       onClick={() => removeStaged(i)}
@@ -448,8 +432,20 @@ export default function AddOrderModal({ onClose }: Props) {
                 fontFamily: 'var(--display)', fontSize: 11, letterSpacing: 2,
                 color: 'var(--amber)', marginBottom: 2,
               }}>ORDER DETAILS</div>
-              <Row label="FALLBACK SUPPLIER">
-                <select value={globalSupplier} onChange={e => setGlobalSupplier(e.target.value)} style={inputStyle}>
+              <Row label="SUPPLIER">
+                <select
+                  value={globalSupplier}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setGlobalSupplier(val);
+                    // Bulk-fill: only touches items that don't already
+                    // have a supplier set — not a fallback applied later.
+                    if (val) {
+                      setStaged(prev => prev.map(item => item.supplier ? item : { ...item, supplier: val }));
+                    }
+                  }}
+                  style={inputStyle}
+                >
                   <option value="">— None —</option>
                   {suppliers.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
@@ -457,28 +453,10 @@ export default function AddOrderModal({ onClose }: Props) {
               <Row label="ORDER DATE">
                 <input type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)} style={inputStyle} />
               </Row>
-              <Row label="EXP. DELIVERY">
-                <input type="date" value={globalDelivery} onChange={e => setGlobalDelivery(e.target.value)} style={inputStyle} />
-              </Row>
-              <Row label="STATUS">
-                <div style={{ display: 'flex', gap: 10 }}>
-                  {(['pending', 'ordered', 'received'] as const).map(s => (
-                    <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                      <input
-                        type="radio" name="global-status" value={s}
-                        checked={globalStatus === s}
-                        onChange={() => setGlobalStatus(s)}
-                        style={{ accentColor: 'var(--amber)' }}
-                      />
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: 10 }}>{s}</span>
-                    </label>
-                  ))}
-                </div>
-              </Row>
               <Row label="NOTES">
                 <input
-                  type="text" value={globalNotes}
-                  onChange={e => setGlobalNotes(e.target.value)}
+                  type="text" value={orderNotes}
+                  onChange={e => setOrderNotes(e.target.value)}
                   placeholder="optional"
                   style={inputStyle}
                 />
@@ -596,12 +574,6 @@ function escapeHtml(s: string): string {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  pending: 'var(--text-muted)',
-  ordered: 'var(--amber)',
-  received: 'var(--green)',
-};
-
 // ── Styles ────────────────────────────────────────────────────────────
 
 const overlayStyle: React.CSSProperties = {
@@ -696,4 +668,11 @@ const inputStyle: React.CSSProperties = {
   flex: 1, background: 'var(--panel2)', border: '1px solid var(--border2)',
   color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: 10,
   padding: '4px 8px', outline: 'none',
+};
+
+// Compact per-item supplier/delivery controls on each MY ORDER staging row.
+const stagedFieldStyle: React.CSSProperties = {
+  flex: 1, background: 'var(--panel2)', border: '1px solid var(--border2)',
+  color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: 9,
+  padding: '3px 6px', outline: 'none', minWidth: 0,
 };

@@ -424,6 +424,9 @@ export interface BrewLabState {
   setOrders: (orders: OrderEntry[]) => void;
   addOrder: (order: OrderEntry) => void;
   updateOrder: (id: string, updates: Partial<OrderEntry>) => void;
+  /** Apply the same partial update to every order whose id is in `ids`.
+   *  Used by the Orders panel's bulk Mark Ordered / Mark Received actions. */
+  bulkUpdateOrders: (ids: string[], updates: Partial<OrderEntry>) => void;
   deleteOrder: (id: string) => void;
 
   // Actions — per-recipe profile selections
@@ -1258,6 +1261,12 @@ export const useStore = create<BrewLabState>((set, get) => ({
   },
   updateOrder: (id, updates) => {
     const next = get().orders.map(o => o.id === id ? { ...o, ...updates } : o);
+    lsSet('bl_orders', next);
+    set({ orders: next });
+  },
+  bulkUpdateOrders: (ids, updates) => {
+    const idSet = new Set(ids);
+    const next = get().orders.map(o => idSet.has(o.id) ? { ...o, ...updates } : o);
     lsSet('bl_orders', next);
     set({ orders: next });
   },
