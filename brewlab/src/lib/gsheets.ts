@@ -50,7 +50,7 @@ export function setGSheetsConfig(patch: Partial<GSheetsConfig>): void {
  */
 export function gsheetsSignIn(clientId: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const redirectUri = window.location.origin + window.location.pathname;
+    const redirectUri = window.location.origin;
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
