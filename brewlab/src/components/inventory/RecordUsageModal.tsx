@@ -27,6 +27,10 @@ import { ingNamesMatch } from '../../lib/ingredient-matcher';
 import { dateToStr, todayDate, strToDate } from '../../lib/dates';
 import type { LedgerData, LedgerEntry, PlannerBrew, MaltLib, HopLib, YeastLib, MiscLib } from '../../types';
 import type { LibEntry } from '../libraries/libraryShared';
+import {
+  getGSheetsConfig, gsheetsGetToken, gsheetsAppendRow,
+  gsheetsSheetIdForSection, gsheetsTabNameFor,
+} from '../../lib/gsheets';
 
 const EXCLUDE_MISC = /phosphoric|sulfuric|lactic|hydrochloric|caustic|water|h2o/i;
 const SECTIONS = ['malts', 'hops', 'yeast', 'misc'] as const;
@@ -231,6 +235,7 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
     const next: LedgerData = { ...ledgerData };
     let recorded = 0;
     const skipped: string[] = [];
+    const gsheetsQueue: { section: Section; ingName: string; qtyKg: number }[] = [];
     for (const r of rows) {
       if (!checked[r.uid] || r.alreadyLogged) continue;
       const rawAmt = parseFloat(amounts[r.uid] || '') || 0;
@@ -251,6 +256,7 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
         taxBatch: brewTaxBatch,
       };
       next[r.ledgerKey] = [...(next[r.ledgerKey] ?? []), entry];
+      gsheetsQueue.push({ section: r.section, ingName: r.ingName, qtyKg });
       recorded++;
     }
     if (recorded > 0) {
@@ -262,6 +268,22 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
       if (fullyRecorded && !brew.fullyRecorded) {
         setPlannerBrews(plannerBrews.map(b =>
           b.id === brew.id ? { ...b, fullyRecorded: true } : b));
+      }
+
+      // Best-effort Google Sheets push — fire-and-forget, never blocks
+      // closing the modal. Column order matches the XLSX ledger export.
+      const token = gsheetsGetToken();
+      if (token) {
+        const { sheetIds } = getGSheetsConfig();
+        const beerNote = brewTaxBatch ? `${brewTaxBatch} — ${brew.name}` : brew.name;
+        for (const q of gsheetsQueue) {
+          const sheetId = gsheetsSheetIdForSection(q.section, sheetIds);
+          if (!sheetId) continue;
+          const tabName = gsheetsTabNameFor(q.ingName);
+          gsheetsAppendRow(token, sheetId, tabName, [
+            dateStr, 'OUT', q.qtyKg, beerNote, '', dateStr, '', '',
+          ]).catch(() => { /* best-effort — never block confirm */ });
+        }
       }
     }
     onClose();

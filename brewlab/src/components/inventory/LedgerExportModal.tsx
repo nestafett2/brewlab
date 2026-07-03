@@ -21,6 +21,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../../store';
 import { exportWorkbook, type SheetSpec, type CellValue } from '../../lib/excel';
+import { gsheetsPushLedger } from '../../lib/gsheets';
 import type { InvSection } from './inventoryShared';
 
 interface Props {
@@ -58,7 +59,7 @@ export default function LedgerExportModal({ defaultSection, onClose }: Props) {
     malts: maltLib, hops: hopLib, yeast: yeastLib, misc: miscLib,
   };
 
-  const run = () => {
+  const run = async () => {
     const sections: InvSection[] = section === ALL_OPTION
       ? ['malts', 'hops', 'yeast', 'misc']
       : [section];
@@ -103,7 +104,7 @@ export default function LedgerExportModal({ defaultSection, onClose }: Props) {
             r.date,
             isGot ? 'IN' : 'OUT',
             isGot ? (r.got ?? '') : (r.used ?? ''),
-            isGot ? (r.supplier ?? '') : (r.beer ?? ''),
+            isGot ? (r.supplier ?? '') : (r.taxBatch ? `${r.taxBatch} — ${r.beer ?? ''}` : (r.beer ?? '')),
             r.receivedDate ?? '',
             r.usedDate ?? '',
             Math.round(running * 1000) / 1000,
@@ -129,6 +130,14 @@ export default function LedgerExportModal({ defaultSection, onClose }: Props) {
     const brand = (settings.breweryName?.trim() || 'BrewLab').replace(/[\s/\\?*[\]:]/g, '_');
     const suffix = from || to ? `_${from || 'start'}_to_${to || 'end'}` : '_all';
     exportWorkbook(`${brand}_TaxLedger${suffix}.xlsx`, sheets);
+
+    const gsheetsResult = await gsheetsPushLedger(sheets, section);
+    if (gsheetsResult === 'ok') {
+      pushToast({ message: 'Synced to Google Sheets', variant: 'success' });
+    } else if (gsheetsResult != null) {
+      pushToast({ message: gsheetsResult, variant: 'error' });
+    }
+
     onClose();
   };
 
