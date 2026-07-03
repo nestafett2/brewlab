@@ -26,7 +26,7 @@ const PRINT_STYLE = `
   h1 { font-size: 14px; letter-spacing: 1px; margin-bottom: 4px; }
   .subtitle { font-size: 10px; color: #555; margin-bottom: 14px; }
   h2 { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #c07010; margin: 16px 0 6px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 8px; table-layout: fixed; }
   th, td { border: 1px solid #999; padding: 3px 6px; text-align: left; }
   th { background: #eee; font-weight: 600; font-size: 8px; }
   td.r, th.r { text-align: right; }
@@ -91,9 +91,12 @@ export function printForecastTable(args: {
     : [section];
   const sectionLabel = section === 'all' ? 'ALL INGREDIENTS' : SECTION_LABEL[section];
 
+  const colTh = 'style="width:120px; min-width:120px; max-width:120px; white-space:normal; word-break:normal; overflow-wrap:break-word; text-align:center;"';
+  const colTd = 'style="width:60px; min-width:60px; max-width:60px;"';
+
   const colHeaderCells = filtered.map(col => col.kind === 'brew'
-    ? `<th class="c">${escapeHtml(formatBrewHeader(col.brew, recipeById))}<br>${escapeHtml(col.brew.start.slice(5))}</th><th class="c">Bal.</th>`
-    : `<th class="c">📦 ${escapeHtml(col.date.slice(5).replace('-', '/'))}</th><th class="c">Bal.</th>`
+    ? `<th colspan="2" ${colTh}>${escapeHtml(formatBrewHeader(col.brew, recipeById))}<br>${escapeHtml(col.brew.start.slice(5))}</th>`
+    : `<th colspan="2" ${colTh}>📦 ${escapeHtml(col.date.slice(5).replace('-', '/'))}</th>`
   ).join('');
 
   const sectionBlocks = sections.map(sec => {
@@ -108,8 +111,8 @@ export function printForecastTable(args: {
           ? `+${fmtKg(c.incoming)}`
           : c.recorded ? '✓' : c.amt > 0 ? fmtKg(c.amt) : '';
         return [
-          `<td class="c">${escapeHtml(amtCell)}</td>`,
-          `<td class="c">${escapeHtml(fmtKg(bal))}</td>`,
+          `<td class="c" ${colTd}>${escapeHtml(amtCell)}</td>`,
+          `<td class="c" ${colTd}>${escapeHtml(fmtKg(bal))}</td>`,
         ];
       }).join('');
       return `<tr>
