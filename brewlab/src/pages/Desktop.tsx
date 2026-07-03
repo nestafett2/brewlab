@@ -49,6 +49,7 @@ import {
   downloadXmlFile,
 } from '../lib/recipeExport';
 import { newRecipeId, today } from '../lib/utils';
+import { dateToStr, todayDate } from '../lib/dates';
 import { fmtNum } from '../lib/format';
 import { lsSet } from '../lib/storage';
 import { isWaterChem } from '../lib/waterChem';
@@ -93,6 +94,9 @@ export default function Desktop() {
   // when the equipment-derived pill strip moved out of the meta bar.)
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  // Out-channel for FolderTree's current multi-selection — read at
+  // File → Export Selected... click time. See FolderTree's selectionRef prop.
+  const folderSelectionRef = useRef<() => string[]>(() => []);
 
   // ── Print dropdown (recipe sub-tab bar) ──────────────────────────────
   // Prep Sheet + Brew Day Sheet used to be owned by RecipeTab/BrewDayTab
@@ -407,6 +411,41 @@ export default function Desktop() {
     } catch (err) {
       pushToast({
         message: 'Error exporting recipe: ' + (err as Error).message,
+        variant: 'error',
+      });
+    }
+  };
+
+  // ── Export Selected (File menu) ──────────────────────────────────────
+  // Exports every recipe currently multi-selected in the sidebar
+  // (FolderTree's checkbox-style selection, read via folderSelectionRef)
+  // as a single BeerXML file — one <RECIPES> document wrapping one
+  // <RECIPE> block per selected recipe. Same serialisation path as
+  // handleExportCurrentRecipe, just fed multiple recipes at once.
+  const handleExportSelected = () => {
+    const ids = folderSelectionRef.current();
+    if (!ids.length) {
+      pushToast({ message: 'No recipes selected. Click recipes in the sidebar to select them.', variant: 'info' });
+      return;
+    }
+    try {
+      const xmlParts = ids.flatMap(id => {
+        const recipe = recipes.find(r => r.id === id);
+        if (!recipe) return [];
+        const ings = getIngredients(id);
+        const mash = getMash(id);
+        return [recipeToBeerXML(recipe, ings, mash)];
+      });
+      if (!xmlParts.length) return;
+      const xml = wrapRecipesDocument(xmlParts);
+      downloadXmlFile(xml, `Selected_Recipes_${xmlParts.length}_${dateToStr(todayDate())}.xml`);
+      pushToast({
+        message: `Exported ${xmlParts.length} recipe${xmlParts.length === 1 ? '' : 's'}`,
+        variant: 'success',
+      });
+    } catch (err) {
+      pushToast({
+        message: 'Error exporting selected recipes: ' + (err as Error).message,
         variant: 'error',
       });
     }
@@ -910,7 +949,13 @@ export default function Desktop() {
                 handleExportCurrentRecipe();
               }}
             >Export Recipe (BeerXML)</div>
-            <div className="menu-dd-item" onClick={closeMenus}>Export Selected...</div>
+            <div
+              className="menu-dd-item"
+              onClick={() => {
+                closeMenus();
+                handleExportSelected();
+              }}
+            >Export Selected...</div>
             <div className="menu-dd-sep" />
             <div
               className="menu-dd-item"
@@ -1360,6 +1405,7 @@ export default function Desktop() {
                     onFolderContext={handleFolderContext}
                     onBulkContext={handleBulkContext}
                     onBlankContext={handleBlankContext}
+                    selectionRef={folderSelectionRef}
                   />
                 </div>
                 <div className="rb-new-folder-btn" onClick={handleNewFolder} role="button">＋ New Folder</div>

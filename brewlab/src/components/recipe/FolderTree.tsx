@@ -128,12 +128,17 @@ interface Props {
    *  an additional row-highlight tier so the user can see which row the
    *  open popover corresponds to. */
   popoverId?: string | null;
+  /** Optional out-channel for the current multi-selection. Desktop's
+   *  File → Export Selected... reads `selectionRef.current()` at click
+   *  time instead of lifting selectedIds into state (which would
+   *  re-render Desktop on every row click). */
+  selectionRef?: React.MutableRefObject<() => string[]>;
 }
 
 export default function FolderTree({
   folders, recipes, preview, setPreview, setFolders, setRecipes,
   openRecipe, onRecipeContext, onFolderContext, onBulkContext, onBlankContext,
-  popoverId,
+  popoverId, selectionRef,
 }: Props) {
   // ── Multi-select state (PART 4) ─────────────────────────────────────
   // selectedIds is the set of recipe ids that are checked. anchorId is
@@ -144,6 +149,9 @@ export default function FolderTree({
   const [anchorId, setAnchorId] = useState<string | null>(null);
   const selectedIdsRef = useRef(selectedIds);
   useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
+  useEffect(() => {
+    if (selectionRef) selectionRef.current = () => [...selectedIds];
+  }, [selectedIds, selectionRef]);
   // ── Drag/drop state ─────────────────────────────────────────────────
   // dragRef carries what's being dragged (recipe or folder); kept in a
   // ref so dragover handlers don't re-render. dropTarget drives visual
