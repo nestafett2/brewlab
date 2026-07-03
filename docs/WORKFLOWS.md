@@ -143,74 +143,81 @@ The recurring delivery will now appear as a delivery column in the forecast with
 
 ## Workflow 3: Managing Inventory
 
-Inventory tracks how much of each library ingredient (malts, hops, yeast, adjuncts) you have on hand. Every number on screen is driven by the tax ledger — the same record of IN (received) and OUT (used) movements that feeds NTA filings, so inventory and tax stay in sync automatically.
+Your ingredient stock is tracked automatically as you brew and receive deliveries. This workflow explains how to set it up and keep it accurate.
 
-### Viewing current stock
+### Setting your opening balances
+
+Before BrewLab can track stock accurately, it needs to know how much of each ingredient you currently have on hand.
 
 **1. Open the Inventory tab**
 Click INVENTORY in the top tab bar.
 
-**2. Choose a section**
-Use the dropdown in the toolbar: MALTS / HOPS / YEAST / ADJUNCTS / 🧫 HARVESTED.
+**2. Select a section**
+Use the dropdown in the toolbar to switch between MALTS, HOPS, YEAST, ADJUNCTS, and HARVESTED YEAST.
 
-**3. Read the stock table**
-Each row is a library entry. ON HAND shows the current ledger balance — red when at or below zero, amber when below 15% of the opening balance.
+**3. Enter opening balances**
+Each ingredient row has an Opening Bal. column with an editable number field. Enter the amount you currently have on hand. This is your starting point — the ledger tracks all movements from here.
 
-> Click a column header to sort. Right-click the header row to show/hide columns. Drag a column header to reorder it.
+> Opening balances are in kg for malts and hops, litres for yeast, and kg for adjuncts.
 
-**4. Filter to items in stock**
-Click IN STOCK ONLY to hide anything with zero or negative balance.
+### Recording ingredient usage after a brew
 
-**5. Edit a library entry or set an opening balance**
-Double-click a row to edit it in the Library entry modal. Or type directly into the OPENING BAL. column to set the pre-ledger starting amount for that ingredient.
+After each brew, record what you used so your stock levels stay accurate.
 
-### Recording a manual ledger entry
+**1. Go to Order Planner → find the brew**
+Click ORDER PLANNER in the top tab bar. Find the brew in the forecast table.
 
-**6. Click TAX LEDGER**
-Toggles the table to a per-ingredient ledger view.
+**2. Click Record Usage**
+A checklist appears showing every ingredient in that recipe with the recipe amounts pre-filled.
 
-**7. Pick an ingredient**
-Use the dropdown at the top of the ledger view.
+**3. Check the ingredients you used**
+All ingredients are pre-checked by default. Uncheck any you don't want to record. Adjust amounts if you used more or less than the recipe called for.
 
-**8. Add or edit an entry**
-Click ＋ ADD ENTRY to log a new IN (received) or OUT (used) movement with date, quantity, and supplier/beer. Click an existing row to edit it.
+**4. If an ingredient says "⚠ not in library — click to fix"**
+This means the recipe ingredient name doesn't match any entry in your library, so BrewLab can't deduct it from stock. Click the warning to open the resolver:
+- **Search your library** — type to filter. Click a match to link this ingredient to that library entry. The link is saved permanently.
+- **+ Add to library** — if the ingredient isn't in your library at all, click this to create a new entry from the recipe ingredient name. It's linked automatically.
 
-> The Current Balance shown updates live as you switch between ingredients.
+Once linked, the ingredient will match correctly on all future brews.
 
-### Correcting inventory after a stock take
+**5. Set the brew date and click RECORD USAGE**
+Stock levels update immediately. The ingredient is marked as recorded for this brew.
 
-**9. Click ⚖ CORRECTION**
-Shows every ingredient in the active section with its current digital balance and a Physical count field.
+> You can also access Record Usage from the Brew Day tab — click 📝 Record Usage at the bottom of that tab.
 
-**10. Enter what you physically counted**
-Any ingredient where the physical count differs from the digital balance automatically writes a correction ledger entry (IN if you have more than expected, OUT if less) when you confirm.
+### Logging incoming deliveries
 
-> Correction entries are flagged with a note in the Tax Ledger so you can tell them apart from normal receiving/usage movements.
+When a delivery arrives, mark it received in the Orders panel. Stock updates automatically — see Workflow 2 (Planning and Placing an Order) for the full orders workflow.
 
-### Recording ingredient usage from a brew
+### Reading the inventory table
 
-**11. Click 📝 Record Usage**
-Available from the Order Planner forecast (right-click a brew column) or the Brew Day tab.
+- **ON HAND** — current stock, calculated from your opening balance plus all incoming deliveries minus all recorded usage.
+- **Red** — stock is at zero or negative. Order immediately.
+- **Amber** — stock is below 15% of your opening balance. Running low.
+- **Normal** — stock is healthy.
 
-**12. Check off ingredients and confirm**
-Review the pre-checked list, adjust quantities if needed, then click RECORD USAGE. This deducts every checked ingredient from inventory.
+Use **IN STOCK ONLY** in the toolbar to filter the table to only ingredients you currently have.
 
-> If an ingredient can't be matched to your library, its row shows "⚠ not in library — click to fix". Click it to search your library and link the ingredient, or add it as a brand-new library entry on the spot — either way it's tracked in inventory from then on.
+Use **TAX LEDGER** to view the full movement history for each ingredient — every IN (delivery) and OUT (usage) entry with dates and brew names.
 
-### Exporting inventory
+### Overview reminders
 
-**13. Click ⬇ EXPORT ▾**
-Choose Export Tax Ledger XLSX (full ledger history for the section) or Export Current Page XLSX (just the visible stock table, matching your column and filter settings).
+If a brew ended more than a day ago and its ingredients haven't been recorded to inventory, a reminder appears on the Brewery Overview screen.
 
-### Tracking harvested yeast
+- **Click the brew name** to open that recipe directly.
+- **Click Dismiss** to permanently hide that reminder if you've already recorded the usage another way or don't need to track it.
 
-**14. Switch to 🧫 HARVESTED**
-Shows every strain you've harvested, with current volume on hand and generation number.
+### Exporting recipes to share with other apps
 
-**15. Log a harvest or a use**
-Click + Log Harvest to record a new harvest for a strain, or − Log Use to record pitching harvested yeast into a brew.
+To export one or more recipes as BeerXML (compatible with BeerSmith, Brewfather, and other brewing software):
 
-> Generation numbers increment automatically each time you log a new harvest for a strain.
+**1. Select recipes in the sidebar**
+Click a recipe to select it. To select multiple, shift-click a range or click additional recipes while holding Ctrl/Cmd.
+
+**2. File → Export Selected**
+BrewLab downloads a zip file containing one BeerXML file per recipe. Each file can be imported individually into BeerSmith or any other BeerXML-compatible app.
+
+> To export a single currently-open recipe, use File → Export Recipe (BeerXML) instead.
 
 ---
 
