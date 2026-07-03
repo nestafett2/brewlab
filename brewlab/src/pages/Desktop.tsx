@@ -924,7 +924,10 @@ export default function Desktop() {
       {/* ═══ Menu Bar ═══ */}
       <header className="menu-bar" ref={menuRef}>
         <div className="title-logo">BREWLAB</div>
-        <div className={`menu-item ${openMenu === 'file' ? 'open' : ''}`} onClick={() => toggleMenu('file')}>
+        <div
+          className={`menu-item ${openMenu === 'file' ? 'open' : ''}`}
+          onClick={e => { if (e.target === e.currentTarget) toggleMenu('file'); }}
+        >
           File
           <div className={`menu-dropdown ${openMenu === 'file' ? 'open' : ''}`}>
             <div
@@ -1000,7 +1003,10 @@ export default function Desktop() {
             />
           </div>
         </div>
-        <div className={`menu-item ${openMenu === 'view' ? 'open' : ''}`} onClick={() => toggleMenu('view')}>
+        <div
+          className={`menu-item ${openMenu === 'view' ? 'open' : ''}`}
+          onClick={e => { if (e.target === e.currentTarget) toggleMenu('view'); }}
+        >
           View
           <div className={`menu-dropdown ${openMenu === 'view' ? 'open' : ''}`}>
             {/* Each "Show X" toggles the tab on AND switches to it.
@@ -1037,7 +1043,10 @@ export default function Desktop() {
             }}>Tariff Reduction</div>
           </div>
         </div>
-        <div className={`menu-item ${openMenu === 'libraries' ? 'open' : ''}`} onClick={() => toggleMenu('libraries')}>
+        <div
+          className={`menu-item ${openMenu === 'libraries' ? 'open' : ''}`}
+          onClick={e => { if (e.target === e.currentTarget) toggleMenu('libraries'); }}
+        >
           Libraries
           <div className={`menu-dropdown ${openMenu === 'libraries' ? 'open' : ''}`}>
             {/* Each item routes to the Libraries page AND points it at the
@@ -1056,7 +1065,10 @@ export default function Desktop() {
           </div>
         </div>
         <div className="menu-item" onClick={() => { setActiveTab('notes'); closeMenus(); }}>Notes</div>
-        <div className={`menu-item ${openMenu === 'settings' ? 'open' : ''}`} onClick={() => toggleMenu('settings')}>
+        <div
+          className={`menu-item ${openMenu === 'settings' ? 'open' : ''}`}
+          onClick={e => { if (e.target === e.currentTarget) toggleMenu('settings'); }}
+        >
           Settings
           <div className={`menu-dropdown ${openMenu === 'settings' ? 'open' : ''}`}>
             {/* Each item routes to the Settings page AND points it at the
