@@ -161,8 +161,8 @@ export default function CurrentStockTable({ section, inStockOnly, onEditEntry, o
     setInventoryStock(next);
   };
 
-  // Sticky offset math — name (140) + up to 2 sticky cols (90 each).
-  const STICKY_NAME_W = 140;
+  // Sticky offset math — name (260) + up to 2 sticky cols (90 each).
+  const STICKY_NAME_W = 260;
   const STICKY_COL_W  = 90;
 
   return (
@@ -173,6 +173,7 @@ export default function CurrentStockTable({ section, inStockOnly, onEditEntry, o
             <th
               style={{
                 ...thStyle, ...stickyStyle, left: 0, minWidth: STICKY_NAME_W, cursor: 'pointer',
+                maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}
               onClick={() => sortBy('name')}
             >INGREDIENT{arrow('name')}</th>
@@ -233,7 +234,13 @@ export default function CurrentStockTable({ section, inStockOnly, onEditEntry, o
                 style={{ cursor: 'pointer' }}
                 title="Double-click to edit"
               >
-                <td style={{ ...tdStyle, ...stickyStyle, left: 0, background: rowBg }}>
+                <td
+                  style={{
+                    ...tdStyle, ...stickyStyle, left: 0, background: rowBg,
+                    maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}
+                  title={entry.name || ''}
+                >
                   {entry.name || '—'}
                   <span
                     onClick={e => { e.stopPropagation(); onDeleteEntry(entry); }}

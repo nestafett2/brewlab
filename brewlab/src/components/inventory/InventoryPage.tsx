@@ -36,13 +36,6 @@ import { exportInventoryCurrentXlsx } from '../orders/orderXlsx';
 
 type ViewMode = 'current' | 'ledger';
 
-const SECTIONS: { id: InvSection; label: string }[] = [
-  { id: 'malts', label: 'MALTS' },
-  { id: 'hops',  label: 'HOPS' },
-  { id: 'yeast', label: 'YEAST' },
-  { id: 'misc',  label: 'ADJUNCTS' },
-];
-
 export default function InventoryPage() {
   const maltLib  = useStore(s => s.maltLib);
   const hopLib   = useStore(s => s.hopLib);
@@ -121,19 +114,25 @@ export default function InventoryPage() {
       {/* TOOLBAR */}
       <div style={toolbarStyle}>
         <span style={titleStyle}>INVENTORY</span>
-        <div style={{ display: 'flex', gap: 4, marginLeft: 14 }}>
-          {SECTIONS.map(s => (
-            <button
-              key={s.id}
-              className={`btn sm ${!showHarvested && section === s.id ? 'active' : ''}`}
-              onClick={() => { setShowHarvested(false); setSection(s.id); }}
-            >{s.label}</button>
-          ))}
-          <button
-            className={`btn sm ${showHarvested ? 'active' : ''}`}
-            onClick={() => setShowHarvested(true)}
-          >🧫 HARVESTED</button>
-        </div>
+        <select
+          value={showHarvested ? 'harvested' : section}
+          onChange={e => {
+            const v = e.target.value;
+            if (v === 'harvested') {
+              setShowHarvested(true);
+            } else {
+              setShowHarvested(false);
+              setSection(v as InvSection);
+            }
+          }}
+          style={{ ...sectionSelectStyle, marginLeft: 14 }}
+        >
+          <option value="malts">MALTS</option>
+          <option value="hops">HOPS</option>
+          <option value="yeast">YEAST</option>
+          <option value="misc">ADJUNCTS</option>
+          <option value="harvested">🧫 HARVESTED</option>
+        </select>
 
         {!showHarvested && (
           <>
@@ -264,6 +263,12 @@ const toolbarStyle: React.CSSProperties = {
 
 const titleStyle: React.CSSProperties = {
   fontFamily: 'var(--display)', fontSize: 15, letterSpacing: 2, color: 'var(--amber)',
+};
+
+const sectionSelectStyle: React.CSSProperties = {
+  fontFamily: 'var(--mono)', fontSize: 10,
+  background: 'var(--panel2)', border: '1px solid var(--border2)',
+  color: 'var(--text)', padding: '3px 8px',
 };
 
 const viewToggleStyle: React.CSSProperties = {
