@@ -884,6 +884,12 @@ function recipeToRow(r: Recipe) {
     // edits round-trip across devices.
     extra_additions: r.extraAdditions || '',
     brewer: r.brewer || '',
+    recipe_pitch_temp: r.recipePitchTemp ?? null,
+    recipe_ferm_temp:  r.recipeFermTemp  ?? null,
+    recipe_o2_lpm:     r.recipeO2Lpm     ?? null,
+    recipe_o2_time:    r.recipeO2Time    ?? null,
+    target_finish_ph:  r.targetFinishPh  ?? null,
+    planned_carb:      r.plannedCarb     ?? null,
     // bh_eff / boil_time / whirlpool_temp columns added by
     // migrations/06-recipe-process-fields.sql. See rowToRecipe below.
     bh_eff: r.bhEff ?? null,
@@ -935,6 +941,12 @@ function rowToRecipe(row: Record<string, unknown>): Recipe {
     // (Postgres column has DEFAULT '' so this is belt-and-braces).
     extraAdditions: (row.extra_additions as string) ?? '',
     brewer: (row.brewer as string) ?? '',
+    recipePitchTemp:  row.recipe_pitch_temp  != null ? Number(row.recipe_pitch_temp)  : undefined,
+    recipeFermTemp:   row.recipe_ferm_temp   != null ? Number(row.recipe_ferm_temp)   : undefined,
+    recipeO2Lpm:      row.recipe_o2_lpm      != null ? Number(row.recipe_o2_lpm)      : undefined,
+    recipeO2Time:     row.recipe_o2_time     != null ? Number(row.recipe_o2_time)     : undefined,
+    targetFinishPh:   row.target_finish_ph   != null ? Number(row.target_finish_ph)   : undefined,
+    plannedCarb:      row.planned_carb       != null ? Number(row.planned_carb)       : undefined,
     archivedAt: (row.archived_at as string | null) ?? null,
   };
 }

@@ -76,6 +76,18 @@ export interface Recipe {
    * Supabase via the `recipes.brewer` column (added 2026-05-12).
    */
   brewer: string;
+  /** Recipe-level pitch temp default (°C). Pre-fills bd.pitchTemp on Brew Day tab when that field is empty. Overrideable on Brew Day. */
+  recipePitchTemp?: number;
+  /** Recipe-level ferm temp default (°C). Pre-fills bd.fermTemp on Brew Day tab when that field is empty. Overrideable on Brew Day. */
+  recipeFermTemp?: number;
+  /** Recipe-level O₂ flow rate default (LPM). Pre-fills bd.o2Lpm on Brew Day tab when that field is empty. Overrideable on Brew Day. */
+  recipeO2Lpm?: number;
+  /** Recipe-level O₂ time default (min). Pre-fills bd.o2Time on Brew Day tab when that field is empty. Overrideable on Brew Day. */
+  recipeO2Time?: number;
+  /** Target finish pH after dry-hop. Pre-fills ferm_meta['target-post-dh-ph'] when that field is empty. Overrideable on Ferm tab. */
+  targetFinishPh?: number;
+  /** Planned carbonation (vols). Pre-fills cold_side['cs-carb-planned'] when that field is empty. Overrideable on Packaging tab. */
+  plannedCarb?: number;
   /**
    * Vestigial column (Supabase `recipes.archived_at`, renamed from
    * `deleted_at` on 2026-05-07 — see migrations/). The two-tier

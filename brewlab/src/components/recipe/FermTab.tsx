@@ -47,7 +47,14 @@ export default function FermTab({ recipeId }: Props) {
   // Entries kept locally for reactive UI; mutations go through the store
   // (which writes localStorage + dispatches Supabase).
   const [entries, setEntriesLocal] = useState<FermLogEntry[]>(() => getFermLog(recipeId));
-  const [meta, setMetaLocal]       = useState<FermMeta>(() => getFermMeta(recipeId));
+  const [meta, setMetaLocal]       = useState<FermMeta>(() => {
+    const saved = getFermMeta(recipeId);
+    // Pre-fill target finish pH from the recipe default when the field is empty
+    if ((saved['target-post-dh-ph'] == null || saved['target-post-dh-ph'] === '') && recipe?.targetFinishPh != null) {
+      return { ...saved, 'target-post-dh-ph': String(recipe.targetFinishPh) };
+    }
+    return saved;
+  });
   const [entryModalOpen, setEntryModalOpen] = useState(false);
   const [dhModalSlot, setDhModalSlot]       = useState<1 | 2 | 3 | null>(null);
   const [harvestModalOpen, setHarvestModalOpen] = useState(false);

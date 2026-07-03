@@ -384,15 +384,41 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
                   on the Prep Sheet when non-empty (header is suppressed if
                   blank, so a recipe with nothing to add doesn't carry a
                   ghost "EXTRA ADDITIONS" heading onto paper). */}
-              <div style={extraAdditionsSectionStyle}>
-                <div style={extraAdditionsLabelStyle}>EXTRA ADDITIONS</div>
-                <textarea
-                  value={recipe.extraAdditions ?? ''}
-                  onChange={e => updateRecipe(recipeId, { extraAdditions: e.target.value })}
-                  placeholder="e.g. orange peel @ 5 min · coriander @ flameout · vanilla bean during DH"
-                  rows={3}
-                  style={extraAdditionsInputStyle}
-                />
+              <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                <div style={{ ...extraAdditionsSectionStyle, flex: 1 }}>
+                  <div style={extraAdditionsLabelStyle}>EXTRA ADDITIONS</div>
+                  <textarea
+                    value={recipe.extraAdditions ?? ''}
+                    onChange={e => updateRecipe(recipeId, { extraAdditions: e.target.value })}
+                    placeholder="e.g. orange peel @ 5 min · coriander @ flameout · vanilla bean during DH"
+                    rows={3}
+                    style={extraAdditionsInputStyle}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 140, paddingTop: 2 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={extraAdditionsLabelStyle}>TARGET FINISH pH</div>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={recipe.targetFinishPh ?? ''}
+                      onChange={e => updateRecipe(recipeId, { targetFinishPh: parseFloat(e.target.value) || undefined })}
+                      placeholder="—"
+                      style={{ ...extraAdditionsInputStyle, minHeight: 'unset', resize: 'none', width: '100%' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={extraAdditionsLabelStyle}>PLANNED CARB (vols)</div>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={recipe.plannedCarb ?? ''}
+                      onChange={e => updateRecipe(recipeId, { plannedCarb: parseFloat(e.target.value) || undefined })}
+                      placeholder="—"
+                      style={{ ...extraAdditionsInputStyle, minHeight: 'unset', resize: 'none', width: '100%' }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>

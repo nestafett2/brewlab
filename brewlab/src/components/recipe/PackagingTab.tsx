@@ -50,7 +50,14 @@ export default function PackagingTab({ recipeId }: Props) {
   const setColdSide  = useStore(s => s.setColdSide);
 
   // ── Local state ──────────────────────────────────────────────────────
-  const [cs, setCs] = useState<ColdSideData>(() => getColdSide(recipeId));
+  const [cs, setCs] = useState<ColdSideData>(() => {
+    const saved = getColdSide(recipeId);
+    // Pre-fill planned carbonation from the recipe default when the field is empty
+    if ((saved['cs-carb-planned'] == null || saved['cs-carb-planned'] === '') && recipe?.plannedCarb != null) {
+      return { ...saved, 'cs-carb-planned': String(recipe.plannedCarb) };
+    }
+    return saved;
+  });
   const [hoverStar, setHoverStar]               = useState<number>(0);
   const [tastingModalOpen, setTastingModalOpen] = useState(false);
   // Without dirtyRef the persistence effect would write a non-`{}` blob on

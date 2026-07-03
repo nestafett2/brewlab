@@ -31,6 +31,7 @@ const MISC_USES = ['boil', 'mash', 'whirlpool', 'fermentation', 'cold side', 'pa
 
 export default function EditIngredientModal({ recipeId, ingredient, allIngredients, onClose }: Props) {
   const updateIngredient = useStore(s => s.updateIngredient);
+  const updateRecipe = useStore(s => s.updateRecipe);
   const maltLib = useStore(s => s.maltLib);
   const hopLib = useStore(s => s.hopLib);
   const yeastLib = useStore(s => s.yeastLib);
@@ -56,6 +57,12 @@ export default function EditIngredientModal({ recipeId, ingredient, allIngredien
   const [yeastBatch, setYeastBatch] = useState('');
   const [yeastGen, setYeastGen] = useState('');
 
+  // Recipe-level pitch/ferm/O2 defaults (not ingredient fields)
+  const [recipePitchTemp, setRecipePitchTemp] = useState('');
+  const [recipeFermTemp, setRecipeFermTemp]   = useState('');
+  const [recipeO2Lpm, setRecipeO2Lpm]         = useState('');
+  const [recipeO2Time, setRecipeO2Time]       = useState('');
+
   // Initialize cost from ingredient or library
   useEffect(() => {
     let c = ingredient.cost || 0;
@@ -77,6 +84,10 @@ export default function EditIngredientModal({ recipeId, ingredient, allIngredien
     setYeastSource((ingredient as any).yeastSource || 'fresh');
     setYeastBatch((ingredient as any).yeastBatch || '');
     setYeastGen((ingredient as any).yeastGen || '');
+    setRecipePitchTemp(recipe?.recipePitchTemp != null ? String(recipe.recipePitchTemp) : '');
+    setRecipeFermTemp(recipe?.recipeFermTemp   != null ? String(recipe.recipeFermTemp)  : '');
+    setRecipeO2Lpm(recipe?.recipeO2Lpm         != null ? String(recipe.recipeO2Lpm)     : '');
+    setRecipeO2Time(recipe?.recipeO2Time        != null ? String(recipe.recipeO2Time)    : '');
     if (!isDry) {
       const litres = ingredient.unit === 'ml' ? ingredient.amt * 0.001 : ingredient.amt;
       setAmt(litres.toFixed(2));
@@ -177,10 +188,21 @@ export default function EditIngredientModal({ recipeId, ingredient, allIngredien
     }
 
     updateIngredient(recipeId, ingredient.id, updates);
+
+    if (type === 'yeast') {
+      const recipeUpdates: Record<string, number | undefined> = {};
+      if (recipePitchTemp !== '') recipeUpdates.recipePitchTemp = parseFloat(recipePitchTemp) || undefined;
+      if (recipeFermTemp  !== '') recipeUpdates.recipeFermTemp  = parseFloat(recipeFermTemp)  || undefined;
+      if (recipeO2Lpm     !== '') recipeUpdates.recipeO2Lpm     = parseFloat(recipeO2Lpm)     || undefined;
+      if (recipeO2Time    !== '') recipeUpdates.recipeO2Time     = parseFloat(recipeO2Time)    || undefined;
+      if (Object.keys(recipeUpdates).length > 0) updateRecipe(recipeId, recipeUpdates);
+    }
+
     onClose();
   }, [
     amt, extra, use, time, cost, notes, malted, type, yeastForm, yeastSource,
     yeastBatch, yeastGen, ingredient, recipeId, updateIngredient, onClose,
+    recipePitchTemp, recipeFermTemp, recipeO2Lpm, recipeO2Time, updateRecipe,
   ]);
 
   const typeLabel = { grain: 'FERMENTABLE', hop: 'HOP', yeast: 'YEAST', misc: 'MISC', water: 'WATER' }[type] || 'INGREDIENT';
@@ -322,6 +344,26 @@ export default function EditIngredientModal({ recipeId, ingredient, allIngredien
                     <input type="number" value={yeastGen} onChange={e => setYeastGen(e.target.value)} min="1" step="1" placeholder="1" style={{ width: '100%' }} />
                   </div>
                   <div className="form-group" style={{ flex: 1 }} />
+                </div>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label>Pitch Temp (°C)</label>
+                    <input type="number" value={recipePitchTemp} onChange={e => setRecipePitchTemp(e.target.value)} placeholder="—" style={{ width: '100%' }} />
+                  </div>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label>Ferm Temp (°C)</label>
+                    <input type="number" value={recipeFermTemp} onChange={e => setRecipeFermTemp(e.target.value)} placeholder="—" style={{ width: '100%' }} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label>O₂ LPM</label>
+                    <input type="number" value={recipeO2Lpm} onChange={e => setRecipeO2Lpm(e.target.value)} placeholder="—" style={{ width: '100%' }} />
+                  </div>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label>O₂ Time (min)</label>
+                    <input type="number" value={recipeO2Time} onChange={e => setRecipeO2Time(e.target.value)} placeholder="—" style={{ width: '100%' }} />
+                  </div>
                 </div>
                 <YeastCalc
                   isDry={yeastForm === 'dry'}

@@ -78,9 +78,20 @@ export default function BrewDayTab({ recipeId }: Props) {
   // Reset dirtyRef too so the new recipe doesn't inherit "user touched X" from
   // the previous one.
   useEffect(() => {
-    setBd(getBrewDay(recipeId));
+    const saved = getBrewDay(recipeId);
+    // Pre-fill from recipe defaults when the brew day field is empty
+    const prefilled: BrewDayData = { ...saved };
+    if ((saved.pitchTemp == null || saved.pitchTemp === '') && recipe?.recipePitchTemp != null)
+      prefilled.pitchTemp = String(recipe.recipePitchTemp);
+    if ((saved.fermTemp  == null || saved.fermTemp  === '') && recipe?.recipeFermTemp  != null)
+      prefilled.fermTemp  = String(recipe.recipeFermTemp);
+    if ((saved.o2Lpm     == null || saved.o2Lpm     === '') && recipe?.recipeO2Lpm     != null)
+      prefilled.o2Lpm     = String(recipe.recipeO2Lpm);
+    if ((saved.o2Time    == null || saved.o2Time    === '') && recipe?.recipeO2Time    != null)
+      prefilled.o2Time    = String(recipe.recipeO2Time);
+    setBd(prefilled);
     dirtyRef.current = false;
-  }, [recipeId, getBrewDay]);
+  }, [recipeId, getBrewDay, recipe?.recipePitchTemp, recipe?.recipeFermTemp, recipe?.recipeO2Lpm, recipe?.recipeO2Time]);
 
   // ── Active equip profile ─────────────────────────────────────────────────
   // Reads the recipe's selected equipment profile id from the reactive
