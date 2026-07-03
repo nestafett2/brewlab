@@ -45,6 +45,7 @@ export default function OrderPlannerPage() {
   const miscLib   = useStore(s => s.miscLib);
 
   const [section, setSection] = useState<LibSection | 'all'>('all');
+  const [dayLimit, setDayLimit] = useState<number>(30);
   const [ordersOpen, setOrdersOpen] = useState(false);
   const [addOrderOpen, setAddOrderOpen] = useState(false);
 
@@ -85,6 +86,16 @@ export default function OrderPlannerPage() {
             <option key={s.id} value={s.id}>{s.label}</option>
           ))}
         </select>
+        <select
+          value={dayLimit}
+          onChange={e => setDayLimit(Number(e.target.value))}
+          style={sectionSelectStyle}
+        >
+          <option value={14}>2 weeks</option>
+          <option value={30}>1 month</option>
+          <option value={90}>3 months</option>
+          <option value={0}>All</option>
+        </select>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
           <button
             className="btn sm"
@@ -97,7 +108,7 @@ export default function OrderPlannerPage() {
         </div>
       </div>
 
-      <ForecastTable section={section} />
+      <ForecastTable section={section} dayLimit={dayLimit} />
 
       {ordersOpen && <OrdersPanel onClose={() => setOrdersOpen(false)} />}
       {addOrderOpen && <AddOrderModal onClose={() => setAddOrderOpen(false)} />}

@@ -27,13 +27,16 @@ import RecordUsageModal from '../inventory/RecordUsageModal';
 
 interface Props {
   section: LibSection | 'all';
+  dayLimit: number;
 }
 
 const SECTION_LABEL: Record<LibSection, string> = {
   malts: 'MALTS', hops: 'HOPS', yeast: 'YEAST', misc: 'ADJUNCTS',
 };
 
-export default function ForecastTable({ section }: Props) {
+const BREW_TINTS = ['rgba(255,255,255,0.03)', 'rgba(255,255,255,0.07)'];
+
+export default function ForecastTable({ section, dayLimit }: Props) {
   const plannerBrews   = useStore(s => s.plannerBrews);
   const orders         = useStore(s => s.orders);
   const inventoryStock = useStore(s => s.inventoryStock);
@@ -83,6 +86,13 @@ export default function ForecastTable({ section }: Props) {
     [plannerBrews, orders],
   );
 
+  const today = new Date();
+  const filtered = dayLimit === 0 ? timeline : timeline.filter(col => {
+    const colDate = new Date(col.kind === 'brew' ? col.brew.start : col.date);
+    const diffDays = (colDate.getTime() - today.getTime()) / 86400000;
+    return diffDays <= dayLimit;
+  });
+
   const sections: LibSection[] = section === 'all'
     ? ['malts', 'hops', 'yeast', 'misc']
     : [section];
@@ -103,7 +113,7 @@ export default function ForecastTable({ section }: Props) {
   const sectionRows = sections.map(sec => ({
     sec,
     rows: buildForecastRows(
-      sec, timeline, libBySection, inventoryStock, ledgerData,
+      sec, filtered, libBySection, inventoryStock, ledgerData,
       recipeId => ingredientsByRecipe[recipeId] ?? [],
       getTaxBatch,
     ),
@@ -119,7 +129,7 @@ export default function ForecastTable({ section }: Props) {
 
   // Total cells in a row (used for section header colspan).
   // 1 ingredient + 1 on-hand + (2 per timeline column) + 1 needed + 1 status
-  const totalColCount = 3 + timeline.length * 2 + 1;
+  const totalColCount = 3 + filtered.length * 2 + 1;
 
   return (
     <div style={tableWrapStyle}>
@@ -134,7 +144,7 @@ export default function ForecastTable({ section }: Props) {
                 sec={sec}
                 unit={unit}
                 rows={rows}
-                timeline={timeline}
+                timeline={filtered}
                 totalColCount={totalColCount}
                 recipeById={recipeById}
                 onBrewContext={brewId => setRecordUsageBrewId(brewId)}
@@ -180,43 +190,55 @@ function SectionBlock({
       <tr style={{ background: 'var(--panel2)' }}>
         <th style={{ ...thStyle, ...stickyLeftStyle, minWidth: 160, zIndex: 15 }}>INGREDIENT</th>
         <th style={{ ...thStyle, minWidth: 80, textAlign: 'right' }}>ON HAND</th>
-        {timeline.map((col, i) => col.kind === 'brew' ? (
-          <th
-            key={`c-${i}`}
-            colSpan={2}
-            onContextMenu={e => { e.preventDefault(); onBrewContext(col.brew.id); }}
-            title="Right-click to log usage"
-            style={{
-              ...thStyle, textAlign: 'center', cursor: 'context-menu',
-              borderTop: `2px solid ${col.brew.color}`,
-              background: `${col.brew.color}22`,
-              color: 'var(--text)', padding: '3px 6px',
-            }}
-          >
-            {formatBrewHeader(col.brew, recipeById)}
-            <br />
-            <span style={{ fontSize: 7, color: 'var(--text-muted)' }}>
-              {col.brew.start.slice(5)}
-            </span>
-          </th>
-        ) : (
-          <th
-            key={`c-${i}`}
-            colSpan={2}
-            style={{
-              ...thStyle, textAlign: 'center',
-              borderTop: '2px solid var(--green)',
-              background: 'rgba(50,215,75,0.08)',
-              color: 'var(--green)', padding: '3px 6px',
-            }}
-          >
-            📦 DELIVERY
-            <br />
-            <span style={{ fontSize: 7, color: 'var(--text-muted)' }}>
-              {col.date.slice(5).replace('-', '/')}
-            </span>
-          </th>
-        ))}
+        {(() => {
+          let brewColIdx = 0;
+          return timeline.map((col, i) => {
+            if (col.kind === 'brew') {
+              const tint = BREW_TINTS[brewColIdx % BREW_TINTS.length];
+              brewColIdx++;
+              return (
+                <th
+                  key={`c-${i}`}
+                  colSpan={2}
+                  onContextMenu={e => { e.preventDefault(); onBrewContext(col.brew.id); }}
+                  title="Right-click to log usage"
+                  style={{
+                    ...thStyle, textAlign: 'center', cursor: 'context-menu',
+                    borderTop: `2px solid ${col.brew.color}`,
+                    borderRight: '1px solid var(--border2)',
+                    background: `linear-gradient(${tint}, ${tint}), ${col.brew.color}22`,
+                    color: 'var(--text)', padding: '3px 6px',
+                  }}
+                >
+                  {formatBrewHeader(col.brew, recipeById)}
+                  <br />
+                  <span style={{ fontSize: 7, color: 'var(--text-muted)' }}>
+                    {col.brew.start.slice(5)}
+                  </span>
+                </th>
+              );
+            }
+            return (
+              <th
+                key={`c-${i}`}
+                colSpan={2}
+                style={{
+                  ...thStyle, textAlign: 'center',
+                  borderTop: '2px solid var(--green)',
+                  borderRight: '1px solid var(--border2)',
+                  background: 'rgba(50,215,75,0.08)',
+                  color: 'var(--green)', padding: '3px 6px',
+                }}
+              >
+                📦 DELIVERY
+                <br />
+                <span style={{ fontSize: 7, color: 'var(--text-muted)' }}>
+                  {col.date.slice(5).replace('-', '/')}
+                </span>
+              </th>
+            );
+          });
+        })()}
         <th style={{ ...thStyle, minWidth: 80, textAlign: 'right' }}>NEEDED</th>
         <th style={{ ...thStyle, minWidth: 70 }}>STATUS</th>
       </tr>
@@ -256,7 +278,7 @@ function SectionBlock({
                         ? <span style={{ color: '#c05050' }}>{fmtKg(c.amt)}</span>
                         : null}
                 </td>,
-                <td key={`b-${j}`} style={{ ...tdStyle, textAlign: 'center', color: balColor }}>
+                <td key={`b-${j}`} style={{ ...tdStyle, textAlign: 'center', color: balColor, borderRight: '1px solid var(--border2)' }}>
                   {fmtKg(bal)}
                 </td>,
               ];
