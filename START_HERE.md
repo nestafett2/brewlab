@@ -172,6 +172,7 @@ These are Ben's hard rules. Don't violate them.
 - **Verify state before fixing.** Before assuming something's broken, check what the React app actually does — bugs in handoff notes are often already resolved.
 - **Always flag the caveats** when reporting back from Claude Code. Ben wants those surfaced every time.
 - **OneDrive connector is available.** Ben's project files are on OneDrive. Always check it when Ben says files are there — never say the connector doesn't exist. Source `.tsx`/`.ts` files are not readable via the connector (wrong MIME type) but folder structure and `.md`/`.json` files are. Ask Ben to upload source files directly.
+- **Update WORKFLOWS.md** when any user-facing workflow changes or a new one is added. This is part of the session wrap-up, not optional. CC updates `docs/WORKFLOWS.md` directly — it's a Markdown file in the repo.
 
 ---
 
@@ -189,6 +190,7 @@ These are Ben's hard rules. Don't violate them.
 | `brewlab-desktop.html` | The authoritative spec. ~20,850 lines. | Before building any feature. |
 | `brewlab-tablet.html` | Tablet reference. | Before building tablet layout. |
 | `brewlab-mobile.html` | Mobile reference. | Before building mobile layout. |
+| `docs/WORKFLOWS.md` | Step-by-step workflow guide for all major tasks. | When updating the user manual or writing CC prompts that affect user-facing workflows. |
 
 ---
 
