@@ -1,6 +1,6 @@
 # BrewLab — Key Workflows
 
-*July 2026 — For a full list of features, see the BrewLab User Manual.*
+*July 2026 — This is the BrewLab user manual.*
 
 ---
 
@@ -141,7 +141,80 @@ The recurring delivery will now appear as a delivery column in the forecast with
 
 ---
 
-## Workflow 3: Brew Day
+## Workflow 3: Managing Inventory
+
+Inventory tracks how much of each library ingredient (malts, hops, yeast, adjuncts) you have on hand. Every number on screen is driven by the tax ledger — the same record of IN (received) and OUT (used) movements that feeds NTA filings, so inventory and tax stay in sync automatically.
+
+### Viewing current stock
+
+**1. Open the Inventory tab**
+Click INVENTORY in the top tab bar.
+
+**2. Choose a section**
+Use the dropdown in the toolbar: MALTS / HOPS / YEAST / ADJUNCTS / 🧫 HARVESTED.
+
+**3. Read the stock table**
+Each row is a library entry. ON HAND shows the current ledger balance — red when at or below zero, amber when below 15% of the opening balance.
+
+> Click a column header to sort. Right-click the header row to show/hide columns. Drag a column header to reorder it.
+
+**4. Filter to items in stock**
+Click IN STOCK ONLY to hide anything with zero or negative balance.
+
+**5. Edit a library entry or set an opening balance**
+Double-click a row to edit it in the Library entry modal. Or type directly into the OPENING BAL. column to set the pre-ledger starting amount for that ingredient.
+
+### Recording a manual ledger entry
+
+**6. Click TAX LEDGER**
+Toggles the table to a per-ingredient ledger view.
+
+**7. Pick an ingredient**
+Use the dropdown at the top of the ledger view.
+
+**8. Add or edit an entry**
+Click ＋ ADD ENTRY to log a new IN (received) or OUT (used) movement with date, quantity, and supplier/beer. Click an existing row to edit it.
+
+> The Current Balance shown updates live as you switch between ingredients.
+
+### Correcting inventory after a stock take
+
+**9. Click ⚖ CORRECTION**
+Shows every ingredient in the active section with its current digital balance and a Physical count field.
+
+**10. Enter what you physically counted**
+Any ingredient where the physical count differs from the digital balance automatically writes a correction ledger entry (IN if you have more than expected, OUT if less) when you confirm.
+
+> Correction entries are flagged with a note in the Tax Ledger so you can tell them apart from normal receiving/usage movements.
+
+### Recording ingredient usage from a brew
+
+**11. Click 📝 Record Usage**
+Available from the Order Planner forecast (right-click a brew column) or the Brew Day tab.
+
+**12. Check off ingredients and confirm**
+Review the pre-checked list, adjust quantities if needed, then click RECORD USAGE. This deducts every checked ingredient from inventory.
+
+> If an ingredient can't be matched to your library, its row shows "⚠ not in library — click to fix". Click it to search your library and link the ingredient, or add it as a brand-new library entry on the spot — either way it's tracked in inventory from then on.
+
+### Exporting inventory
+
+**13. Click ⬇ EXPORT ▾**
+Choose Export Tax Ledger XLSX (full ledger history for the section) or Export Current Page XLSX (just the visible stock table, matching your column and filter settings).
+
+### Tracking harvested yeast
+
+**14. Switch to 🧫 HARVESTED**
+Shows every strain you've harvested, with current volume on hand and generation number.
+
+**15. Log a harvest or a use**
+Click + Log Harvest to record a new harvest for a strain, or − Log Use to record pitching harvested yeast into a brew.
+
+> Generation numbers increment automatically each time you log a new harvest for a strain.
+
+---
+
+## Workflow 4: Brew Day
 
 ### Before brew day — print the prep sheet
 
@@ -171,7 +244,7 @@ Click 📝 Record Usage at the bottom of the Brew Day tab. This deducts the ingr
 
 ---
 
-## Workflow 4: Fermentation Tracking
+## Workflow 5: Fermentation Tracking
 
 **1. Open the Fermentation tab**
 In the recipe, click the Fermentation sub-tab.
@@ -189,7 +262,7 @@ In the Yeast Harvest section, log how many litres you harvested. Generation numb
 
 ---
 
-## Workflow 5: Packaging
+## Workflow 6: Packaging
 
 **1. Open the Packaging tab**
 In the recipe, click the Packaging sub-tab.
@@ -202,7 +275,7 @@ Fill in the notes sections at the bottom.
 
 ---
 
-## Workflow 6: NTA Tax Filing
+## Workflow 7: NTA Tax Filing
 
 > ⚠ Tax records are legally binding. Once you click "Record to Tax Master," figures are permanently frozen. Read this workflow carefully before proceeding.
 
@@ -225,7 +298,7 @@ Click SUBMITTER in the top tab bar. Select the beer name. The app normalises all
 
 ---
 
-## Workflow 7: Syncing Across Devices
+## Workflow 8: Syncing Across Devices
 
 BrewLab syncs automatically between desktop, tablet, and mobile via Supabase.
 
