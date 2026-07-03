@@ -25,7 +25,7 @@ import { useStore } from '../../store';
 import { fmtIngAmt, toKgForLedger } from '../../lib/units';
 import { ingNamesMatch } from '../../lib/ingredient-matcher';
 import { dateToStr, todayDate, strToDate } from '../../lib/dates';
-import type { LedgerData, LedgerEntry, PlannerBrew } from '../../types';
+import type { LedgerData, LedgerEntry, PlannerBrew, MaltLib, HopLib, YeastLib, MiscLib } from '../../types';
 import type { LibEntry } from '../libraries/libraryShared';
 
 const EXCLUDE_MISC = /phosphoric|sulfuric|lactic|hydrochloric|caustic|water|h2o/i;
@@ -66,6 +66,11 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
   const hopLib   = useStore(s => s.hopLib);
   const yeastLib = useStore(s => s.yeastLib);
   const miscLib  = useStore(s => s.miscLib);
+  const setMaltLib  = useStore(s => s.setMaltLib);
+  const setHopLib   = useStore(s => s.setHopLib);
+  const setYeastLib = useStore(s => s.setYeastLib);
+  const setMiscLib  = useStore(s => s.setMiscLib);
+  const updateIngredient = useStore(s => s.updateIngredient);
 
   const brew = useMemo(
     () => plannerBrews.find(b => b.id === brewId) ?? null,
@@ -144,6 +149,8 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
   const [checked, setChecked] = useState<Record<string, boolean>>(initialChecked);
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [date, setDate] = useState<string>(brew?.start || dateToStr(todayDate()));
+  const [resolvingUid, setResolvingUid] = useState<string | null>(null);
+  const [resolveSearch, setResolveSearch] = useState('');
 
   // Re-seed local state when the row set changes (e.g. brew change).
   const lastRowsRef = useRef<RowData[] | null>(null);
@@ -167,6 +174,32 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
       for (const r of rows) if (!r.alreadyLogged) next[r.uid] = val;
       return next;
     });
+  };
+
+  // Link a recipe ingredient to a library entry by saving libId onto the ingredient.
+  // Also update the row's ledgerKey by rebuilding rows (rows is derived from store so
+  // updating the ingredient triggers a re-render automatically).
+  const resolveLink = (row: RowData, libEntry: LibEntry) => {
+    // Find the matching recipe ingredient by name + section type
+    const ingType = ING_TYPES[row.section];
+    const recipeIng = ings.find(i => i.type === ingType && i.name === row.ingName);
+    if (recipeIng && recipeId) {
+      updateIngredient(recipeId, String(recipeIng.id), { libId: String(libEntry.id) });
+    }
+    setResolvingUid(null);
+    setResolveSearch('');
+    pushToast({ message: `Linked "${row.ingName}" → "${libEntry.name}"`, variant: 'success' });
+  };
+
+  const addToLibrary = (row: RowData) => {
+    const newId = String(Date.now());
+    const newEntry = { id: newId, name: row.ingName, supplier: '', notes: '' };
+    if (row.section === 'malts') setMaltLib([...maltLib, newEntry as MaltLib]);
+    else if (row.section === 'hops') setHopLib([...hopLib, newEntry as HopLib]);
+    else if (row.section === 'yeast') setYeastLib([...yeastLib, newEntry as YeastLib]);
+    else setMiscLib([...miscLib, newEntry as MiscLib]);
+    resolveLink(row, newEntry as LibEntry);
+    pushToast({ message: `Added "${row.ingName}" to ${row.section} library.`, variant: 'success' });
   };
 
   const hasNoLibMatch = rows.some(r => r.ledgerKey.startsWith('nolib_'));
@@ -300,8 +333,47 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={ingNameStyle}>{r.ingName}</div>
                     {r.ledgerKey.startsWith('nolib_') && (
-                      <div style={{ fontFamily: 'var(--mono)', fontSize: 8, color: '#f09420' }}>
-                        ⚠ not in library
+                      <div>
+                        <div
+                          style={{ fontFamily: 'var(--mono)', fontSize: 8, color: '#f09420', cursor: 'pointer', textDecoration: 'underline' }}
+                          onClick={e => { e.preventDefault(); setResolvingUid(resolvingUid === r.uid ? null : r.uid); setResolveSearch(''); }}
+                        >⚠ not in library — click to fix</div>
+                        {resolvingUid === r.uid && (() => {
+                          const lib = libBySection[r.section];
+                          const filtered = resolveSearch.trim()
+                            ? lib.filter(e => e.name.toLowerCase().includes(resolveSearch.toLowerCase()))
+                            : lib.slice(0, 8);
+                          return (
+                            <div style={{ marginTop: 4, background: 'var(--panel2)', border: '1px solid var(--border2)', padding: 6 }}>
+                              <input
+                                autoFocus
+                                placeholder={`Search ${r.section}…`}
+                                value={resolveSearch}
+                                onChange={e => setResolveSearch(e.target.value)}
+                                style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border2)', color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: 9, padding: '3px 6px', outline: 'none', marginBottom: 4 }}
+                              />
+                              <div style={{ maxHeight: 120, overflowY: 'auto' }}>
+                                {filtered.map(le => (
+                                  <div
+                                    key={String(le.id)}
+                                    onClick={() => resolveLink(r, le)}
+                                    style={{ padding: '3px 6px', fontFamily: 'var(--mono)', fontSize: 9, cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
+                                    onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--panel)'}
+                                    onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = ''}
+                                  >{le.name}</div>
+                                ))}
+                                {filtered.length === 0 && (
+                                  <div style={{ padding: '3px 6px', fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>No matches</div>
+                                )}
+                              </div>
+                              <button
+                                className="btn sm"
+                                style={{ marginTop: 6, width: '100%' }}
+                                onClick={() => addToLibrary(r)}
+                              >+ Add "{r.ingName}" to library</button>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
