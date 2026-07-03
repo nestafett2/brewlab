@@ -1450,6 +1450,7 @@ export default function Desktop() {
                           setFolders={setFolders}
                           openRecipe={openRecipe}
                           onBlankContext={handleBlankContext}
+                          selectedFolderId={preview?.kind === 'folder' ? preview.id : null}
                         />
                       ) : (() => {
                         const r = preview?.kind === 'recipe' ? recipes.find(x => x.id === preview.id) : null;

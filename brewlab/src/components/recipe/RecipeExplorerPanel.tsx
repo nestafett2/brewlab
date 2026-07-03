@@ -61,10 +61,13 @@ interface Props {
   /** Right-click on the By Folder view's blank area — Desktop fires the
    *  same "+ New Folder" menu the sidebar uses. */
   onBlankContext: (e: React.MouseEvent) => void;
+  /** When set, the explorer defaults to showing only recipes in this folder
+   *  (and its descendants). An "All" toggle lets the user expand to all recipes. */
+  selectedFolderId?: string | null;
 }
 
 export default function RecipeExplorerPanel({
-  recipes, folders, setFolders, openRecipe, onBlankContext,
+  recipes, folders, setFolders, openRecipe, onBlankContext, selectedFolderId,
 }: Props) {
   const [mode, setMode] = useState<ExplorerMode>(loadMode);
   // Inline preview within the explorer's right pane. Local-only state —
@@ -78,6 +81,27 @@ export default function RecipeExplorerPanel({
     try { localStorage.setItem(LS_KEY, mode); } catch { /* ignore */ }
   }, [mode]);
   useEffect(() => { setPreviewId(null); }, [mode]);
+
+  const [showAll, setShowAll] = useState(false);
+  // Reset showAll when the selected folder changes
+  useEffect(() => { setShowAll(false); }, [selectedFolderId]);
+
+  // Collect all descendant folder ids of a given folder (including itself)
+  const getDescendantFolderIds = (folderId: string): Set<string> => {
+    const ids = new Set<string>();
+    const visit = (id: string) => {
+      ids.add(id);
+      folders.filter(f => f.parentId === id).forEach(f => visit(f.id));
+    };
+    visit(folderId);
+    return ids;
+  };
+
+  const displayedRecipes = useMemo(() => {
+    if (!selectedFolderId || showAll) return recipes;
+    const ids = getDescendantFolderIds(selectedFolderId);
+    return recipes.filter(r => ids.has(r.folder));
+  }, [recipes, selectedFolderId, showAll, folders]);
 
   // Resolve preview id → recipe at render time so a deletion or
   // hydration-driven id change clears the pane gracefully.
@@ -102,22 +126,38 @@ export default function RecipeExplorerPanel({
             >{MODE_LABELS[m]}</button>
           ))}
         </div>
-        <span style={countStyle}>{recipes.length} {recipes.length === 1 ? 'recipe' : 'recipes'}</span>
+        {selectedFolderId && (
+          <button
+            className={`btn sm ${!showAll ? 'active' : ''}`}
+            style={{ marginLeft: 8 }}
+            onClick={() => setShowAll(s => !s)}
+            title={showAll ? 'Show selected folder only' : 'Show all recipes'}
+          >
+            {showAll ? 'All' : folders.find(f => f.id === selectedFolderId)?.name ?? 'Folder'}
+          </button>
+        )}
+        <span style={countStyle}>
+          {displayedRecipes.length}
+          {selectedFolderId && !showAll && displayedRecipes.length !== recipes.length
+            ? ` of ${recipes.length}`
+            : ''
+          } {displayedRecipes.length === 1 ? 'recipe' : 'recipes'}
+        </span>
       </div>
       <div style={splitStyle}>
         <div style={{ ...bodyStyle, flex: 1, minWidth: 0 }}>
-          {mode === 'date'   && <ByDate    recipes={recipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
+          {mode === 'date'   && <ByDate    recipes={displayedRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
           {mode === 'folder' && <ByFolder
-            recipes={recipes} folders={folders}
+            recipes={displayedRecipes} folders={folders}
             setFolders={setFolders}
             onPreview={handlePreview}
             onOpen={handleOpen}
             previewId={previewId}
             onBlankContext={onBlankContext}
           />}
-          {mode === 'style'  && <ByStyle   recipes={recipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
-          {mode === 'name'   && <ByName    recipes={recipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
-          {mode === 'tax'    && <ByTax     recipes={recipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
+          {mode === 'style'  && <ByStyle   recipes={displayedRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
+          {mode === 'name'   && <ByName    recipes={displayedRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
+          {mode === 'tax'    && <ByTax     recipes={displayedRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
         </div>
         {previewRecipe && (
           <div style={previewPaneStyle}>
