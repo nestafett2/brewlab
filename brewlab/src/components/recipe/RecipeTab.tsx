@@ -357,27 +357,23 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
             placeholder={settings.breweryName ? `(default: ${settings.breweryName})` : '—'}
             style={brewerInputStyle}
           />
-        </div>
-
-        {/* Origin */}
-        <div style={brewerRowStyle}>
-          <label style={brewerLabelStyle}>Origin</label>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {(['own', 'collab', 'oem'] as RecipeOrigin[]).map(opt => (
-              <button
-                key={opt}
-                className="btn sm"
-                style={recipe.recipeOrigin === opt
+          {(['own', 'collab', 'oem'] as RecipeOrigin[]).map(opt => (
+            <button
+              key={opt}
+              className="btn sm"
+              style={{
+                padding: '2px 8px', fontSize: 11,
+                ...(recipe.recipeOrigin === opt
                   ? { color: 'var(--amber)', borderColor: 'var(--amber)' }
-                  : {}}
-                onClick={() => updateRecipe(recipeId, {
-                  recipeOrigin: recipe.recipeOrigin === opt ? null : opt,
-                })}
-              >
-                {opt === 'own' ? 'Own Brand' : opt === 'collab' ? 'Collab' : 'OEM'}
-              </button>
-            ))}
-          </div>
+                  : {}),
+              }}
+              onClick={() => updateRecipe(recipeId, {
+                recipeOrigin: recipe.recipeOrigin === opt ? null : opt,
+              })}
+            >
+              {opt === 'own' ? 'Own Brand' : opt === 'collab' ? 'Collab' : 'OEM'}
+            </button>
+          ))}
         </div>
 
         {(recipe.recipeOrigin === 'collab' || recipe.recipeOrigin === 'oem') && (
