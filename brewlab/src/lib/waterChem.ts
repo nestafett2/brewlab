@@ -31,7 +31,7 @@ import type { Ingredient } from '../types';
  * (brewlab-desktop.html:8466 / 8610 / 11564). Frozen so callers can't mutate.
  */
 export const WATER_CHEM_KW: RegExp =
-  /gypsum|calcium.*sulfate|calcium.*chloride|magnesium|lactic.*acid|phosphoric.*acid|hydrochloric.*acid|sulfuric.*acid|chalk|lime|bicarbonate|calcium.*carbonate|epsom|baking.*soda|sodium.*bicarbonate|potassium.*metabisulfite|campden|salts|nacl|cacl|caso4|mgso4|cacl2|table.*salt|sodium.*chloride/i;
+  /gypsum|calcium.*sulfate|calcium.*chloride|magnesium|lactic.*acid|phosphoric.*acid|hydrochloric.*acid|sulfuric.*acid|chalk|bicarbonate|calcium.*carbonate|epsom|baking.*soda|sodium.*bicarbonate|potassium.*metabisulfite|campden|salts|nacl|cacl|caso4|mgso4|cacl2|table.*salt|sodium.*chloride/i;
 
 /**
  * True if the ingredient is a water-chemistry addition that must be excluded
