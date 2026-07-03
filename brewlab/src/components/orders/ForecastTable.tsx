@@ -203,11 +203,14 @@ function SectionBlock({
                   onContextMenu={e => { e.preventDefault(); onBrewContext(col.brew.id); }}
                   title="Right-click to log usage"
                   style={{
-                    ...thStyle, textAlign: 'center', cursor: 'context-menu',
+                    ...thStyle, cursor: 'context-menu',
                     borderTop: `2px solid ${col.brew.color}`,
                     borderRight: '1px solid var(--border2)',
                     background: `linear-gradient(${tint}, ${tint}), ${col.brew.color}22`,
                     color: 'var(--text)', padding: '3px 6px',
+                    width: 120, minWidth: 120, maxWidth: 120,
+                    whiteSpace: 'normal' as const, wordBreak: 'normal' as const,
+                    overflowWrap: 'break-word' as const, textAlign: 'center',
                   }}
                 >
                   {formatBrewHeader(col.brew, recipeById)}
@@ -223,11 +226,14 @@ function SectionBlock({
                 key={`c-${i}`}
                 colSpan={2}
                 style={{
-                  ...thStyle, textAlign: 'center',
+                  ...thStyle,
                   borderTop: '2px solid var(--green)',
                   borderRight: '1px solid var(--border2)',
                   background: 'rgba(50,215,75,0.08)',
                   color: 'var(--green)', padding: '3px 6px',
+                  width: 120, minWidth: 120, maxWidth: 120,
+                  whiteSpace: 'normal' as const, wordBreak: 'normal' as const,
+                  overflowWrap: 'break-word' as const, textAlign: 'center',
                 }}
               >
                 📦 DELIVERY
@@ -269,7 +275,7 @@ function SectionBlock({
                 : row.stock > 0 && bal < row.stock * 0.15
                   ? '#f09420' : 'var(--text)';
               return [
-                <td key={`a-${j}`} style={{ ...tdStyle, textAlign: 'center' }}>
+                <td key={`a-${j}`} style={{ ...tdStyle, textAlign: 'center', width: 60, minWidth: 60, maxWidth: 60 }}>
                   {c.incoming > 0
                     ? <span style={{ color: 'var(--green)' }}>+{fmtKg(c.incoming)}</span>
                     : c.recorded
@@ -278,7 +284,7 @@ function SectionBlock({
                         ? <span style={{ color: '#c05050' }}>{fmtKg(c.amt)}</span>
                         : null}
                 </td>,
-                <td key={`b-${j}`} style={{ ...tdStyle, textAlign: 'center', color: balColor, borderRight: '1px solid var(--border2)' }}>
+                <td key={`b-${j}`} style={{ ...tdStyle, textAlign: 'center', color: balColor, borderRight: '1px solid var(--border2)', width: 60, minWidth: 60, maxWidth: 60 }}>
                   {fmtKg(bal)}
                 </td>,
               ];

@@ -22,6 +22,7 @@ import ForecastTable from './ForecastTable';
 import OrdersPanel from './OrdersPanel';
 import AddOrderModal from './AddOrderModal';
 import { exportOrderPlannerXlsx } from './orderXlsx';
+import { printForecastTable } from './forecastPrint';
 import type { LibSection } from './orderForecast';
 
 const SECTIONS: { id: LibSection | 'all'; label: string }[] = [
@@ -35,6 +36,7 @@ const SECTIONS: { id: LibSection | 'all'; label: string }[] = [
 export default function OrderPlannerPage() {
   const settings    = useStore(s => s.settings);
   const plannerBrews    = useStore(s => s.plannerBrews);
+  const orders          = useStore(s => s.orders);
   const inventoryStock  = useStore(s => s.inventoryStock);
   const ledgerData      = useStore(s => s.ledgerData);
   const ingredientsByRecipe = useStore(s => s.ingredientsByRecipe);
@@ -73,6 +75,24 @@ export default function OrderPlannerPage() {
     });
   };
 
+  const printForecast = () => {
+    const recipeById = new Map(recipes.map(r => [r.id, {
+      taxBatch: r.taxBatch ?? '', beerName: r.beerName ?? '', name: r.name ?? '',
+    }]));
+    printForecastTable({
+      section,
+      plannerBrews,
+      orders,
+      libBySection: { malts: maltLib, hops: hopLib, yeast: yeastLib, misc: miscLib },
+      inventoryStock,
+      ledgerData,
+      getIngredients: recipeId => ingredientsByRecipe[recipeId] ?? [],
+      recipeById,
+      dayLimit,
+      breweryName: settings.breweryName,
+    });
+  };
+
   return (
     <div style={pageStyle}>
       <div style={toolbarStyle}>
@@ -96,6 +116,7 @@ export default function OrderPlannerPage() {
           <option value={90}>3 months</option>
           <option value={0}>All</option>
         </select>
+        <button className="btn sm" onClick={printForecast}>🖨 PRINT</button>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
           <button
             className="btn sm"
