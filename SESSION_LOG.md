@@ -1,3 +1,48 @@
+## 03 July 2026 — Recipe UI, sync fixes, Order Planner overhaul, recurring orders
+
+### Commits this session
+`ad28b82` → `00fc396` → `539ccf4` → `3b1ba22` → `c00e337` → `cefca99` → `d05b7ac` → `10d6718` (plus several intermediate commits)
+
+### What got built
+
+**hopLib AA% in brew day sheet** — `brewDaySheetPrint.ts` now looks up hop alpha acid from `hopLib` by name and shows an AA% column in the boil additions table.
+
+**Recipe tab UI polish** — ingredient cards background set to `var(--panel)` (theme-aware white in light mode); stat strip gap widened from 8 to 28px; `rp-stat-val`/`rp-stat-label` font-weight dropped from 600 to 400; batch L unit sits flush with the input via flex wrapper.
+
+**boilTime/bhEff/whirlpoolTemp Supabase sync** — `rowToRecipe` was hardcoding 45/67.6/85 for all three fields; `recipeToRow` wasn't writing them at all. Migration `2026-07-03-recipe-process-fields.sql` adds `bh_eff numeric`, `boil_time integer`, `whirlpool_temp integer` to `recipes`. Both functions updated to round-trip correctly. Applied to Supabase before deploy.
+
+**Default bhEff/boilTime on equipment profile** — `EquipmentProfile` gains `defaultBhEff?` and `defaultBoilTime?`. Equipment Profiles panel shows new fields. New recipe creation and BeerXML import read from the active equipment profile. `defaultBhEff` removed from Settings → Advanced where it was briefly added.
+
+**BeerXML import uses system efficiency** — `<EFFICIENCY>` from XML is ignored. `bhEff` comes from equipment profile. OG/FG recalculated from the grain bill at the brewery's efficiency via `computeRecipeStats`.
+
+**Water chem salts on brew day print** — `isWaterChem` returns false for imported ingredients with explicit `use: 'mash'`/`'boil'` (by design for tax). Print sheet now uses `WATER_CHEM_KW` regex directly via a local `isPrintWaterChem` helper that ignores the use field, correctly routing them to mash/sparge salt lines and excluding them from the boil additions table.
+
+**Duplicate recipe bug** — `duplicateRecipe` action: `name: (source.name || '') + ' (copy)'` → `name: ''`. Tax identifier must be blank on duplicate.
+
+**Order Planner toolbar** — section nav collapsed to `<select>` dropdown. Import Library + Import Stock moved to Settings → Order Planner panel. Toolbar now: dropdown | date range | GOOGLE SHEETS | ORDERS | EXPORT XLSX | + NEW ORDER.
+
+**AddOrderModal redesign** — staging area: per-item checkboxes + bulk-assign bar (Select All, supplier, delivery, Apply). ORDER DETAILS: Supplier (fills blanks), Order Date, Notes. CREATE ORDER always visible. Add Manually: Type, Ingredient, Qty, Supplier only.
+
+**OrdersPanel redesign** — grouped by `orderDate`. Header: derived status badge (PENDING/IN PROGRESS/COMPLETE) + delivery range. Per-item checkboxes. Bulk action bar: "Mark as" dropdown + APPLY + deselect. Received = strikethrough. Auto-delete complete groups after 30 days.
+
+**Forecast table** — alternating column tints + `borderRight` dividers between brew column pairs. Date range filter (2w/1m/3m/All, default 1m). Print button via `forecastPrint.ts`. Fixed 120px column width with word-wrap (no mid-word breaks), `table-layout: fixed`.
+
+**Recurring orders** — `RecurringOrder` type. Store slice with `bl_recurring_orders` (syncs via SETTINGS_KEYS). `expandRecurringOrders` generates synthetic delivery columns within 90-day window. Settings → Order Planner: list + form (type, ingredient from library dropdown, qty, supplier, cadence, start/end date, notes). Auto-appears in forecast as delivery columns.
+
+### Key decisions
+- Water chem print fix uses `WATER_CHEM_KW` directly (not `isWaterChem`) — preserves the tax exclusion logic which correctly uses the use field, while allowing print to identify by name regardless of use value.
+- Equipment profile is the right home for default bhEff/boilTime, not global Settings — each brewhouse has its own efficiency and typical boil duration.
+- BeerXML `<EFFICIENCY>` ignored on import — the original brewer's efficiency is meaningless on your system; OG recalculated from grain bill at your efficiency.
+- Recurring orders are localStorage-only but synced via SETTINGS_KEYS (same as `bl_orders`) — no dedicated Supabase table needed.
+- `forecastPrint.ts` not wired for recurring orders yet — flagged as a gap.
+
+### Noted for future
+- OEM/Collab/Own Brand per-recipe field
+- Focus mode (full-screen toggle)
+- Recurring orders in print forecast
+
+---
+
 # SESSION_LOG entry — 2026-07-02 — Print dropdown, Brew Day Sheet overhaul, NTA match bug fix, NTA print selector, manuals
 
 ## Print ▾ dropdown
