@@ -1,6 +1,6 @@
 # BrewLab — START HERE
 
-**Last session: 03 July 2026 (Google Sheets ledger sync, NTA Submitter improvements)**
+**Last session: 03 July 2026 (Recipe planning fields, DH pH fix, Ferm & Packaging sheet)**
 **Read this first. Everything else is reference.**
 
 ---
@@ -56,67 +56,46 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 
 ---
 
-## What Got Done Last Session (03 July 2026)
+## What Got Done Last Session (03 July 2026 — afternoon)
 
-**Google Sheets OAuth sync built** — three separate Google Sheets workbooks (Malts / Hops / Yeast & Misc) now receive live ledger pushes. OAuth flow via Settings → Google Sheets (Client ID + three Sheet IDs + Connect button). Token stored locally in `bl_gsheets` — never syncs to Supabase. Auto-appends on every Record Usage confirm and every Add Entry. Edits append a CORRECTION row with delta. Deletes append a CORRECTION row with negative quantity. XLSX export unchanged and independent.
+**Recipe-level planning fields** — added `recipePitchTemp`, `recipeFermTemp`, `recipeO2Lpm`, `recipeO2Time`, `targetFinishPh`, `plannedCarb` to the Recipe type and Supabase (`migrations/2026-07-03-recipe-planning-fields.sql`). Pitch/ferm/O₂ fields appear in the yeast edit modal (with pitch profile selector to auto-fill O₂ fields). Target finish pH and planned carb appear alongside the Extra Additions box on the Recipe tab. All pre-fill their respective destination tabs (Brew Day, Ferm, Packaging) when empty, overrideable on each tab.
 
-**Tax Ledger XLSX — taxBatch in Beer/Note column** — OUT rows in the exported XLSX now show `taxBatch — beerName` format when a tax batch number exists, matching the format used by Record Usage entries.
+**DH pH calculation bug fix** — `calcDhPhPrediction` was comparing `currentPh > targetFinalPh` to decide whether to recommend acid, ignoring the predicted DH rise entirely. Fixed to use `currentPh + predictedRise > targetFinalPh` — so if the beer is at target now but the DH will push it above target, acid is correctly recommended. `predictedFinalPh` added to the return object.
 
-**NTA Submitter — Print Form gate** — Print Form button now only appears after a Check has been run and a matching submission found. Previously showed whenever the register was non-empty.
+**Ferm tab scroll fix** — bottom section (DH buttons + DH pH Prediction + Harvest + Carbonation) was clipping when DH pH Prediction card expanded. Added `overflowY: 'auto'` to the container.
 
-**NTA Submitter — Submitted Recipes Register sort** — register now sorts newest-first by default with a toggle to switch to oldest-first.
+**Recipe Explorer folder filtering** — Explorer now filters to the selected folder's contents by default. A toggle button shows the folder name (click to expand to All). Count shows "N of Total" when filtered. Resets to folder view when the selected folder changes.
 
-**NTA Submitter — Print All button** — new button in the register header prints the entire submission register without requiring checkbox selection.
+**Pitch profile selector in yeast popup** — Edit Yeast modal now has a Profile dropdown (when pitch profiles exist) that auto-fills O₂ LPM and O₂ Time into the recipe-level fields.
 
-**NTA Submitter — Print All uses compact vertical layout** — Print All now renders a compact one-row-per-recipe summary table (~50 per A4 page) instead of the CC1-5610-6 horizontal form. Print Form (selected recipes) keeps the existing detailed CC1-5610-6 layout. Functions split into `printNtaFormDetailed` (existing, unchanged) and `printNtaFormSummary` (new). Commit: `1714921`.
+**Ferm & Packaging Sheet** — new print artifact `src/components/recipe/fermPackagingSheetPrint.ts`. A4 portrait, same visual language as Brew Day Sheet. Sections: header (beer name, brew #, targets), fermentation log (15 blank rows + DH date chips), harvest (single row), packaging (two-column: dates/readings left, volume grid right), notes box. Accessible via Print ▾ → "Ferm & Packaging Sheet". Layout polish deferred.
 
-**NTA water chem exclusion fix** — phosphoric acid and other water chemistry ingredients were appearing in the NTA Submitter misc list when their `use` field was set to `'mash'` instead of `'water chemistry'`. Fixed in `ntaNormalise` by adding the `WATER_CHEM_KW` regex as an unconditional second check alongside `isWaterChem`, so water chem ingredients are excluded regardless of their `use` field. Commit: `8f82a95`.
-
-**Water chem regex — `lime` removed** — `WATER_CHEM_KW` in `src/lib/waterChem.ts` previously included `lime` as a keyword, risking false exclusion of fruit/food ingredients like "Kaffir Lime". Removed since calcium hydroxide (the intended match) is better caught by `calcium.*carbonate` and `chalk`. Commit: `8f82a95`.
+**Retroactive migration files** — created `migrations/2026-05-12-add-extra-additions.sql` and `migrations/2026-05-12-add-brewer.sql` to document columns already live in Supabase.
 
 ---
 
 ## What's Still Broken / Pending
 
-### Housekeeping (do soon)
-- Move project out of OneDrive. Current location: `/Users/ben/Library/CloudStorage/OneDrive-株式会社オープンエア/Apps/Brewing App`. OneDrive placeholder files break Git and Node builds; moving to `~/Developer/brewlab` is the real fix.
-- Retroactive migration files for `recipes.extra_additions` and `recipes.brewer`. Both columns are live in Supabase but no `.sql` file saved in `migrations/`.
-- Verify `2026-07-03-recipe-process-fields.sql` exists in the right place in `migrations/`.
-
 ### Print gaps
-- Brew Day Sheet layout — fit to one page, grid alignment pass pending.
-- Sheet 3 — Ferm + Packaging combined daily log. Design + impl pending.
-- Sheet 4 — Brew Day filled (auto-archive). Revisit after Ben uses blank sheet in production.
+- Ferm & Packaging Sheet layout polish — needs visual review and tweaks.
 - "Print Full Brew Packet" — after individual sheets stabilise.
 - Monthly Report A3 vs A4 — revisit once production data exists.
+
+### Smoke tests pending
+- Brewer field cross-device sync.
+- Extra additions field cross-device sync.
+- BeerXML round-trip (export → re-import → verify equivalent).
+- Backup round-trip (export → import → reconnect → verify).
+- Monthly Report print — NO PACKAGE DATE label, Happoshu highlight.
 
 ### Feature gaps
 - Recipe browser: OEM/Collab/Own Brand field (noted, deferred).
 - Focus mode: full-screen toggle hiding sidebar and action stack (noted, deferred).
 
-### Smoke tests pending
-- Numeric formatting (integer batch sizes, 1 dp ABV everywhere).
-- Toast/undo retrofit (recipe delete confirms, MashProfileModal Reset, WaterTab Clear, FermTab log row delete).
-- Beer Buffer Capacity input in Settings → Advanced + Ferm tab residual-acid response.
-- Equipment + Mash + Pitch profile locking.
-- Templates BJCP filter.
-- BeerXML round-trip (export → re-import → verify equivalent).
-- Backup round-trip (export → import → reconnect → verify).
-- Yeast harvest picker formatted pair display.
-- Prep Sheet print — all sections, target chips, fallbacks.
-- Brew Day Sheet print — ferm/pitch temps from brewDay fields, sparge tracker, mash grid.
-- Brewer field cross-device sync.
-- Extra additions field cross-device sync.
-- Monthly Report print — NO PACKAGE DATE label, Happoshu highlight.
-
-### Calibration
-- `BEER_BUFFER_PH_PER_MEQ_L` (default 0.04) — recalibrate once production data exists.
-
 ### Deferred
 - BJCP 2025 style guideline import.
-- Google Sheets sync (built — inventory ledger auto-push live). Monthly backup script (shell script + cron, post-launch).
+- Google Sheets monthly backup script (shell script + cron, post-launch).
 - Teiban / Gentei / One-off classification.
-- HTML/React label divergence.
 - Typography pass (after all tabs visible together).
 
 ### Future products
@@ -129,9 +108,8 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 
 ## Next Session Focus
 
-1. **Brew Day Sheet print polish** — fit to one page.
-2. **Smoke tests** — work through the pending list.
-3. **WORKFLOWS.md** — add Google Sheets setup workflow (connect, configure Sheet IDs, test sync).
+1. **Ferm & Packaging Sheet layout polish.**
+2. **Smoke tests** — brewer/extra additions cross-device sync, BeerXML round-trip, backup round-trip.
 
 ---
 
@@ -153,6 +131,7 @@ These are Ben's hard rules. Don't violate them.
 - **Always flag the caveats** when reporting back from Claude Code. Ben wants those surfaced every time.
 - **OneDrive connector is available.** Ben's project files are on OneDrive. Always check it when Ben says files are there — never say the connector doesn't exist. Source `.tsx`/`.ts` files are not readable via the connector (wrong MIME type) but folder structure and `.md`/`.json` files are. Ask Ben to upload source files directly.
 - **Update WORKFLOWS.md** when any user-facing workflow changes or a new one is added. This is part of the session wrap-up, not optional. CC updates `docs/WORKFLOWS.md` directly — it's a Markdown file in the repo.
+- **No guessing.** Read the actual source files before writing any prompt. Never assume field names, component structure, or wiring. If a file is needed, ask Ben to upload it.
 
 ---
 
