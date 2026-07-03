@@ -253,11 +253,12 @@ void INV_SECTION_LABELS;
 
 const pageStyle: React.CSSProperties = {
   display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden',
+  maxWidth: 1024, margin: '0 auto', width: '100%',
 };
 
 const toolbarStyle: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 6,
-  padding: '6px 12px', borderBottom: '1px solid var(--border)',
+  padding: '6px 16px', borderBottom: '1px solid var(--border)',
   background: 'var(--panel)', flexShrink: 0,
 };
 
