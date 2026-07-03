@@ -1,6 +1,6 @@
 # BrewLab — START HERE
 
-**Last session: 03 July 2026 (Recipe UI polish, sync fixes, Order Planner overhaul, recurring orders)**
+**Last session: 03 July 2026 (Inventory polish, Export Selected, Record Usage resolver, Overview reminders)**
 **Read this first. Everything else is reference.**
 
 ---
@@ -49,8 +49,8 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 | Planner | ✓ working | |
 | Notes | ✓ working | |
 | Libraries | ✓ working | |
-| Inventory / Order Planner | ✓ working | Substantially redesigned this session |
-| Settings (all sub-tabs) | ✓ working | Order Planner sub-tab added |
+| Inventory / Order Planner | ✓ working | |
+| Settings (all sub-tabs) | ✓ working | |
 | Templates | ✓ working | |
 | Tariff Reduction | ✓ working | |
 
@@ -58,35 +58,21 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 
 ## What Got Done Last Session (03 July 2026)
 
-**hopLib AA% wired** — brew day sheet print now shows AA% column for hop additions, looked up from hopLib by name.
+**Inventory toolbar condensed** — MALTS/HOPS/YEAST/ADJUNCTS/HARVESTED buttons collapsed into a single dropdown. TAX LEDGER is now a standalone toggle; the redundant CURRENT button removed.
 
-**Recipe tab UI polish** — ingredient cards area gets `var(--panel)` background (theme-aware); stat strip gap widened; `rp-stat-val` / `rp-stat-label` font weight reduced to 400; batch L unit fixed to sit flush with the input.
+**Inventory layout fixed** — page constrained to 1024px centered. INGREDIENT column capped at 260px with ellipsis truncation and full-name tooltip on hover.
 
-**boilTime / bhEff / whirlpoolTemp sync fixed** — these three fields were hardcoded in `rowToRecipe` and never written by `recipeToRow`. Migration `2026-07-03-recipe-process-fields.sql` adds `bh_eff`, `boil_time`, `whirlpool_temp` columns to `recipes`. Both functions now round-trip them correctly.
+**Recurring orders print gap fixed** — `forecastPrint.ts` now passes `recurringOrders` to `deriveTimeline`, so printed forecasts match the on-screen forecast.
 
-**Default bhEff and boilTime moved to equipment profile** — `EquipmentProfile` gains `defaultBhEff` and `defaultBoilTime` optional fields. New recipe creation and BeerXML import now read from the active equipment profile instead of hardcoded defaults. `defaultBhEff` removed from Settings → Advanced (where it was briefly added). Settings → Equipment Profiles panel updated with the new fields.
+**Export Selected** — File menu → Export Selected now exports all highlighted sidebar recipes as a zip file, one BeerXML per recipe. Compatible with BeerSmith and other apps. Uses jszip (statically imported, ~95KB bundle addition).
 
-**BeerXML import now uses your system efficiency** — on import, `bhEff` comes from the active equipment profile (not the XML's `<EFFICIENCY>`), and OG/FG are recalculated from the grain bill at your efficiency rather than imported directly.
+**File menu stay-open bug fixed** — menu items no longer re-open the dropdown after being clicked.
 
-**Water chem salts fixed on brew day print** — imported water chemistry ingredients (phosphoric acid, calcium chloride, gypsum etc.) with `use: 'mash'` or `use: 'boil'` were showing in the boil additions table. Fixed by using `WATER_CHEM_KW` name regex directly in the print sheet (bypassing the `isWaterChem` use-field rule which correctly rejects them for tax purposes but wrongly excluded them from the salt sections on print).
+**Record Usage — "not in library" resolver** — ingredients that don't match a library entry now show "⚠ not in library — click to fix". Clicking opens an inline panel to either search and link to an existing library entry, or add the ingredient as a new library entry. Link is saved permanently via `libId` on the recipe ingredient.
 
-**Duplicate recipe bug fixed** — `duplicateRecipe` store action now sets `name: ''` instead of appending `' (copy)'`. The Recipe Name (仕込記号) is the NTA tax identifier and must be blank on a duplicate.
+**Record Usage — checkbox reset bug fixed** — stable UIDs (`section_name` instead of counter) plus brewId-aware reseed logic. Resolving a "not in library" row no longer wipes the user's checkbox selections.
 
-**Order Planner toolbar redesign** — section filter (ALL/MALTS/HOPS/YEAST/ADJUNCTS) collapsed into a single dropdown. Import Library (XML) and Import Stock (CSV) moved to Settings → Order Planner. Toolbar now fits on one line: section dropdown | date range filter | GOOGLE SHEETS | ORDERS | EXPORT XLSX | + NEW ORDER.
-
-**Order creation redesign (AddOrderModal)** — MY ORDER staging area now has checkboxes per item + a bulk-assign bar (Select All, supplier dropdown, delivery date, Apply to Selected). ORDER DETAILS simplified to: Supplier (fills items with no supplier set), Order Date, Notes. Review & Create step removed — CREATE ORDER is always visible. Add Manually simplified to Type + Ingredient + Qty + Supplier only.
-
-**Orders panel redesign** — items grouped by `orderDate`. Group header shows derived status (PENDING / IN PROGRESS / COMPLETE) and delivery date range. Each item row has a checkbox. Bulk action bar at bottom: count + "Mark as" dropdown (pending/ordered/received) + APPLY + deselect. Received items show with strikethrough. Auto-deletes complete order groups 30 days after all items received.
-
-**Forecast table improvements:**
-- Alternating column backgrounds + vertical divider (`borderRight`) between each brew column pair
-- Date range filter dropdown in toolbar (2 weeks / 1 month / 3 months / All; default 1 month)
-- Print button — prints current forecast view via `forecastPrint.ts`
-- Fixed column width (120px per brew/delivery column, word-wrap at word boundaries, no mid-word breaks)
-
-**Recurring orders** — new `RecurringOrder` type and store slice (`bl_recurring_orders`, syncs via SETTINGS_KEYS). Define templates in Settings → Order Planner: ingredient (from library dropdown), type, qty, supplier, cadence (weekly/biweekly/monthly), start date, optional end date. `expandRecurringOrders` generates synthetic delivery columns in the forecast within a 90-day window. Shown as delivery columns in the forecast table automatically.
-
-**Per-recipe OEM/Collab field** — noted for future implementation. Per-recipe field with OEM/Collab/Own Brand classification + text field for who it's for. Sortable in recipe browser.
+**Overview recording reminders** — each reminder row now has a clickable brew name (opens the recipe) and a Dismiss button (permanently hides that reminder via `bl_dismissed_rec_reminders` in localStorage).
 
 ---
 
@@ -94,24 +80,21 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 
 ### Housekeeping (do soon)
 - Move project out of OneDrive. Current location: `/Users/ben/Library/CloudStorage/OneDrive-株式会社オープンエア/Apps/Brewing App`. OneDrive placeholder files break Git and Node builds; moving to `~/Developer/brewlab` is the real fix.
-- Retroactive migration files for `recipes.extra_additions` and `recipes.brewer`. Both columns are live in Supabase but no `.sql` file saved in `migrations/`. Match the `YYYY-MM-DD_description.sql` naming convention.
-- Migration `2026-07-03-recipe-process-fields.sql` naming: CC named it `06-recipe-process-fields.sql` then renamed to `2026-07-03-recipe-process-fields.sql` — verify the file exists in the right place.
+- Retroactive migration files for `recipes.extra_additions` and `recipes.brewer`. Both columns are live in Supabase but no `.sql` file saved in `migrations/`.
+- Verify `2026-07-03-recipe-process-fields.sql` exists in the right place in `migrations/`.
 
 ### Print gaps
-- Recurring orders don't show in printed forecast (`forecastPrint.ts` calls `deriveTimeline` without `recurringOrders`). Wire it to match the on-screen forecast.
-- Brew Day Sheet layout still needs polish — fit to one page, grid alignment pass pending.
+- Brew Day Sheet layout — fit to one page, grid alignment pass pending.
 - Sheet 3 — Ferm + Packaging combined daily log. Design + impl pending.
 - Sheet 4 — Brew Day filled (auto-archive). Revisit after Ben uses blank sheet in production.
 - "Print Full Brew Packet" — after individual sheets stabilise.
 - Monthly Report A3 vs A4 — revisit once production data exists.
 
 ### Feature gaps
-- File menu: Export Selected placeholder (needs design discussion).
 - NTA Submitter: dedicated Submitted Recipes view (sortable by date, Print All).
 - NTA Submitter: Print Form button should gate on submission status.
-- Recipe browser: OEM/Collab/Own Brand field (noted this session, deferred).
-- Focus mode: full-screen toggle hiding sidebar and action stack (noted this session, deferred).
-- Inventory screen too wide (layout bug, needs investigation).
+- Recipe browser: OEM/Collab/Own Brand field (noted, deferred).
+- Focus mode: full-screen toggle hiding sidebar and action stack (noted, deferred).
 
 ### Smoke tests pending
 - Numeric formatting (integer batch sizes, 1 dp ABV everywhere).
@@ -148,10 +131,9 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 
 ## Next Session Focus
 
-1. **User manual update** — add Order Planner workflow (recurring orders, creating orders, receiving deliveries).
-2. **Brew Day Sheet print polish** — fit to one page.
-3. **NTA Submitter improvements** — Submitted Recipes view + print gate.
-4. **Recurring orders print gap** — wire `forecastPrint.ts` to include recurring delivery columns.
+1. **Brew Day Sheet print polish** — fit to one page.
+2. **NTA Submitter improvements** — Submitted Recipes view + print gate.
+3. **Smoke tests** — work through the pending list above.
 
 ---
 
