@@ -160,7 +160,7 @@ export default function NtaPage() {
 
   const handlePrintForm = () => {
     const selectedEntries = [...printSelected].sort((a, b) => a - b).map(i => ntaRegister[i]);
-    printNtaForm(selectedEntries);
+    printNtaFormDetailed(selectedEntries);
     setPrintSelecting(false);
     setPrintSelected(new Set());
   };
@@ -312,7 +312,7 @@ export default function NtaPage() {
           printSelecting={printSelecting}
           printSelected={printSelected}
           onTogglePrint={handleTogglePrint}
-          onPrintAll={() => printNtaForm(ntaRegister)}
+          onPrintAll={() => printNtaFormSummary(ntaRegister)}
         />
       </div>
 
@@ -791,7 +791,7 @@ const modalPanel: React.CSSProperties = {
 // Print form (CC1-5610-6)
 // ═══════════════════════════════════════════════════════════════════
 
-function printNtaForm(register: NtaSubmission[]): void {
+function printNtaFormDetailed(register: NtaSubmission[]): void {
   const fmt1 = (v: unknown): string => {
     const n = parseFloat(String(v));
     return isFinite(n) ? n.toFixed(1) : '—';
@@ -875,6 +875,70 @@ function printNtaForm(register: NtaSubmission[]): void {
 
   printHtml(pageHtml, {
     title: 'NTA Declaration CC1-5610-6',
+    pageSize: 'A4',
+    landscape: false,
+    extraStyles: `
+      body { font-family: 'MS Mincho', serif; }
+    `,
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Print register summary (compact, ~50 recipes per A4 page)
+// ═══════════════════════════════════════════════════════════════════
+
+function printNtaFormSummary(register: NtaSubmission[]): void {
+  const fmt1 = (v: number): string => v > 0 ? v.toFixed(1) : '—';
+  const fmt3 = (v: number): string => v > 0 ? v.toFixed(3) : '—';
+
+  const headers = [
+    '#', 'Recipe Name', 'Tax #', 'Grains (kg)', 'Hops (kg)', 'Wheat (kg)',
+    'Oats (kg)', 'Other (kg)', 'Water (L)', 'Start Plato', 'Into FV (L)',
+    'Packaged (L)', 'Yeast (kg)', 'ABV', 'Misc',
+  ];
+
+  const rows = register.map((r, i) => [
+    String(i + 1),
+    r.code || '—',
+    r.date || '—',
+    fmt1(r.maltKg),
+    fmt3(r.hopsKg),
+    r.wheatKg > 0 ? fmt1(r.wheatKg) : '—',
+    r.oatsKg > 0 ? fmt1(r.oatsKg) : '—',
+    r.otherGrainKg > 0 ? fmt1(r.otherGrainKg) : '—',
+    fmt1(r.waterL),
+    fmt1(r.ogP),
+    fmt1(r.intoFV),
+    r.packaged > 0 ? Math.floor(r.packaged).toString() : '—',
+    fmt3(r.yeastKg),
+    r.abv > 0 ? r.abv.toFixed(1) + '%' : '—',
+    r.miscList.map(m => m.name).join(', ') || '—',
+  ]);
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const bodyHtml = `
+<div style="padding:12px;font-family:'MS Mincho',serif;font-size:8px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <span style="font-size:12px;font-weight:bold;">提出済みレシピ一覧 / Submitted Recipes Register</span>
+    <span style="font-size:9px;">${escapeHtml(today)}</span>
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:8px;">
+    <thead>
+      <tr>
+        ${headers.map(h => `<td style="border:1px solid #999;padding:2px 4px;background:#e8e8e8;font-weight:bold;white-space:nowrap;">${escapeHtml(h)}</td>`).join('')}
+      </tr>
+    </thead>
+    <tbody>
+      ${rows.map(row =>
+        `<tr>${row.map(v => `<td style="border:1px solid #999;padding:2px 4px;">${escapeHtml(v)}</td>`).join('')}</tr>`
+      ).join('')}
+    </tbody>
+  </table>
+</div>`;
+
+  printHtml(bodyHtml, {
+    title: 'NTA Submitted Recipes Register',
     pageSize: 'A4',
     landscape: false,
     extraStyles: `
