@@ -8,7 +8,7 @@ import {
 } from '../../lib/calculations';
 import { fmtNum } from '../../lib/format';
 import { isWaterChem } from '../../lib/waterChem';
-import type { Ingredient, IngredientType } from '../../types';
+import type { Ingredient, IngredientType, RecipeOrigin } from '../../types';
 import IngredientCard from './IngredientCard';
 import ActionStack from './ActionStack';
 import StyleSummaryPanel from './StyleSummaryPanel';
@@ -358,6 +358,41 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
             style={brewerInputStyle}
           />
         </div>
+
+        {/* Origin */}
+        <div style={brewerRowStyle}>
+          <label style={brewerLabelStyle}>Origin</label>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {(['own', 'collab', 'oem'] as RecipeOrigin[]).map(opt => (
+              <button
+                key={opt}
+                className="btn sm"
+                style={recipe.recipeOrigin === opt
+                  ? { color: 'var(--amber)', borderColor: 'var(--amber)' }
+                  : {}}
+                onClick={() => updateRecipe(recipeId, {
+                  recipeOrigin: recipe.recipeOrigin === opt ? null : opt,
+                })}
+              >
+                {opt === 'own' ? 'Own Brand' : opt === 'collab' ? 'Collab' : 'OEM'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {(recipe.recipeOrigin === 'collab' || recipe.recipeOrigin === 'oem') && (
+          <div style={brewerRowStyle}>
+            <label style={brewerLabelStyle}>
+              {recipe.recipeOrigin === 'oem' ? 'OEM For' : 'Collab With'}
+            </label>
+            <input
+              value={recipe.oemFor ?? ''}
+              onChange={e => updateRecipe(recipeId, { oemFor: e.target.value })}
+              placeholder="Partner name..."
+              style={brewerInputStyle}
+            />
+          </div>
+        )}
 
         <div className="content" style={contentStyle}>
           <div className="table-wrap" style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-start' }}>

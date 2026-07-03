@@ -9,7 +9,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import type { Recipe, RecipeBrewAgain, Ingredient, FermLogEntry } from '../types';
+import type { Recipe, RecipeBrewAgain, RecipeOrigin, Ingredient, FermLogEntry } from '../types';
 
 let client: SupabaseClient | null = null;
 let clientUrl = '';
@@ -884,6 +884,8 @@ function recipeToRow(r: Recipe) {
     // edits round-trip across devices.
     extra_additions: r.extraAdditions || '',
     brewer: r.brewer || '',
+    recipe_origin: r.recipeOrigin ?? null,
+    oem_for: r.oemFor || '',
     recipe_pitch_temp: r.recipePitchTemp ?? null,
     recipe_ferm_temp:  r.recipeFermTemp  ?? null,
     recipe_o2_lpm:     r.recipeO2Lpm     ?? null,
@@ -941,6 +943,8 @@ function rowToRecipe(row: Record<string, unknown>): Recipe {
     // (Postgres column has DEFAULT '' so this is belt-and-braces).
     extraAdditions: (row.extra_additions as string) ?? '',
     brewer: (row.brewer as string) ?? '',
+    recipeOrigin: (row.recipe_origin as RecipeOrigin) ?? null,
+    oemFor: (row.oem_for as string) ?? '',
     recipePitchTemp:  row.recipe_pitch_temp  != null ? Number(row.recipe_pitch_temp)  : undefined,
     recipeFermTemp:   row.recipe_ferm_temp   != null ? Number(row.recipe_ferm_temp)   : undefined,
     recipeO2Lpm:      row.recipe_o2_lpm      != null ? Number(row.recipe_o2_lpm)      : undefined,

@@ -766,6 +766,17 @@ function RecipeSidebarRow({
     >
       <div className="recipe-item-info">
         <div className="recipe-item-name">{nameLine}</div>
+        {recipe.recipeOrigin && recipe.recipeOrigin !== 'own' && (
+          <span style={{
+            fontSize: 8, fontFamily: 'var(--mono)', letterSpacing: 0.5,
+            color: 'var(--amber-dim)', textTransform: 'uppercase',
+            marginLeft: 4,
+          }}>
+            {recipe.recipeOrigin === 'oem'
+              ? `OEM${recipe.oemFor ? ` · ${recipe.oemFor}` : ''}`
+              : `Collab${recipe.oemFor ? ` · ${recipe.oemFor}` : ''}`}
+          </span>
+        )}
         {styleLine && <div className="recipe-item-meta">{styleLine}</div>}
         <div className="recipe-item-version">{versionLine}</div>
       </div>

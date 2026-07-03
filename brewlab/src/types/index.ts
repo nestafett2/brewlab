@@ -14,6 +14,7 @@ export type RecipeBrewAgain = 'yes' | 'no' | 'maybe' | null;
 export type IngredientType = 'grain' | 'hop' | 'yeast' | 'misc' | 'water';
 export type HopUse = 'mash' | 'boil' | 'whirlpool' | 'dry hop' | 'first wort' | 'flameout';
 export type IbuMethod = 'tinseth' | 'rager' | 'daniels';
+export type RecipeOrigin = 'own' | 'collab' | 'oem' | null;
 
 export interface Recipe {
   id: string;                  // e.g. 'r1'
@@ -76,6 +77,14 @@ export interface Recipe {
    * Supabase via the `recipes.brewer` column (added 2026-05-12).
    */
   brewer: string;
+  /**
+   * Recipe origin classification — Own Brand, Collab, or OEM.
+   * `null` means unclassified (most recipes). `oemFor` holds the
+   * partner name when origin is 'collab' or 'oem'.
+   */
+  recipeOrigin?: RecipeOrigin;
+  /** Partner brewery/brand name for OEM and Collab recipes. */
+  oemFor?: string;
   /** Recipe-level pitch temp default (°C). Pre-fills bd.pitchTemp on Brew Day tab when that field is empty. Overrideable on Brew Day. */
   recipePitchTemp?: number;
   /** Recipe-level ferm temp default (°C). Pre-fills bd.fermTemp on Brew Day tab when that field is empty. Overrideable on Brew Day. */
