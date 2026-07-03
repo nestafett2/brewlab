@@ -214,7 +214,7 @@ export default function NtaPage() {
               <button className="btn sm" onClick={handleCancelPrintSelect}>Cancel</button>
             </>
           ) : (
-            ntaRegister.length > 0 && (
+            isChecked && matches.length > 0 && (
               <button className="btn" onClick={() => setPrintSelecting(true)}>🖨 Print Form</button>
             )
           )}
@@ -312,6 +312,7 @@ export default function NtaPage() {
           printSelecting={printSelecting}
           printSelected={printSelected}
           onTogglePrint={handleTogglePrint}
+          onPrintAll={() => printNtaForm(ntaRegister)}
         />
       </div>
 
@@ -339,7 +340,7 @@ export default function NtaPage() {
 // ═══════════════════════════════════════════════════════════════════
 
 function SubmittedRegister({
-  rows, onDelete, onShowDetail, printSelecting, printSelected, onTogglePrint,
+  rows, onDelete, onShowDetail, printSelecting, printSelected, onTogglePrint, onPrintAll,
 }: {
   rows: NtaSubmission[];
   onDelete: (idx: number) => void;
@@ -347,7 +348,16 @@ function SubmittedRegister({
   printSelecting: boolean;
   printSelected: Set<number>;
   onTogglePrint: (idx: number) => void;
+  onPrintAll: () => void;
 }) {
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  const sortedRows = [...rows]
+    .map((r, i) => ({ r, origIdx: i }))
+    .sort((a, b) => sortOrder === 'desc'
+      ? b.r.date.localeCompare(a.r.date)
+      : a.r.date.localeCompare(b.r.date));
+
   return (
     <div style={{
       background: 'var(--panel2)', border: '1px solid var(--border2)',
@@ -366,6 +376,15 @@ function SubmittedRegister({
         <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>
           — all amounts per 1000L batch
         </span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button
+            className="btn sm"
+            onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')}
+          >
+            {sortOrder === 'desc' ? '↑ Oldest first' : '↓ Newest first'}
+          </button>
+          <button className="btn sm" onClick={onPrintAll}>🖨 Print All</button>
+        </div>
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{
@@ -390,9 +409,9 @@ function SubmittedRegister({
                 padding: 20, textAlign: 'center', color: 'var(--text-muted)',
                 fontSize: 9, letterSpacing: 1,
               }}>NO SUBMISSIONS YET</td></tr>
-            ) : rows.map((r, i) => (
-              <tr key={i}
-                  onDoubleClick={() => onShowDetail(i)}
+            ) : sortedRows.map(({ r, origIdx }, i) => (
+              <tr key={origIdx}
+                  onDoubleClick={() => onShowDetail(origIdx)}
                   style={{
                     borderBottom: '1px solid var(--border)', cursor: 'pointer',
                     background: i % 2 ? 'rgba(255,255,255,0.01)' : undefined,
@@ -402,8 +421,8 @@ function SubmittedRegister({
                   <td style={{ padding: '5px 10px' }}>
                     <input
                       type="checkbox"
-                      checked={printSelected.has(i)}
-                      onChange={() => onTogglePrint(i)}
+                      checked={printSelected.has(origIdx)}
+                      onChange={() => onTogglePrint(origIdx)}
                     />
                   </td>
                 )}
@@ -425,7 +444,7 @@ function SubmittedRegister({
                   maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}>{r.miscList.map(m => m.name).join(', ') || '—'}</td>
                 <td style={{ padding: '5px 8px', whiteSpace: 'nowrap' }}>
-                  <button className="btn sm danger" onClick={() => onDelete(i)}>✕</button>
+                  <button className="btn sm danger" onClick={() => onDelete(origIdx)}>✕</button>
                 </td>
               </tr>
             ))}
