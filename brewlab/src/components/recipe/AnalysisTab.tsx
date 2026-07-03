@@ -22,7 +22,7 @@ import { fmtNum } from '../../lib/format';
 import {
   platoToSg, calcActualEfficiency,
 } from '../../lib/calculations';
-import { printHtml } from '../../lib/print';
+import { printAnalysisSheet } from './analysisSheetPrint';
 import type {
   Ingredient, BrewDayData, FermLogEntry, FermMeta, ColdSideData,
   TaxRecord,
@@ -241,25 +241,26 @@ export default function AnalysisTab({ recipeId }: Props) {
 
   // ── Print handler ────────────────────────────────────────────────────
   const handlePrint = useCallback(() => {
-    if (!view) {
+    if (!view || !recipe) {
       pushToast({ message: 'No analysis data to print.', variant: 'info' });
       return;
     }
-    const node = document.getElementById('analysis-printable');
-    if (!node) {
-      pushToast({ message: 'No analysis data to print.', variant: 'info' });
-      return;
-    }
-    printHtml(node.outerHTML, {
-      title: 'Brew Analysis — ' + view.beerName,
-      pageSize: 'A4',
-      landscape: false,
-      extraStyles: `
-        body { font-size: 10px; }
-        h1, h2 { font-size: 14px; }
-      `,
+    const ingredients = lsGet<Ingredient[]>(`bl_recipe_ings_${recipeId}`, []);
+    const brewDay      = lsGet<BrewDayData>(`bl_bd_${recipeId}`, {});
+    const fermLogData  = lsGet<FermLogEntry[]>(`bl_ferm_log_${recipeId}`, []);
+    const fermMeta     = lsGet<FermMeta>(`bl_ferm_meta_${recipeId}`, {});
+    const taxRecord    = getTaxRecord(recipeId) as TaxRecord;
+    const coldSide     = getColdSide(recipeId);
+    printAnalysisSheet({
+      recipe, ingredients, taxRecord, coldSide, brewDay,
+      fermLog: fermLogData, fermMeta, settings, maltLib, hopLib, yeastLib, miscLib,
+      brewerName: settings.breweryName || '',
+      measBhEff: view.measBhEff,
+      attenReal: view.attenReal,
+      attenPlan: view.attenPlan,
     });
-  }, [view, pushToast]);
+  }, [view, recipe, recipeId, settings, maltLib, hopLib, yeastLib, miscLib,
+      getTaxRecord, getColdSide, pushToast]);
 
   if (!recipe) return <div className="empty">Select a recipe.</div>;
   if (!view) return null;
@@ -284,10 +285,7 @@ export default function AnalysisTab({ recipeId }: Props) {
       </div>
 
       <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
-        <div id="analysis-printable" style={{
-          maxWidth: 800, margin: '0 auto',
-          fontFamily: 'var(--sans)', fontSize: 11, color: 'var(--text)',
-        }}>
+        <>
           {/* ── Title block ── */}
           <div style={{
             display: 'grid', gridTemplateColumns: '1fr auto', gap: 12, marginBottom: 16,
@@ -504,7 +502,7 @@ export default function AnalysisTab({ recipeId }: Props) {
               />
             </div>
           </SectionPanel>
-        </div>
+        </>
       </div>
     </div>
   );
