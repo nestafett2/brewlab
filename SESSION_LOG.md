@@ -1,3 +1,22 @@
+## 03 July 2026 (evening) — NTA Print Summary, Water Chem Fix
+
+**NTA Submitter — Print All vertical summary**
+Print All now uses a new compact layout (`printNtaFormSummary`) — one row per recipe, columns: #, Recipe Name, Tax #, Grains, Hops, Wheat, Oats, Other, Water, Start Plato, Into FV, Packaged, Yeast, ABV, Misc. Target ~50 recipes per A4 portrait page. Print Form (selected recipes) unchanged — still uses `printNtaFormDetailed` (CC1-5610-6 horizontal, 4 per page). File: `src/components/tax/NtaPage.tsx`. Commit: `1714921`.
+
+**NTA water chem exclusion fix**
+Phosphoric acid (and other water chem ingredients) were passing through into `ntaNormalise`'s misc list when `use` was set to `'mash'` instead of `'water chemistry'`. The `isWaterChem` function's explicit-use-wins rule blocked the regex fallback. Fix: added `WATER_CHEM_KW.test(m.name || '')` as an unconditional OR in `ntaNormalise`'s misc loop, so the name regex always applies in the NTA path regardless of `use` field. This intentionally diverges from `isWaterChem`'s documented precedence for this one call site. File: `src/lib/nta.ts`. Commit: `8f82a95`.
+
+**Water chem regex — lime removed**
+`lime` removed from `WATER_CHEM_KW` in `src/lib/waterChem.ts` to prevent false exclusion of fruit/food ingredients (e.g. "Kaffir Lime"). Calcium hydroxide is still caught by `chalk` and `calcium.*carbonate`. Commit: `8f82a95`.
+
+**Google Cloud credentials (for reference)**
+OAuth Client ID: `1069631621980-lr80vo546tjbskkk676cbdt2f2hbbgg7.apps.googleusercontent.com`
+Authorised JavaScript origins: `https://brewlab-red.vercel.app` and `https://brewlab-red.vercel.app/`
+Account: brewing@nomodachi.com
+Project: BrewLab
+
+---
+
 ## 03 July 2026 — Google Sheets Sync + NTA Submitter Polish
 
 **Google Sheets OAuth sync**

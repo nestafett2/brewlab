@@ -68,6 +68,12 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 
 **NTA Submitter — Print All button** — new button in the register header prints the entire submission register without requiring checkbox selection.
 
+**NTA Submitter — Print All uses compact vertical layout** — Print All now renders a compact one-row-per-recipe summary table (~50 per A4 page) instead of the CC1-5610-6 horizontal form. Print Form (selected recipes) keeps the existing detailed CC1-5610-6 layout. Functions split into `printNtaFormDetailed` (existing, unchanged) and `printNtaFormSummary` (new). Commit: `1714921`.
+
+**NTA water chem exclusion fix** — phosphoric acid and other water chemistry ingredients were appearing in the NTA Submitter misc list when their `use` field was set to `'mash'` instead of `'water chemistry'`. Fixed in `ntaNormalise` by adding the `WATER_CHEM_KW` regex as an unconditional second check alongside `isWaterChem`, so water chem ingredients are excluded regardless of their `use` field. Commit: `8f82a95`.
+
+**Water chem regex — `lime` removed** — `WATER_CHEM_KW` in `src/lib/waterChem.ts` previously included `lime` as a keyword, risking false exclusion of fruit/food ingredients like "Kaffir Lime". Removed since calcium hydroxide (the intended match) is better caught by `calcium.*carbonate` and `chalk`. Commit: `8f82a95`.
+
 ---
 
 ## What's Still Broken / Pending
@@ -175,6 +181,7 @@ These are Ben's hard rules. Don't violate them.
 | Supabase | brewing@nomodachi.com | Project ID: `inxipvdturxgeapsznxb` |
 | GitHub | nestafett2 (personal account) | Repo: `github.com/nestafett2/brewlab`. |
 | Vercel | Ben's personal account | Deployed at `https://brewlab-red.vercel.app`, auto-deploys on push to `main`. |
+| Google Cloud | brewing@nomodachi.com | OAuth Client ID: `1069631621980-lr80vo546tjbskkk676cbdt2f2hbbgg7.apps.googleusercontent.com`. Authorised origins: `https://brewlab-red.vercel.app` and `https://brewlab-red.vercel.app/`. Project: BrewLab. |
 | Netlify | — | Abandoned. Hit free-tier bandwidth limit. Do not use. |
 
 **Supabase URL:** `https://inxipvdturxgeapsznxb.supabase.co`
