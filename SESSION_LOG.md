@@ -1,3 +1,34 @@
+## 03 July 2026 (afternoon) — Recipe planning fields, DH pH fix, Explorer filtering, Ferm & Packaging sheet
+
+### Recipe-level planning fields
+Added six new optional fields to `Recipe` type and Supabase (`migrations/2026-07-03-recipe-planning-fields.sql`): `recipePitchTemp`, `recipeFermTemp`, `recipeO2Lpm`, `recipeO2Time`, `targetFinishPh`, `plannedCarb`. Full round-trip via `rowToRecipe`/`recipeToRow`. UI: pitch/ferm/O₂ fields in the yeast edit modal; target finish pH and planned carb alongside the Extra Additions box on the Recipe tab. Pre-fill: Brew Day tab pre-fills from recipe defaults on recipeId change (useEffect pattern); Ferm and Packaging tabs pre-fill via lazy useState initialiser (key={recipeId} remount pattern). All pre-fills only fire when the destination field is empty. Files: `src/types/index.ts`, `src/lib/supabase.ts`, `src/components/recipe/EditIngredientModal.tsx`, `src/components/recipe/RecipeTab.tsx`, `src/components/recipe/BrewDayTab.tsx`, `src/components/recipe/FermTab.tsx`, `src/components/recipe/PackagingTab.tsx`, `migrations/2026-07-03-recipe-planning-fields.sql`.
+
+### Pitch profile selector in yeast popup
+`EditIngredientModal.tsx` yeast section now has a Profile dropdown (rendered when `pitchProfiles.length > 0`) that auto-fills `recipeO2Lpm` and `recipeO2Time` state fields. Note: `PitchProfile` type has no pitch temp or ferm temp fields — those remain manual inputs.
+
+### DH pH calculation bug fix
+`calcDhPhPrediction` in `src/lib/calculations.ts` was comparing `currentPh > targetFinalPh` to decide whether to recommend acid, ignoring the predicted DH rise. Fixed: residual is now computed from `predictedFinalPh = currentPh + predictedRise` vs target. `predictedFinalPh` added to return type and object. Commit: part of `bd94391` batch.
+
+### Ferm tab scroll fix
+Bottom section div in `FermTab.tsx` (DH buttons + DH pH Prediction + Harvest + Carbonation) had no `overflowY` — content was clipped when DH pH Prediction card expanded. Added `overflowY: 'auto'`.
+
+### Recipe Explorer folder filtering
+`RecipeExplorerPanel.tsx` now accepts `selectedFolderId` prop from `Desktop.tsx` (derived from `preview` state). When a folder is selected, `displayedRecipes` filters to that folder and all descendants via `getDescendantFolderIds`. Toggle button shows folder name / "All". Count shows "N of Total recipes" when filtered. `showAll` resets when `selectedFolderId` changes.
+
+### Ferm & Packaging Sheet
+New print artifact `src/components/recipe/fermPackagingSheetPrint.ts`. A4 portrait, same CSS/visual language as Brew Day Sheet. Sections: header (beer name, brew #, date, brewer, tank, OG/FG/ABV chips), fermentation log (15-row blank handwriting table + DH date chips), harvest (single-row table), packaging (two-column: dates/readings/carbonation left, volume grid right), notes box. Handler `handlePrintFermPackagingSheet` added to `Desktop.tsx`. "Ferm & Packaging Sheet" added to Print ▾ dropdown. Layout polish deferred.
+
+### Retroactive migration files
+Created `migrations/2026-05-12-add-extra-additions.sql` and `migrations/2026-05-12-add-brewer.sql` documenting columns already live in Supabase since May 2026.
+
+### Key decisions
+- Recipe-level planning fields use `optional` (undefined) rather than null defaults — consistent with other optional Recipe fields like `brewNumber`.
+- Ferm/Packaging pre-fill uses the lazy useState initialiser rather than a useEffect, because both tabs use `key={recipeId}` for remounting — confirmed by reading source files before writing.
+- DH pH fix uses `predictedFinalPh` as the baseline for acid calculation, not raw `currentPh` — the brewer's current measurement plus the expected rise is the correct input to the acid recommendation.
+- Recipe Explorer filtering is descendant-aware — selecting a parent folder shows recipes in all subfolders too.
+
+---
+
 ## 03 July 2026 (evening) — NTA Print Summary, Water Chem Fix
 
 **NTA Submitter — Print All vertical summary**
