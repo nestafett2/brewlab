@@ -21,7 +21,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../../store';
 import { exportWorkbook, type SheetSpec, type CellValue } from '../../lib/excel';
-import { gsheetsPushLedger } from '../../lib/gsheets';
+import { gsheetsPushLedger, gsheetsGetToken } from '../../lib/gsheets';
 import type { InvSection } from './inventoryShared';
 
 interface Props {
@@ -59,7 +59,7 @@ export default function LedgerExportModal({ defaultSection, onClose }: Props) {
     malts: maltLib, hops: hopLib, yeast: yeastLib, misc: miscLib,
   };
 
-  const run = async () => {
+  const buildSheets = (): SheetSpec[] => {
     const sections: InvSection[] = section === ALL_OPTION
       ? ['malts', 'hops', 'yeast', 'misc']
       : [section];
@@ -123,6 +123,11 @@ export default function LedgerExportModal({ defaultSection, onClose }: Props) {
       }
     }
 
+    return sheets;
+  };
+
+  const run = () => {
+    const sheets = buildSheets();
     if (!sheets.length) {
       pushToast({ message: 'No ledger entries in that date range.', variant: 'info' });
       return;
@@ -130,14 +135,25 @@ export default function LedgerExportModal({ defaultSection, onClose }: Props) {
     const brand = (settings.breweryName?.trim() || 'BrewLab').replace(/[\s/\\?*[\]:]/g, '_');
     const suffix = from || to ? `_${from || 'start'}_to_${to || 'end'}` : '_all';
     exportWorkbook(`${brand}_TaxLedger${suffix}.xlsx`, sheets);
+    onClose();
+  };
 
+  const syncToSheets = async () => {
+    if (section === ALL_OPTION) {
+      pushToast({ message: 'Select a specific section to sync to Google Sheets.', variant: 'error' });
+      return;
+    }
+    const sheets = buildSheets();
+    if (!sheets.length) {
+      pushToast({ message: 'No ledger entries in that date range.', variant: 'info' });
+      return;
+    }
     const gsheetsResult = await gsheetsPushLedger(sheets, section);
     if (gsheetsResult === 'ok') {
       pushToast({ message: 'Synced to Google Sheets', variant: 'success' });
     } else if (gsheetsResult != null) {
       pushToast({ message: gsheetsResult, variant: 'error' });
     }
-
     onClose();
   };
 
@@ -169,6 +185,9 @@ export default function LedgerExportModal({ defaultSection, onClose }: Props) {
 
         <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
           <button className="btn primary" style={{ flex: 1 }} onClick={run}>EXPORT</button>
+          {gsheetsGetToken() !== null && (
+            <button className="btn" style={{ flex: 1 }} onClick={syncToSheets}>SYNC TO SHEETS</button>
+          )}
           <button className="btn" onClick={onClose}>CANCEL</button>
         </div>
       </div>
