@@ -1,6 +1,6 @@
 /**
  * Recipe Explorer right pane — appears when sidebarTab === 'explorer'.
- * Five mutually-exclusive view modes (chips at the top):
+ * Six mutually-exclusive view modes (chips at the top):
  *   • By Date    — flat, brewDate descending; "No brew date" subgroup last.
  *   • By Folder  — folder tree mirroring the sidebar (shared folder.open
  *                  state); right-click blank area → "+ New Folder".
@@ -8,6 +8,8 @@
  *                  recipes sorted alphabetically by beerName within group.
  *   • By Name    — flat, alphabetical case-insensitive on beerName||name.
  *   • By Tax #   — flat by taxBatch ascending; "No tax batch" subgroup last.
+ *   • By Origin  — grouped Own Brand / Collab / OEM (own or unset first);
+ *                  recipes sorted alphabetically by beerName within group.
  *
  * Mode persistence: localStorage key `bl_explorer_mode`. Survives tab
  * switches and page reloads. Default 'date'.
@@ -30,7 +32,7 @@ import type { Folder, Recipe } from '../../types';
 import { formatRecipeStyleLine } from '../../lib/utils';
 import RecipePreview from './RecipePreview';
 
-export type ExplorerMode = 'date' | 'folder' | 'style' | 'name' | 'tax';
+export type ExplorerMode = 'date' | 'folder' | 'style' | 'name' | 'tax' | 'origin';
 
 const MODE_LABELS: Record<ExplorerMode, string> = {
   date:   'By Date',
@@ -38,8 +40,9 @@ const MODE_LABELS: Record<ExplorerMode, string> = {
   style:  'By Style',
   name:   'By Name',
   tax:    'By Tax #',
+  origin: 'By Origin',
 };
-const MODE_ORDER: ExplorerMode[] = ['date', 'folder', 'style', 'name', 'tax'];
+const MODE_ORDER: ExplorerMode[] = ['date', 'folder', 'style', 'name', 'tax', 'origin'];
 
 const LS_KEY = 'bl_explorer_mode';
 
@@ -158,6 +161,7 @@ export default function RecipeExplorerPanel({
           {mode === 'style'  && <ByStyle   recipes={displayedRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
           {mode === 'name'   && <ByName    recipes={displayedRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
           {mode === 'tax'    && <ByTax     recipes={displayedRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
+          {mode === 'origin' && <ByOrigin  recipes={displayedRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
         </div>
         {previewRecipe && (
           <div style={previewPaneStyle}>
@@ -272,6 +276,51 @@ function ByTax({ recipes, onPreview, onOpen, previewId }: ModeProps) {
           ))}
         </>
       )}
+    </div>
+  );
+}
+
+// ─── Mode: By Origin ─────────────────────────────────────────────────
+//
+// Buckets recipes by `recipeOrigin` in a fixed order: Own Brand (own or
+// unset), Collab, OEM. Each group sorts alphabetically by beerName||name.
+// A group's subheader only renders when it holds at least one recipe.
+
+function ByOrigin({ recipes, onPreview, onOpen, previewId }: ModeProps) {
+  const { own, collab, oem } = useMemo(() => {
+    const own:    Recipe[] = [];
+    const collab: Recipe[] = [];
+    const oem:    Recipe[] = [];
+    for (const r of recipes) {
+      if (r.recipeOrigin === 'collab') collab.push(r);
+      else if (r.recipeOrigin === 'oem') oem.push(r);
+      else own.push(r); // 'own' or null/undefined
+    }
+    const byName = (a: Recipe, b: Recipe) =>
+      (a.beerName || a.name || '').toLowerCase()
+        .localeCompare((b.beerName || b.name || '').toLowerCase());
+    own.sort(byName);
+    collab.sort(byName);
+    oem.sort(byName);
+    return { own, collab, oem };
+  }, [recipes]);
+
+  if (recipes.length === 0) return <Empty />;
+  const renderGroup = (label: string, group: Recipe[]) =>
+    group.length > 0 && (
+      <>
+        <SubHeader label={label} count={group.length} />
+        {group.map(r => (
+          <ExplorerRow key={r.id} recipe={r} selected={r.id === previewId}
+            onPreview={() => onPreview(r.id)} onOpen={() => onOpen(r.id)} />
+        ))}
+      </>
+    );
+  return (
+    <div style={listStyle}>
+      {renderGroup('Own Brand', own)}
+      {renderGroup('Collab', collab)}
+      {renderGroup('OEM', oem)}
     </div>
   );
 }
