@@ -291,14 +291,13 @@ export default function LibrariesPage() {
     const targetIds = ids ?? [...selectedIds];
     const count = targetIds.length;
     if (!count) return;
-    if (!window.confirm(`Delete ${count} entries? This cannot be undone.`)) return;
     const idSet = new Set(targetIds);
     const beforeData = sectionData;
     const beforeSelected = new Set(selectedIds);
     setSectionData(sectionData.filter(e => !idSet.has(String(e.id))));
     setSelectedIds(new Set());
     pushToast({
-      message: `Deleted ${count} entries`,
+      message: `Deleted ${count} ${count === 1 ? 'entry' : 'entries'}`,
       undo: () => {
         setSectionData(beforeData);
         setSelectedIds(beforeSelected);
