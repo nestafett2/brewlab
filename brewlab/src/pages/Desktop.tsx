@@ -122,6 +122,7 @@ export default function Desktop() {
   const getColdSide              = useStore(s => s.getColdSide);
   const [printMenuOpen, setPrintMenuOpen] = useState(false);
   const printMenuRef = useRef<HTMLDivElement>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Close the Print dropdown on any click outside it, and on Escape.
   // Deferred mousedown listener so the click that opens the menu doesn't
@@ -1353,13 +1354,22 @@ export default function Desktop() {
                     sub-tab, since there's no sidebar sibling there. */}
                 {isRecipeOpen && activeRecipeId && (
                   <div className="page page-row">
-                    {recipeSubTab === 'ingredients' && renderRecipeBrowserSidebar()}
+                    {recipeSubTab === 'ingredients' && !sidebarCollapsed && renderRecipeBrowserSidebar()}
                     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
                       {/* ═══ Recipe Meta Bar ═══
                            Layout: title left, metadata pills + beer glass
                            right (marginLeft auto). */}
                       {selectedRecipeForMeta && (
                         <div className="recipe-meta-bar">
+                          {recipeSubTab === 'ingredients' && (
+                            <button
+                              onClick={() => setSidebarCollapsed(c => !c)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 16, padding: '0 8px 0 0', flexShrink: 0 }}
+                              title={sidebarCollapsed ? 'Show recipe list' : 'Hide recipe list'}
+                            >
+                              {sidebarCollapsed ? '▶' : '◀'}
+                            </button>
+                          )}
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0, minWidth: 120 }}>
                             <input
                               type="text"
