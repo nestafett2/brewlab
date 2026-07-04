@@ -2,11 +2,13 @@
  * Blank tasting scorecard — A4 portrait, pure black-on-white, designed to
  * be printed and filled in by hand. Mirrors the on-screen tasting panel
  * (hop & fruit / malt & fermentation descriptors, structured notes, brew
- * again + rating) but as circle-a-score / write-on-the-lines paper form.
+ * again + rating) but as a circle-a-score / write-on-the-lines paper form.
  *
- * Each descriptor is scored on a fixed-column table: a header row of score
- * labels (0 … 5) sits above rows of open circles, one ○ per 20px column, so
- * every circle lines up directly under its number.
+ * Scoring layout: the two descriptor sections sit side by side in the top
+ * half of the page. Each descriptor is a single compact row —
+ * "Descriptor   0 ○ 1 ○ 2 ○ 3 ○ 4 ○ 5" — where the printed whole numbers
+ * are the integer scores and each ○ between them is the half-point to
+ * circle. The bottom half is left for the written tasting notes.
  */
 
 import { printHtml, escapeHtml } from '../../lib/print';
@@ -21,30 +23,17 @@ const MALT_DESCRIPTORS = [
   'Sour/Acidic', 'Funky/Yeasty', 'Full Body', 'Clean/Dry',
 ];
 
-const SCORE_LABELS = ['0', '½', '1', '1½', '2', '2½', '3', '3½', '4', '4½', '5'];
+// Whole numbers in regular text; the ○ between each pair is the half-point.
+const SCALE = '0 ○ 1 ○ 2 ○ 3 ○ 4 ○ 5';
 
 const NOTE_BOXES = ['Appearance', 'Aroma', 'Flavor', 'Mouthfeel', 'Overall Impression'];
 
-/**
- * Fixed-layout scoring table for one section. Column 1 is the descriptor
- * name (fills remaining width); the 11 score columns are each 20px so the
- * header labels and the ○ circles below share the same grid.
- */
-function scoreTable(descriptors: string[]): string {
-  const colGroup =
-    '<colgroup><col class="name-col-c" />' +
-    SCORE_LABELS.map(() => '<col class="sc-col" />').join('') +
-    '</colgroup>';
-  const headerRow =
-    '<tr><td class="name-col"></td>' +
-    SCORE_LABELS.map(l => `<td class="sc-h">${l}</td>`).join('') +
-    '</tr>';
-  const bodyRows = descriptors.map(d =>
-    `<tr><td class="name-col">${escapeHtml(d)}</td>` +
-    SCORE_LABELS.map(() => '<td class="sc-c">○</td>').join('') +
-    '</tr>'
+/** One descriptor section (header + compact scored rows) for a column. */
+function sectionColumn(title: string, descriptors: string[]): string {
+  const rows = descriptors.map(d =>
+    `<tr><td class="dn">${escapeHtml(d)}</td><td class="sc">${SCALE}</td></tr>`
   ).join('');
-  return `<table class="score-table">${colGroup}<tbody>${headerRow}${bodyRows}</tbody></table>`;
+  return `<div class="sec-h">${escapeHtml(title)}</div><table class="desc-tbl"><tbody>${rows}</tbody></table>`;
 }
 
 function noteBox(label: string): string {
@@ -68,11 +57,10 @@ export function printTastingSheet(beerName: string, brewDate: string, breweryNam
     <span>Taster: <span class="fill"></span></span>
   </div>
 
-  <div class="section-h">Hop &amp; Fruit Character</div>
-  ${scoreTable(HOP_DESCRIPTORS)}
-
-  <div class="section-h">Malt &amp; Fermentation Character</div>
-  ${scoreTable(MALT_DESCRIPTORS)}
+  <table class="two-col"><tbody><tr>
+    <td class="col">${sectionColumn('Hop & Fruit Character', HOP_DESCRIPTORS)}</td>
+    <td class="col">${sectionColumn('Malt & Fermentation Character', MALT_DESCRIPTORS)}</td>
+  </tr></tbody></table>
 
   <div class="section-h">Tasting Notes</div>
   <div class="note-grid">
@@ -96,13 +84,17 @@ export function printTastingSheet(beerName: string, brewDate: string, breweryNam
     .fields .fill { display: inline-block; min-width: 130px; border-bottom: 1px solid #000; padding: 0 4px; }
     .section-h { font-size: 10pt; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #000; margin: 12px 0 4px; padding-bottom: 2px; }
 
-    /* Fixed-column scoring grid — circles align under their score labels. */
-    .score-table { table-layout: fixed; width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-    .score-table col.sc-col { width: 20px; }
-    .score-table td { border: none; padding: 1px 0; }
-    .score-table .name-col { text-align: left; font-size: 11pt; padding-right: 8px; white-space: nowrap; }
-    .score-table .sc-h { width: 20px; text-align: center; font-size: 9pt; color: #555; }
-    .score-table .sc-c { width: 20px; text-align: center; font-size: 11pt; }
+    /* Two scoring sections side by side, top half of the page. */
+    .two-col { width: 100%; table-layout: fixed; border-collapse: collapse; margin-bottom: 4px; }
+    .two-col > tbody > tr > td.col { width: 50%; vertical-align: top; border: none; padding: 0; }
+    .two-col > tbody > tr > td.col:first-child { padding-right: 20px; }
+    .sec-h { font-size: 10pt; font-weight: bold; text-transform: uppercase; border-bottom: 1px solid #000; margin: 0 0 4px; padding-bottom: 2px; }
+
+    /* Compact descriptor rows: name left, "0 ○ 1 ○ … 5" scale right. */
+    .desc-tbl { width: 100%; border-collapse: collapse; }
+    .desc-tbl td { border: none; padding: 1px 0; }
+    .desc-tbl .dn { font-size: 10pt; white-space: nowrap; padding-right: 8px; }
+    .desc-tbl .sc { font-family: 'Courier New', monospace; font-size: 10pt; letter-spacing: 1px; text-align: right; white-space: nowrap; }
 
     .note-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .note-box { border: 1px solid #ccc; padding: 8px; min-height: 60px; }
