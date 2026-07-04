@@ -52,11 +52,11 @@
 
   /* Libraries-tab scoped typography. Bumped above the rest of the
      app's table fonts; deferred global typography pass will revisit. */
-  --lib-fs-header: 11px;
-  --lib-fs-row: 13px;
-  --lib-fs-detail-title: 19px;
-  --lib-fs-detail-label: 10px;
-  --lib-fs-detail-value: 13px;
+  --lib-fs-header: 10px;
+  --lib-fs-row: 11px;
+  --lib-fs-detail-title: 16px;
+  --lib-fs-detail-label: 9px;
+  --lib-fs-detail-value: 11px;
 }
 
 /* Light mode overrides */
@@ -818,7 +818,7 @@ thead th {
   text-transform: uppercase;
   color: var(--text-muted);
   font-family: var(--sans);
-  padding: 8px 10px;
+  padding: 4px 8px;
   text-align: left;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
@@ -827,7 +827,7 @@ thead th {
 tbody tr {
   transition: background 0.08s;
   cursor: pointer;
-  height: 44px;
+  height: 28px;
 }
 
 tbody tr:hover {
@@ -840,7 +840,7 @@ tbody tr.selected {
 }
 
 tbody td {
-  padding: 5px 10px;
+  padding: 3px 8px;
   vertical-align: middle;
   white-space: nowrap;
 }
