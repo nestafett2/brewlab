@@ -1,6 +1,6 @@
 /**
  * Recipe Explorer right pane — appears when sidebarTab === 'explorer'.
- * Six mutually-exclusive view modes (chips at the top):
+ * Five mutually-exclusive view modes (chips at the top):
  *   • By Date    — flat, brewDate descending; "No brew date" subgroup last.
  *   • By Folder  — folder tree mirroring the sidebar (shared folder.open
  *                  state); right-click blank area → "+ New Folder".
@@ -8,8 +8,10 @@
  *                  recipes sorted alphabetically by beerName within group.
  *   • By Name    — flat, alphabetical case-insensitive on beerName||name.
  *   • By Tax #   — flat by taxBatch ascending; "No tax batch" subgroup last.
- *   • By Origin  — grouped Own Brand / Collab / OEM (own or unset first);
- *                  recipes sorted alphabetically by beerName within group.
+ *
+ * A free-text search box and Own/Collab/OEM origin-filter chips in the
+ * toolbar narrow the recipe list feeding every mode (applied before the
+ * mode subcomponent groups/sorts).
  *
  * Mode persistence: localStorage key `bl_explorer_mode`. Survives tab
  * switches and page reloads. Default 'date'.
@@ -32,7 +34,7 @@ import type { Folder, Recipe } from '../../types';
 import { formatRecipeStyleLine } from '../../lib/utils';
 import RecipePreview from './RecipePreview';
 
-export type ExplorerMode = 'date' | 'folder' | 'style' | 'name' | 'tax' | 'origin';
+export type ExplorerMode = 'date' | 'folder' | 'style' | 'name' | 'tax';
 
 const MODE_LABELS: Record<ExplorerMode, string> = {
   date:   'By Date',
@@ -40,9 +42,8 @@ const MODE_LABELS: Record<ExplorerMode, string> = {
   style:  'By Style',
   name:   'By Name',
   tax:    'By Tax #',
-  origin: 'By Origin',
 };
-const MODE_ORDER: ExplorerMode[] = ['date', 'folder', 'style', 'name', 'tax', 'origin'];
+const MODE_ORDER: ExplorerMode[] = ['date', 'folder', 'style', 'name', 'tax'];
 
 const LS_KEY = 'bl_explorer_mode';
 
@@ -80,6 +81,14 @@ export default function RecipeExplorerPanel({
   // confusing) and naturally on tab switch (panel unmounts).
   const [previewId, setPreviewId] = useState<string | null>(null);
 
+  // Toolbar filters — narrow the list feeding every mode. Free-text
+  // search matches beerName||name; origin chips ('own' also matches
+  // unset). Both persist across mode switches (list contents don't
+  // change shape, so keeping the filter is less surprising than the
+  // preview pinning we clear on mode switch below).
+  const [search, setSearch] = useState('');
+  const [originFilter, setOriginFilter] = useState<'own' | 'collab' | 'oem' | null>(null);
+
   useEffect(() => {
     try { localStorage.setItem(LS_KEY, mode); } catch { /* ignore */ }
   }, [mode]);
@@ -106,6 +115,21 @@ export default function RecipeExplorerPanel({
     return recipes.filter(r => ids.has(r.folder));
   }, [recipes, selectedFolderId, showAll, folders]);
 
+  // Apply the toolbar search + origin filters on top of the folder scope.
+  // This is what feeds the mode subcomponents (not displayedRecipes).
+  const filteredRecipes = useMemo(() => {
+    let out = displayedRecipes;
+    const q = search.trim().toLowerCase();
+    if (q) {
+      out = out.filter(r => (r.beerName || r.name || '').toLowerCase().includes(q));
+    }
+    if (originFilter) {
+      // Unset recipeOrigin is treated as 'own' (own-brand by default).
+      out = out.filter(r => (r.recipeOrigin ?? 'own') === originFilter);
+    }
+    return out;
+  }, [displayedRecipes, search, originFilter]);
+
   // Resolve preview id → recipe at render time so a deletion or
   // hydration-driven id change clears the pane gracefully.
   const previewRecipe = useMemo(
@@ -129,6 +153,32 @@ export default function RecipeExplorerPanel({
             >{MODE_LABELS[m]}</button>
           ))}
         </div>
+        <div style={searchWrapStyle}>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search recipes…"
+            style={searchInputStyle}
+          />
+          {search && (
+            <button
+              className="btn sm"
+              style={searchClearStyle}
+              onClick={() => setSearch('')}
+              title="Clear search"
+            >✕</button>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {(['own', 'collab', 'oem'] as const).map(o => (
+            <button
+              key={o}
+              className={`btn sm ${originFilter === o ? 'active' : ''}`}
+              onClick={() => setOriginFilter(prev => (prev === o ? null : o))}
+            >{o === 'own' ? 'Own' : o === 'collab' ? 'Collab' : 'OEM'}</button>
+          ))}
+        </div>
         {selectedFolderId && (
           <button
             className={`btn sm ${!showAll ? 'active' : ''}`}
@@ -140,28 +190,27 @@ export default function RecipeExplorerPanel({
           </button>
         )}
         <span style={countStyle}>
-          {displayedRecipes.length}
-          {selectedFolderId && !showAll && displayedRecipes.length !== recipes.length
+          {filteredRecipes.length}
+          {filteredRecipes.length !== recipes.length
             ? ` of ${recipes.length}`
             : ''
-          } {displayedRecipes.length === 1 ? 'recipe' : 'recipes'}
+          } {filteredRecipes.length === 1 ? 'recipe' : 'recipes'}
         </span>
       </div>
       <div style={splitStyle}>
         <div style={{ ...bodyStyle, flex: 1, minWidth: 0 }}>
-          {mode === 'date'   && <ByDate    recipes={displayedRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
+          {mode === 'date'   && <ByDate    recipes={filteredRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
           {mode === 'folder' && <ByFolder
-            recipes={displayedRecipes} folders={folders}
+            recipes={filteredRecipes} folders={folders}
             setFolders={setFolders}
             onPreview={handlePreview}
             onOpen={handleOpen}
             previewId={previewId}
             onBlankContext={onBlankContext}
           />}
-          {mode === 'style'  && <ByStyle   recipes={displayedRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
-          {mode === 'name'   && <ByName    recipes={displayedRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
-          {mode === 'tax'    && <ByTax     recipes={displayedRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
-          {mode === 'origin' && <ByOrigin  recipes={displayedRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
+          {mode === 'style'  && <ByStyle   recipes={filteredRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
+          {mode === 'name'   && <ByName    recipes={filteredRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
+          {mode === 'tax'    && <ByTax     recipes={filteredRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
         </div>
         {previewRecipe && (
           <div style={previewPaneStyle}>
@@ -276,51 +325,6 @@ function ByTax({ recipes, onPreview, onOpen, previewId }: ModeProps) {
           ))}
         </>
       )}
-    </div>
-  );
-}
-
-// ─── Mode: By Origin ─────────────────────────────────────────────────
-//
-// Buckets recipes by `recipeOrigin` in a fixed order: Own Brand (own or
-// unset), Collab, OEM. Each group sorts alphabetically by beerName||name.
-// A group's subheader only renders when it holds at least one recipe.
-
-function ByOrigin({ recipes, onPreview, onOpen, previewId }: ModeProps) {
-  const { own, collab, oem } = useMemo(() => {
-    const own:    Recipe[] = [];
-    const collab: Recipe[] = [];
-    const oem:    Recipe[] = [];
-    for (const r of recipes) {
-      if (r.recipeOrigin === 'collab') collab.push(r);
-      else if (r.recipeOrigin === 'oem') oem.push(r);
-      else own.push(r); // 'own' or null/undefined
-    }
-    const byName = (a: Recipe, b: Recipe) =>
-      (a.beerName || a.name || '').toLowerCase()
-        .localeCompare((b.beerName || b.name || '').toLowerCase());
-    own.sort(byName);
-    collab.sort(byName);
-    oem.sort(byName);
-    return { own, collab, oem };
-  }, [recipes]);
-
-  if (recipes.length === 0) return <Empty />;
-  const renderGroup = (label: string, group: Recipe[]) =>
-    group.length > 0 && (
-      <>
-        <SubHeader label={label} count={group.length} />
-        {group.map(r => (
-          <ExplorerRow key={r.id} recipe={r} selected={r.id === previewId}
-            onPreview={() => onPreview(r.id)} onOpen={() => onOpen(r.id)} />
-        ))}
-      </>
-    );
-  return (
-    <div style={listStyle}>
-      {renderGroup('Own Brand', own)}
-      {renderGroup('Collab', collab)}
-      {renderGroup('OEM', oem)}
     </div>
   );
 }
@@ -625,6 +629,28 @@ const titleStyle: React.CSSProperties = {
 const countStyle: React.CSSProperties = {
   marginLeft: 'auto',
   fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-muted)',
+};
+
+const searchWrapStyle: React.CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 4, marginLeft: 8,
+};
+
+const searchInputStyle: React.CSSProperties = {
+  width: 160,
+  background: 'var(--panel2)',
+  border: '1px solid var(--border2)',
+  color: 'var(--text)',
+  fontFamily: 'var(--mono)',
+  fontSize: 11,
+  padding: '3px 8px',
+  height: 24,
+  boxSizing: 'border-box',
+  borderRadius: 3,
+  outline: 'none',
+};
+
+const searchClearStyle: React.CSSProperties = {
+  padding: '2px 6px', fontSize: 11,
 };
 
 const splitStyle: React.CSSProperties = {
