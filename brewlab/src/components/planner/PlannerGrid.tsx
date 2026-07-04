@@ -503,17 +503,11 @@ function buildBrewhouseDayBars(
   return out;
 }
 
-// ─── Phase color coding (HTML had per-brew colours; this derives the
-//     bar colour from the vessel's phase, with completed brews greyed) ──
+// ─── Bar colour — per-brew stored colour, greyed once completed ───────
 
 function barColor(brew: PlannerBrew, today: Date): string {
-  // Past / completed — end date before today → grey.
   if (strToDate(brew.end) < today) return 'var(--panel3)';
-  const key = brew.vessel.toLowerCase();
-  if (key === 'bh' || key.includes('brewhouse')) return '#2a6496';          // brewhouse → blue
-  if (key.includes('fv') || key.includes('ferm')) return '#2d6a4f';         // fermenter (active) → green
-  if (key.includes('bt') || key.includes('bright')) return 'rgba(180,110,0,0.8)'; // bright tank → amber
-  return brew.color;                                                        // fallback: stored colour
+  return brew.color;
 }
 
 // ─── Header styles ───────────────────────────────────────────────────

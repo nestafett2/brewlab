@@ -24,8 +24,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store';
 import type { PlannerBrew, PlannerAction } from '../../types';
-import { addDays, dateToStr, strToDate, todayDate } from '../../lib/dates';
-import { PLANNER_DAYS, deriveVesselGroups } from './plannerShared';
+import { addDays, dateToStr, diffDays, strToDate, todayDate } from '../../lib/dates';
+import { PLANNER_DAYS, DOW_ABBR, deriveVesselGroups } from './plannerShared';
+import { printHtml, escapeHtml } from '../../lib/print';
 import PlannerGrid from './PlannerGrid';
 import PlannerUpcoming from './PlannerUpcoming';
 import CalendarPopup from './CalendarPopup';
@@ -52,6 +53,7 @@ export default function PlannerPage() {
   const plannerBrews    = useStore(s => s.plannerBrews);
   const setPlannerBrews = useStore(s => s.setPlannerBrews);
   const tankCalib       = useStore(s => s.tankCalib);
+  const settings        = useStore(s => s.settings);
   const pushToast       = useStore(s => s.pushToast);
   // One-shot pre-fill from RecipeTab → "Add to Planner" sidebar action.
   const pendingPlannerAdd    = useStore(s => s.pendingPlannerAdd);
@@ -117,6 +119,93 @@ export default function PlannerPage() {
   // Toolbar nav
   const shift = (days: number) => persistStart(addDays(start, days));
   const goToToday = () => persistStart(addDays(todayDate(), -7));
+
+  // ── Print — HTML render of the current visible planner window ────────
+  const printPlanner = () => {
+    const days: Date[] = [];
+    for (let i = 0; i < PLANNER_DAYS; i++) days.push(addDays(start, i));
+    const today = todayDate();
+    const visEnd = addDays(start, PLANNER_DAYS - 1);
+
+    const tintClass = (d: Date): string => {
+      if (d.getTime() === today.getTime()) return 'td-today';
+      return (d.getDay() === 0 || d.getDay() === 6) ? 'we' : '';
+    };
+
+    // Day header cells (number + day-of-week).
+    const dayHeader = days
+      .map(d => `<td class="dayhdr ${tintClass(d)}">${d.getDate()}<br>${DOW_ABBR[d.getDay()]}</td>`)
+      .join('');
+
+    // One <tbody> section per vessel group: amber group row + vessel rows.
+    const bodyRows = vesselGroups.map(g => {
+      const groupRow =
+        `<tr class="grouprow"><td colspan="${days.length + 1}">${escapeHtml(g.group)}</td></tr>`;
+
+      const vesselRows = g.vessels.map(v => {
+        // Brews on this vessel overlapping the window, earliest first.
+        const vb = plannerBrews
+          .filter(b => b.vessel === v.id)
+          .map(b => ({ b, s: strToDate(b.start), e: strToDate(b.end) }))
+          .filter(({ s, e }) => s <= visEnd && e >= start)
+          .sort((a, c) => a.s.getTime() - c.s.getTime());
+
+        // Coverage array → contiguous colspan runs per brew.
+        const cover: (PlannerBrew | null)[] = new Array(days.length).fill(null);
+        for (const { b, s, e } of vb) {
+          const si = Math.max(0, diffDays(start, s));
+          const ei = Math.min(days.length - 1, diffDays(start, e));
+          for (let d = si; d <= ei; d++) if (cover[d] === null) cover[d] = b;
+        }
+
+        let cells = '';
+        let i = 0;
+        while (i < days.length) {
+          const b = cover[i];
+          if (!b) {
+            cells += `<td class="${tintClass(days[i])}"></td>`;
+            i++;
+          } else {
+            let j = i;
+            while (j < days.length && cover[j] === b) j++;
+            cells += `<td class="brewbar" colspan="${j - i}" style="background-color:${escapeHtml(b.color)}">${escapeHtml(b.name)}</td>`;
+            i = j;
+          }
+        }
+        return `<tr><td class="vlabel">${escapeHtml(v.name)}</td>${cells}</tr>`;
+      }).join('');
+
+      return groupRow + vesselRows;
+    }).join('');
+
+    const brewery = settings.breweryName || 'Brewery';
+    const bodyHtml = `
+<div style="display:flex;justify-content:space-between;align-items:baseline;font-family:monospace;margin-bottom:6px;">
+  <span style="font-size:12px;font-weight:700;">${escapeHtml(brewery)}</span>
+  <span style="font-size:14px;font-weight:700;letter-spacing:2px;">PRODUCTION PLANNER</span>
+  <span style="font-size:9px;">${escapeHtml(rangeLabel)} &middot; printed ${escapeHtml(dateToStr(today))}</span>
+</div>
+<table class="planner">
+  <thead><tr><td class="corner"></td>${dayHeader}</tr></thead>
+  <tbody>${bodyRows}</tbody>
+</table>`;
+
+    printHtml(bodyHtml, {
+      title: 'Production Planner',
+      pageSize: 'A4',
+      landscape: true,
+      extraStyles: `
+        table.planner { border-collapse: collapse; width: 100%; table-layout: fixed; font-family: monospace; }
+        table.planner td { border: 1px solid #ccc; font-size: 8px; padding: 1px 2px; text-align: center; overflow: hidden; white-space: nowrap; }
+        table.planner td.corner { width: 90px; border: none; }
+        table.planner td.vlabel { text-align: left; font-size: 10px; font-weight: 600; width: 90px; white-space: nowrap; }
+        table.planner td.we { background: #eeeeee; }
+        table.planner td.td-today { background: #ffe6bf; }
+        table.planner td.brewbar { color: #fff; text-align: left; text-shadow: 0 0 2px rgba(0,0,0,0.6); }
+        table.planner tr.grouprow td { background: #fff3d6; color: #b5730a; font-weight: 700; text-align: left; font-size: 9px; letter-spacing: 1px; }
+      `,
+    });
+  };
 
   const openCalendar = () => {
     if (!calBtnRef.current) return;
@@ -218,6 +307,7 @@ export default function PlannerPage() {
             onClick={() => setHideEmpty(v => !v)}
             title="Hide vessel rows with no brews in the visible range"
           >{hideEmpty ? '☑' : '☐'} HIDE EMPTY</button>
+          <button className="btn sm" onClick={printPlanner}>🖨 PRINT</button>
           <button className="btn sm" onClick={() => setYearlyOpen(true)}>📅 YEARLY</button>
           <button
             className="btn sm primary"
