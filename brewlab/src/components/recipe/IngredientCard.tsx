@@ -23,12 +23,20 @@
  */
 
 import { useState, type ReactElement } from 'react';
+import { Wheat, Leaf, FlaskConical, Plus } from 'lucide-react';
 import { useStore } from '../../store';
 import { fmtAmt } from '../../lib/utils';
 import { fmtNum } from '../../lib/format';
 import type { Ingredient, IngredientType } from '../../types';
 
 type RecipeSectionType = 'grain' | 'hop' | 'yeast' | 'misc';
+
+const SECTION_ICONS: Record<RecipeSectionType, React.ReactNode> = {
+  grain: <Wheat size={14} strokeWidth={1.5} />,
+  hop:   <Leaf size={14} strokeWidth={1.5} />,
+  yeast: <FlaskConical size={14} strokeWidth={1.5} />,
+  misc:  <Plus size={14} strokeWidth={1.5} />,
+};
 
 interface ColDef {
   key: string;
@@ -145,14 +153,12 @@ export default function IngredientCard({
 
   return (
     <div style={{ ...sectionStyle, ...(extraTopGap ? { marginTop: 12 } : {}) }}>
-      <div
-        style={headerStyle}
-        onContextMenu={onHeaderContext}
-        title="Right-click for column options"
-      >
+      <div style={headerStyle} onContextMenu={onHeaderContext} title="Right-click for column options">
         <span style={{ ...dotStyle, background: dotColor }} />
-        <span style={labelStyle}>{label}</span>
-        <span style={countStyle}>· {items.length}</span>
+        <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
+          {SECTION_ICONS[sectionType]}
+        </span>
+        <span style={countStyle}>{items.length}</span>
       </div>
 
       {items.length === 0 ? (
@@ -386,7 +392,7 @@ const headerStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 8,
-  padding: '8px 4px 4px',
+  padding: '6px 4px 2px',
   cursor: 'context-menu',
 };
 
@@ -395,14 +401,6 @@ const dotStyle: React.CSSProperties = {
   height: 8,
   borderRadius: '50%',
   flexShrink: 0,
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 700,
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase',
-  color: 'var(--text-muted)',
 };
 
 const countStyle: React.CSSProperties = {
