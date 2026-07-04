@@ -278,44 +278,35 @@ function ByDate({ recipes, onPreview, onOpen, previewId }: ModeProps) {
 
 // ─── Mode: By Name ───────────────────────────────────────────────────
 
-interface NameGroup {
-  key: string;   // 'A'..'Z', or '#' for non-alpha first characters
-  recipes: Recipe[];
-}
-
 function ByName({ recipes, onPreview, onOpen, previewId }: ModeProps) {
-  const groups = useMemo<NameGroup[]>(() => {
-    const m = new Map<string, NameGroup>();
-    for (const r of recipes) {
-      const ch = (r.beerName || r.name || '').trim().charAt(0).toUpperCase();
-      const key = /[A-Z]/.test(ch) ? ch : '#';
-      const g = m.get(key);
-      if (g) g.recipes.push(r);
-      else m.set(key, { key, recipes: [r] });
-    }
-    const out = Array.from(m.values());
-    // A→Z, with the '#' (non-alpha) bucket last.
-    out.sort((a, b) => {
-      if (a.key === '#') return 1;
-      if (b.key === '#') return -1;
-      return a.key.localeCompare(b.key);
-    });
-    for (const g of out) {
-      g.recipes.sort((a, b) =>
-        (a.beerName || a.name || '').toLowerCase()
-          .localeCompare((b.beerName || b.name || '').toLowerCase()));
-    }
-    return out;
-  }, [recipes]);
-
-  // Per-group collapsed state. Default open. Local-only — same pattern
-  // as ByStyle (letter groups have no model object to persist against).
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const toggle = (key: string) => setCollapsed(prev => {
     const next = new Set(prev);
     if (next.has(key)) next.delete(key); else next.add(key);
     return next;
   });
+
+  const groups = useMemo(() => {
+    const m = new Map<string, Recipe[]>();
+    for (const r of recipes) {
+      const ch = (r.beerName || r.name || '').toUpperCase().charAt(0);
+      const key = /[A-Z]/.test(ch) ? ch : '#';
+      const list = m.get(key);
+      if (list) list.push(r);
+      else m.set(key, [r]);
+    }
+    const keys = Array.from(m.keys()).sort((a, b) => {
+      if (a === '#') return 1;
+      if (b === '#') return -1;
+      return a.localeCompare(b);
+    });
+    return keys.map(key => ({
+      key,
+      recipes: m.get(key)!.slice().sort((a, b) =>
+        (a.beerName || a.name || '').toLowerCase()
+          .localeCompare((b.beerName || b.name || '').toLowerCase())),
+    }));
+  }, [recipes]);
 
   if (groups.length === 0) return <Empty />;
   return (
@@ -328,7 +319,6 @@ function ByName({ recipes, onPreview, onOpen, previewId }: ModeProps) {
             onClick={() => toggle(g.key)}
           >
             <span className={`rb-folder-arrow${!collapsed.has(g.key) ? ' open' : ''}`}>▶</span>
-            <span className="rb-folder-icon">🔤</span>
             <span className="rb-folder-name">{g.key}</span>
             <span className="rb-folder-count">{g.recipes.length}</span>
           </div>
@@ -597,10 +587,7 @@ function ExplorerRow({
   onOpen: () => void;
   indentPx?: number;
 }) {
-  const hasNum = typeof recipe.brewNumber === 'number' && recipe.brewNumber > 0;
-  const nameLine = hasNum
-    ? `#${recipe.brewNumber} ${recipe.beerName || recipe.name}`
-    : (recipe.beerName || recipe.name);
+  const nameLine = recipe.beerName || recipe.name || '(unnamed)';
   const styleLine = formatRecipeStyleLine(recipe.style);
   const versionLine = `v${recipe.version || '1.0'}`;
 
