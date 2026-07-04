@@ -87,7 +87,7 @@ export default function RecipeExplorerPanel({
   // change shape, so keeping the filter is less surprising than the
   // preview pinning we clear on mode switch below).
   const [search, setSearch] = useState('');
-  const [originFilter, setOriginFilter] = useState<'own' | 'collab' | 'oem' | null>(null);
+  const [originFilter, setOriginFilter] = useState<'own' | 'collab' | 'oem' | ''>('');
 
   useEffect(() => {
     try { localStorage.setItem(LS_KEY, mode); } catch { /* ignore */ }
@@ -143,16 +143,6 @@ export default function RecipeExplorerPanel({
   return (
     <div style={pageStyle}>
       <div style={toolbarStyle}>
-        <span style={titleStyle}>RECIPE EXPLORER</span>
-        <div style={{ display: 'flex', gap: 4, marginLeft: 14 }}>
-          {MODE_ORDER.map(m => (
-            <button
-              key={m}
-              className={`btn sm ${mode === m ? 'active' : ''}`}
-              onClick={() => setMode(m)}
-            >{MODE_LABELS[m]}</button>
-          ))}
-        </div>
         <div style={searchWrapStyle}>
           <input
             type="text"
@@ -170,15 +160,26 @@ export default function RecipeExplorerPanel({
             >✕</button>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {(['own', 'collab', 'oem'] as const).map(o => (
+        <span style={titleStyle}>RECIPE EXPLORER</span>
+        <div style={{ display: 'flex', gap: 4, marginLeft: 14 }}>
+          {MODE_ORDER.map(m => (
             <button
-              key={o}
-              className={`btn sm ${originFilter === o ? 'active' : ''}`}
-              onClick={() => setOriginFilter(prev => (prev === o ? null : o))}
-            >{o === 'own' ? 'Own' : o === 'collab' ? 'Collab' : 'OEM'}</button>
+              key={m}
+              className={`btn sm ${mode === m ? 'active' : ''}`}
+              onClick={() => setMode(m)}
+            >{MODE_LABELS[m]}</button>
           ))}
         </div>
+        <select
+          value={originFilter}
+          onChange={e => setOriginFilter(e.target.value as 'own' | 'collab' | 'oem' | '')}
+          style={originSelectStyle}
+        >
+          <option value="">All Origins</option>
+          <option value="own">Own Brand</option>
+          <option value="collab">Collab</option>
+          <option value="oem">OEM</option>
+        </select>
         {selectedFolderId && (
           <button
             className={`btn sm ${!showAll ? 'active' : ''}`}
@@ -651,6 +652,17 @@ const searchInputStyle: React.CSSProperties = {
 
 const searchClearStyle: React.CSSProperties = {
   padding: '2px 6px', fontSize: 11,
+};
+
+const originSelectStyle: React.CSSProperties = {
+  background: 'var(--panel2)',
+  border: '1px solid var(--border2)',
+  color: 'var(--text)',
+  fontFamily: 'var(--mono)',
+  fontSize: 11,
+  padding: '3px 6px',
+  borderRadius: 3,
+  outline: 'none',
 };
 
 const splitStyle: React.CSSProperties = {
