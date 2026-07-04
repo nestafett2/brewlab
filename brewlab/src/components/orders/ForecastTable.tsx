@@ -271,14 +271,14 @@ function SectionBlock({
               return [
                 <td key={`a-${j}`} style={{ ...tdStyle, textAlign: 'center', width: 60, minWidth: 60, maxWidth: 60 }}>
                   {c.incoming > 0
-                    ? <span style={{ color: 'var(--green)' }}>+{fmtKg(c.incoming)}</span>
+                    ? <span style={{ color: 'var(--green)', fontWeight: 600 }}>+{fmtKg(c.incoming)}</span>
                     : c.recorded
                       ? <span title="Already recorded" style={{ color: '#3a8a3a', fontSize: 9 }}>✓</span>
                       : c.amt > 0
-                        ? <span style={{ color: 'var(--red)', fontWeight: 500 }}>{fmtKg(c.amt)}</span>
+                        ? <span style={{ color: 'var(--red)', fontWeight: 600 }}>{fmtKg(c.amt)}</span>
                         : null}
                 </td>,
-                <td key={`b-${j}`} style={{ ...tdStyle, textAlign: 'center', color: balColor, fontWeight: bal < 0 ? 600 : undefined, borderRight: '1px solid var(--border2)', width: 60, minWidth: 60, maxWidth: 60 }}>
+                <td key={`b-${j}`} style={{ ...tdStyle, textAlign: 'center', color: balColor, fontWeight: bal < 0 ? 700 : 500, borderRight: '1px solid var(--border2)', width: 60, minWidth: 60, maxWidth: 60 }}>
                   {fmtKg(bal)}
                 </td>,
               ];
@@ -330,14 +330,14 @@ const emptyStyle: React.CSSProperties = {
 
 const sectionHeaderStyle: React.CSSProperties = {
   background: 'var(--panel2)',
-  fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: 2,
+  fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, letterSpacing: 2,
   color: 'var(--amber)', padding: '6px 12px',
   borderTop: '2px solid var(--border2)',
 };
 
 const thStyle: React.CSSProperties = {
-  fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)',
-  padding: '4px 8px', fontWeight: 600,
+  fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-muted)',
+  padding: '4px 8px', fontWeight: 700,
   background: 'var(--panel2)',
 };
 
@@ -346,11 +346,11 @@ const stickyLeftStyle: React.CSSProperties = {
 };
 
 const nameTdStyle: React.CSSProperties = {
-  fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text)',
+  fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 500, color: 'var(--text)',
   padding: '4px 8px',
 };
 
 const tdStyle: React.CSSProperties = {
-  fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text)',
+  fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 500, color: 'var(--text)',
   padding: '4px 6px',
 };
