@@ -19,8 +19,8 @@
   --red: #ff453a;
   --blue: #0a84ff;
   --purple: #bf5af2;
-  --mono: 'IBM Plex Mono', monospace;
-  --sans: -apple-system, 'Helvetica Neue', sans-serif;
+  --mono: 'Geist Mono', 'IBM Plex Mono', monospace;
+  --sans: 'Inter', -apple-system, 'Helvetica Neue', sans-serif;
   --display: 'Bebas Neue', sans-serif;
 
   /* Libraries-tab scoped typography. Bumped above the rest of the
