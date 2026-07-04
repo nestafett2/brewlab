@@ -1256,8 +1256,6 @@ export default function Desktop() {
                 placeholder="仕込記号"
                 style={{ fontSize: 11, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed rgba(255,255,255,0.15)', outline: 'none', padding: 0, fontFamily: 'var(--sans)', minWidth: 60 }}
               />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
               {(['own', 'collab', 'oem'] as RecipeOrigin[]).map(opt => (
                 <button
                   key={opt}
