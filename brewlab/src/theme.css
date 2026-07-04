@@ -70,15 +70,15 @@ body.light {
   --border: rgba(0, 0, 0, 0.10);
   --border2: rgba(0, 0, 0, 0.16);
   --border3: rgba(0, 0, 0, 0.22);
-  --amber: #c07010;
-  --amber-bright: #e08020;
-  --amber-dim: #a06010;
+  --amber: #b45309;
+  --amber-bright: #d4700f;
+  --amber-dim: #92470a;
   --amber-glow: rgba(192, 112, 16, 0.10);
   --text: #1c1c1e;
   --text-dim: #3a3a3c;
   --text-muted: #6c6c70;
-  --green: #248a3d;
-  --red: #d70015;
+  --green: #1e7e34;
+  --red: #c0392b;
   --blue: #0040dd;
 }
 
