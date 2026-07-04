@@ -1,61 +1,106 @@
 /**
  * Recipe Explorer right pane — appears when sidebarTab === 'explorer'.
- * Five mutually-exclusive view modes (chips at the top):
- *   • By Date    — flat, brewDate descending; "No brew date" subgroup last.
- *   • By Folder  — folder tree mirroring the sidebar (shared folder.open
- *                  state); right-click blank area → "+ New Folder".
- *   • By Style   — grouped by styleKey ("BJCP 21A") with display label;
- *                  recipes sorted alphabetically by beerName within group.
- *   • By Name    — collapsible A–Z groups (first letter of beerName||name;
- *                  non-alpha under "#" last); recipes alphabetical within.
- *   • By Tax #   — flat by taxBatch ascending; "No tax batch" subgroup last.
  *
- * A free-text search box and Own/Collab/OEM origin-filter chips in the
- * toolbar narrow the recipe list feeding every mode (applied before the
- * mode subcomponent groups/sorts).
+ * Table-based design: a single sortable, reorderable table of recipes
+ * with an inline preview pane on the right.
  *
- * Mode persistence: localStorage key `bl_explorer_mode`. Survives tab
- * switches and page reloads. Default 'date'.
+ * Toolbar filters narrow the list feeding the table:
+ *   • Search      — free-text on beerName||name.
+ *   • Style       — dropdown of unique recipe styles.
+ *   • Origin      — Own / Collab / OEM (own also matches unset).
+ *   • Folder      — when a folder is selected in the sidebar, scope to it
+ *                   (+ descendants); an "All" toggle expands to everything.
  *
- * Row format matches the sidebar 3-line shape from FolderTree's
- * RecipeSidebarRow:
- *   #brewNumber beerName
- *   style · BJCP code
- *   v1.x
- * Click anywhere on a row → opens the recipe in the main editor (same
- * `openRecipe` handler the sidebar uses).
+ * Columns (Tax Batch # / Beer Name / Style / Date / Version):
+ *   • Click a header to sort by it (click again flips direction).
+ *   • Drag a header onto another to reorder columns; order persists in
+ *     localStorage (`bl_explorer_cols`).
  *
- * Drag/drop and multi-select are intentionally NOT included here — those
- * stay in the left sidebar. The explorer is read-mostly; only blank-area
- * folder creation in the By Folder view writes anything.
+ * Rows: single-click previews (250ms debounce so a double-click doesn't
+ * flash the preview first), double-click opens in the main editor.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Folder, Recipe } from '../../types';
-import { formatRecipeStyleLine } from '../../lib/utils';
 import RecipePreview from './RecipePreview';
 
-export type ExplorerMode = 'date' | 'folder' | 'style' | 'name' | 'tax';
+// ─── Columns ─────────────────────────────────────────────────────────
 
-const MODE_LABELS: Record<ExplorerMode, string> = {
-  date:   'By Date',
-  folder: 'By Folder',
-  style:  'By Style',
-  name:   'By Name',
-  tax:    'By Tax #',
+type ColKey = 'taxBatch' | 'beerName' | 'style' | 'brewDate' | 'version';
+
+const DEFAULT_COLS: ColKey[] = ['taxBatch', 'beerName', 'style', 'brewDate', 'version'];
+
+const COL_LABELS: Record<ColKey, string> = {
+  taxBatch: 'Tax Batch #',
+  beerName: 'Beer Name',
+  style:    'Style',
+  brewDate: 'Date',
+  version:  'Version',
 };
-const MODE_ORDER: ExplorerMode[] = ['date', 'folder', 'style', 'name', 'tax'];
 
-const LS_KEY = 'bl_explorer_mode';
+const COLS_LS_KEY = 'bl_explorer_cols';
 
-/** Read the persisted mode, defaulting to 'date'. Tolerant of missing
- *  / corrupted values — any unexpected string falls back to default. */
-function loadMode(): ExplorerMode {
+/** Read persisted column order. Falls back to DEFAULT_COLS unless the
+ *  stored value is an exact permutation of the known columns (guards
+ *  against corrupted / stale-schema values). */
+function loadColOrder(): ColKey[] {
   try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw && MODE_ORDER.includes(raw as ExplorerMode)) return raw as ExplorerMode;
-  } catch { /* localStorage unavailable — keep default */ }
-  return 'date';
+    const raw = localStorage.getItem(COLS_LS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (
+        Array.isArray(parsed)
+        && parsed.length === DEFAULT_COLS.length
+        && new Set(parsed).size === DEFAULT_COLS.length
+        && parsed.every((c: unknown) => DEFAULT_COLS.includes(c as ColKey))
+      ) {
+        return parsed as ColKey[];
+      }
+    }
+  } catch { /* localStorage unavailable / invalid JSON — keep default */ }
+  return DEFAULT_COLS.slice();
+}
+
+/** Sort comparator for a given column + direction. Empty values always
+ *  sort last regardless of direction. */
+function compareRecipes(a: Recipe, b: Recipe, col: ColKey, dir: 1 | -1): number {
+  switch (col) {
+    case 'taxBatch': {
+      const av = (a.taxBatch || '').trim();
+      const bv = (b.taxBatch || '').trim();
+      if (!av && !bv) return 0;
+      if (!av) return 1;
+      if (!bv) return -1;
+      return dir * av.localeCompare(bv, undefined, { numeric: true });
+    }
+    case 'beerName': {
+      const av = (a.beerName || a.name || '').toLowerCase();
+      const bv = (b.beerName || b.name || '').toLowerCase();
+      return dir * av.localeCompare(bv);
+    }
+    case 'style': {
+      const av = (a.style || '').toLowerCase();
+      const bv = (b.style || '').toLowerCase();
+      if (!av && !bv) return 0;
+      if (!av) return 1;
+      if (!bv) return -1;
+      return dir * av.localeCompare(bv);
+    }
+    case 'brewDate': {
+      const av = a.brewDate || '';
+      const bv = b.brewDate || '';
+      if (!av && !bv) return 0;
+      if (!av) return 1;
+      if (!bv) return -1;
+      // Default (dir=1) is descending — newest first.
+      return dir * bv.localeCompare(av);
+    }
+    case 'version': {
+      const av = (a.version || '').toLowerCase();
+      const bv = (b.version || '').toLowerCase();
+      return dir * av.localeCompare(bv);
+    }
+  }
 }
 
 interface Props {
@@ -63,8 +108,9 @@ interface Props {
   folders: Folder[];
   setFolders: (folders: Folder[]) => void;
   openRecipe: (recipeId: string) => void;
-  /** Right-click on the By Folder view's blank area — Desktop fires the
-   *  same "+ New Folder" menu the sidebar uses. */
+  /** Right-click on a blank area — Desktop fires the same "+ New Folder"
+   *  menu the sidebar uses. (Retained on the interface for callers; the
+   *  table view has no folder-tree blank area to hook it to.) */
   onBlankContext: (e: React.MouseEvent) => void;
   /** When set, the explorer defaults to showing only recipes in this folder
    *  (and its descendants). An "All" toggle lets the user expand to all recipes. */
@@ -72,34 +118,33 @@ interface Props {
 }
 
 export default function RecipeExplorerPanel({
-  recipes, folders, setFolders, openRecipe, onBlankContext, selectedFolderId,
+  recipes, folders, openRecipe, selectedFolderId,
 }: Props) {
-  const [mode, setMode] = useState<ExplorerMode>(loadMode);
   // Inline preview within the explorer's right pane. Local-only state —
-  // intentionally not synced with sidebar `preview` (which drives
-  // Overview-mode behaviour). Cleared on mode switch (different list
-  // shapes — keeping the same recipe pinned across mode changes is
-  // confusing) and naturally on tab switch (panel unmounts).
+  // intentionally not synced with sidebar `preview`. Resolved to a recipe
+  // at render time so a deletion / hydration id change clears it.
   const [previewId, setPreviewId] = useState<string | null>(null);
 
-  // Toolbar filters — narrow the list feeding every mode. Free-text
-  // search matches beerName||name; origin chips ('own' also matches
-  // unset). Both persist across mode switches (list contents don't
-  // change shape, so keeping the filter is less surprising than the
-  // preview pinning we clear on mode switch below).
+  // Toolbar filters.
   const [search, setSearch] = useState('');
+  const [styleFilter, setStyleFilter] = useState('');
   const [originFilter, setOriginFilter] = useState<'own' | 'collab' | 'oem' | ''>('');
 
+  // Sort + column order.
+  const [sort, setSort] = useState<{ col: ColKey; dir: 1 | -1 }>({ col: 'taxBatch', dir: 1 });
+  const [colOrder, setColOrder] = useState<ColKey[]>(loadColOrder);
+  const [draggingCol, setDraggingCol] = useState<ColKey | null>(null);
+
+  // Persist column order whenever it changes.
   useEffect(() => {
-    try { localStorage.setItem(LS_KEY, mode); } catch { /* ignore */ }
-  }, [mode]);
-  useEffect(() => { setPreviewId(null); }, [mode]);
+    try { localStorage.setItem(COLS_LS_KEY, JSON.stringify(colOrder)); } catch { /* ignore */ }
+  }, [colOrder]);
 
   const [showAll, setShowAll] = useState(false);
-  // Reset showAll when the selected folder changes
+  // Reset showAll when the selected folder changes.
   useEffect(() => { setShowAll(false); }, [selectedFolderId]);
 
-  // Collect all descendant folder ids of a given folder (including itself)
+  // Collect all descendant folder ids of a given folder (including itself).
   const getDescendantFolderIds = (folderId: string): Set<string> => {
     const ids = new Set<string>();
     const visit = (id: string) => {
@@ -116,23 +161,36 @@ export default function RecipeExplorerPanel({
     return recipes.filter(r => ids.has(r.folder));
   }, [recipes, selectedFolderId, showAll, folders]);
 
-  // Apply the toolbar search + origin filters on top of the folder scope.
-  // This is what feeds the mode subcomponents (not displayedRecipes).
+  // Unique, non-blank styles across ALL recipes — feeds the Style filter.
+  const styleOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of recipes) {
+      if (r.style && r.style.trim()) set.add(r.style);
+    }
+    return Array.from(set).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  }, [recipes]);
+
+  // Apply search + style + origin filters on top of the folder scope.
   const filteredRecipes = useMemo(() => {
     let out = displayedRecipes;
     const q = search.trim().toLowerCase();
     if (q) {
       out = out.filter(r => (r.beerName || r.name || '').toLowerCase().includes(q));
     }
+    if (styleFilter) {
+      out = out.filter(r => r.style === styleFilter);
+    }
     if (originFilter) {
       // Unset recipeOrigin is treated as 'own' (own-brand by default).
       out = out.filter(r => (r.recipeOrigin ?? 'own') === originFilter);
     }
     return out;
-  }, [displayedRecipes, search, originFilter]);
+  }, [displayedRecipes, search, styleFilter, originFilter]);
 
-  // Resolve preview id → recipe at render time so a deletion or
-  // hydration-driven id change clears the pane gracefully.
+  const sortedRecipes = useMemo(() => {
+    return filteredRecipes.slice().sort((a, b) => compareRecipes(a, b, sort.col, sort.dir));
+  }, [filteredRecipes, sort]);
+
   const previewRecipe = useMemo(
     () => previewId ? recipes.find(r => r.id === previewId) ?? null : null,
     [previewId, recipes],
@@ -140,6 +198,21 @@ export default function RecipeExplorerPanel({
 
   const handlePreview = (id: string) => setPreviewId(id);
   const handleOpen    = (id: string) => { setPreviewId(null); openRecipe(id); };
+
+  // Click a header: new col → ascending (dir 1); same col → flip direction.
+  const onSort = (col: ColKey) =>
+    setSort(prev => prev.col === col ? { col, dir: prev.dir === 1 ? -1 : 1 } : { col, dir: 1 });
+
+  // Drop the dragged column immediately before the target column.
+  const handleDrop = (target: ColKey) => {
+    setColOrder(prev => {
+      if (!draggingCol || draggingCol === target) return prev;
+      const next = prev.filter(c => c !== draggingCol);
+      next.splice(next.indexOf(target), 0, draggingCol);
+      return next;
+    });
+    setDraggingCol(null);
+  };
 
   return (
     <div style={pageStyle}>
@@ -162,19 +235,20 @@ export default function RecipeExplorerPanel({
             >✕</button>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 4, marginLeft: 14 }}>
-          {MODE_ORDER.map(m => (
-            <button
-              key={m}
-              className={`btn sm ${mode === m ? 'active' : ''}`}
-              onClick={() => setMode(m)}
-            >{MODE_LABELS[m]}</button>
+        <select
+          value={styleFilter}
+          onChange={e => setStyleFilter(e.target.value)}
+          style={filterSelectStyle}
+        >
+          <option value="">All Styles</option>
+          {styleOptions.map(s => (
+            <option key={s} value={s}>{s}</option>
           ))}
-        </div>
+        </select>
         <select
           value={originFilter}
           onChange={e => setOriginFilter(e.target.value as 'own' | 'collab' | 'oem' | '')}
-          style={originSelectStyle}
+          style={filterSelectStyle}
         >
           <option value="">All Origins</option>
           <option value="own">Own Brand</option>
@@ -201,18 +275,47 @@ export default function RecipeExplorerPanel({
       </div>
       <div style={splitStyle}>
         <div style={{ ...bodyStyle, flex: 1, minWidth: 0 }}>
-          {mode === 'date'   && <ByDate    recipes={filteredRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
-          {mode === 'folder' && <ByFolder
-            recipes={filteredRecipes} folders={folders}
-            setFolders={setFolders}
-            onPreview={handlePreview}
-            onOpen={handleOpen}
-            previewId={previewId}
-            onBlankContext={onBlankContext}
-          />}
-          {mode === 'style'  && <ByStyle   recipes={filteredRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
-          {mode === 'name'   && <ByName    recipes={filteredRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
-          {mode === 'tax'    && <ByTax     recipes={filteredRecipes} onPreview={handlePreview} onOpen={handleOpen} previewId={previewId} />}
+          {sortedRecipes.length === 0 ? (
+            <Empty />
+          ) : (
+            <table style={tableStyle}>
+              <thead>
+                <tr>
+                  {colOrder.map(col => (
+                    <th
+                      key={col}
+                      draggable
+                      onDragStart={() => setDraggingCol(col)}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={() => handleDrop(col)}
+                      onDragEnd={() => setDraggingCol(null)}
+                      onClick={() => onSort(col)}
+                      style={{ ...thStyle, opacity: draggingCol === col ? 0.5 : 1 }}
+                      title="Click to sort · drag to reorder"
+                    >
+                      {COL_LABELS[col]}
+                      {sort.col === col && (
+                        <span style={sortArrowStyle}>{sort.dir === 1 ? ' ↑' : ' ↓'}</span>
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedRecipes.map((r, i) => (
+                  <ExplorerRow
+                    key={r.id}
+                    recipe={r}
+                    cols={colOrder}
+                    selected={r.id === previewId}
+                    zebra={i % 2 === 1}
+                    onPreview={() => handlePreview(r.id)}
+                    onOpen={() => handleOpen(r.id)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
         {previewRecipe && (
           <div style={previewPaneStyle}>
@@ -233,370 +336,42 @@ export default function RecipeExplorerPanel({
   );
 }
 
-// Mode subcomponents share these click props — single-click previews,
-// double-click opens, previewId drives the row's selected styling.
-interface ModeProps {
-  recipes: Recipe[];
-  onPreview: (id: string) => void;
-  onOpen: (id: string) => void;
-  previewId: string | null;
-}
-
-// ─── Mode: By Date ───────────────────────────────────────────────────
-
-function ByDate({ recipes, onPreview, onOpen, previewId }: ModeProps) {
-  const { dated, undated } = useMemo(() => {
-    const dated:   Recipe[] = [];
-    const undated: Recipe[] = [];
-    for (const r of recipes) {
-      if (r.brewDate) dated.push(r); else undated.push(r);
-    }
-    // Most recent first (descending). String compare is correct for ISO YYYY-MM-DD.
-    dated.sort((a, b) => b.brewDate.localeCompare(a.brewDate));
-    return { dated, undated };
-  }, [recipes]);
-
-  if (recipes.length === 0) return <Empty />;
-  return (
-    <div style={listStyle}>
-      {dated.map(r => (
-        <ExplorerRow key={r.id} recipe={r} selected={r.id === previewId}
-          onPreview={() => onPreview(r.id)} onOpen={() => onOpen(r.id)} />
-      ))}
-      {undated.length > 0 && (
-        <>
-          <SubHeader label="No brew date" count={undated.length} />
-          {undated.map(r => (
-            <ExplorerRow key={r.id} recipe={r} selected={r.id === previewId}
-              onPreview={() => onPreview(r.id)} onOpen={() => onOpen(r.id)} />
-          ))}
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─── Mode: By Name ───────────────────────────────────────────────────
-
-function ByName({ recipes, onPreview, onOpen, previewId }: ModeProps) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const toggle = (key: string) => setCollapsed(prev => {
-    const next = new Set(prev);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    return next;
-  });
-
-  const groups = useMemo(() => {
-    const m = new Map<string, Recipe[]>();
-    for (const r of recipes) {
-      const ch = (r.beerName || r.name || '').toUpperCase().charAt(0);
-      const key = /[A-Z]/.test(ch) ? ch : '#';
-      const list = m.get(key);
-      if (list) list.push(r);
-      else m.set(key, [r]);
-    }
-    const keys = Array.from(m.keys()).sort((a, b) => {
-      if (a === '#') return 1;
-      if (b === '#') return -1;
-      return a.localeCompare(b);
-    });
-    return keys.map(key => ({
-      key,
-      recipes: m.get(key)!.slice().sort((a, b) =>
-        (a.beerName || a.name || '').toLowerCase()
-          .localeCompare((b.beerName || b.name || '').toLowerCase())),
-    }));
-  }, [recipes]);
-
-  if (groups.length === 0) return <Empty />;
-  return (
-    <div style={listStyle}>
-      {groups.map(g => (
-        <div key={g.key}>
-          <div
-            className="rb-folder-header"
-            style={{ paddingLeft: 8, cursor: 'pointer' }}
-            onClick={() => toggle(g.key)}
-          >
-            <span className={`rb-folder-arrow${!collapsed.has(g.key) ? ' open' : ''}`}>▶</span>
-            <span className="rb-folder-name">{g.key}</span>
-            <span className="rb-folder-count">{g.recipes.length}</span>
-          </div>
-          {!collapsed.has(g.key) && (
-            <div className="rb-folder-body">
-              {g.recipes.map(r => (
-                <ExplorerRow key={r.id} recipe={r} selected={r.id === previewId}
-                  onPreview={() => onPreview(r.id)} onOpen={() => onOpen(r.id)}
-                  indentPx={12} />
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── Mode: By Tax # ──────────────────────────────────────────────────
-
-function ByTax({ recipes, onPreview, onOpen, previewId }: ModeProps) {
-  const { tagged, untagged } = useMemo(() => {
-    const tagged:   Recipe[] = [];
-    const untagged: Recipe[] = [];
-    for (const r of recipes) {
-      if (r.taxBatch && r.taxBatch.trim()) tagged.push(r); else untagged.push(r);
-    }
-    // Numeric-aware compare for "23" < "100" ordering.
-    tagged.sort((a, b) =>
-      a.taxBatch.localeCompare(b.taxBatch, undefined, { numeric: true }));
-    return { tagged, untagged };
-  }, [recipes]);
-  if (recipes.length === 0) return <Empty />;
-  return (
-    <div style={listStyle}>
-      {tagged.map(r => (
-        <ExplorerRow key={r.id} recipe={r} selected={r.id === previewId}
-          onPreview={() => onPreview(r.id)} onOpen={() => onOpen(r.id)} />
-      ))}
-      {untagged.length > 0 && (
-        <>
-          <SubHeader label="No tax batch" count={untagged.length} />
-          {untagged.map(r => (
-            <ExplorerRow key={r.id} recipe={r} selected={r.id === previewId}
-              onPreview={() => onPreview(r.id)} onOpen={() => onOpen(r.id)} />
-          ))}
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─── Mode: By Style ──────────────────────────────────────────────────
-
-interface StyleGroup {
-  key: string;             // styleKey or stripped style name
-  label: string;           // display label
-  recipes: Recipe[];
-}
-
-function ByStyle({ recipes, onPreview, onOpen, previewId }: ModeProps) {
-  const groups = useMemo<StyleGroup[]>(() => {
-    const m = new Map<string, StyleGroup>();
-    for (const r of recipes) {
-      // Group key: BJCP code (`r.styleKey`) when set, else the bare
-      // style name with any trailing "(Custom)" stripped. Recipes with
-      // neither bucket under the literal label "(no style)" so they're
-      // discoverable rather than silently dropped.
-      const key = (r.styleKey || '').trim()
-        || (r.style || '').replace(/\s*\([^)]*\)\s*$/, '').trim()
-        || '(no style)';
-      const label = formatRecipeStyleLine(r.style) || key;
-      const g = m.get(key);
-      if (g) g.recipes.push(r);
-      else m.set(key, { key, label, recipes: [r] });
-    }
-    const out = Array.from(m.values());
-    // Sort groups by display label, recipes within each group by beerName.
-    out.sort((a, b) => a.label.toLowerCase().localeCompare(b.label.toLowerCase()));
-    for (const g of out) {
-      g.recipes.sort((a, b) =>
-        (a.beerName || a.name || '').toLowerCase()
-          .localeCompare((b.beerName || b.name || '').toLowerCase()));
-    }
-    return out;
-  }, [recipes]);
-
-  // Per-group collapsed state. Default open. Local-only (different from
-  // folder.open which is persisted) — style groups have no model object.
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const toggle = (key: string) => setCollapsed(prev => {
-    const next = new Set(prev);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    return next;
-  });
-
-  if (groups.length === 0) return <Empty />;
-  return (
-    <div style={listStyle}>
-      {groups.map(g => (
-        <div key={g.key}>
-          <div
-            className="rb-folder-header"
-            style={{ paddingLeft: 8, cursor: 'pointer' }}
-            onClick={() => toggle(g.key)}
-          >
-            <span className={`rb-folder-arrow${!collapsed.has(g.key) ? ' open' : ''}`}>▶</span>
-            <span className="rb-folder-icon">🍺</span>
-            <span className="rb-folder-name">{g.label}</span>
-            <span className="rb-folder-count">{g.recipes.length}</span>
-          </div>
-          {!collapsed.has(g.key) && (
-            <div className="rb-folder-body">
-              {g.recipes.map(r => (
-                <ExplorerRow key={r.id} recipe={r} selected={r.id === previewId}
-                  onPreview={() => onPreview(r.id)} onOpen={() => onOpen(r.id)}
-                  indentPx={12} />
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── Mode: By Folder ────────────────────────────────────────────────
-//
-// Mirrors the sidebar tree's hierarchy + open state. No drag/drop, no
-// multi-select — click-to-open only. Right-click on blank area fires
-// the same "+ New Folder" menu the sidebar uses. Folder right-click is
-// not wired in this view (rename/delete stay in the sidebar to keep
-// surface area small).
-
-interface FolderViewProps extends ModeProps {
-  folders: Folder[];
-  setFolders: (folders: Folder[]) => void;
-  onBlankContext: (e: React.MouseEvent) => void;
-}
-
-function ByFolder({
-  recipes, folders, setFolders, onPreview, onOpen, previewId, onBlankContext,
-}: FolderViewProps) {
-  const childrenByParent = useMemo(() => {
-    const m = new Map<string | null, Folder[]>();
-    for (const f of folders) {
-      const list = m.get(f.parentId) ?? [];
-      list.push(f);
-      m.set(f.parentId, list);
-    }
-    return m;
-  }, [folders]);
-  const recipesByFolder = useMemo(() => {
-    const m = new Map<string, Recipe[]>();
-    for (const r of recipes) {
-      const list = m.get(r.folder) ?? [];
-      list.push(r);
-      m.set(r.folder, list);
-    }
-    return m;
-  }, [recipes]);
-  const descendantCount = useMemo(() => {
-    const m = new Map<string, number>();
-    const visit = (id: string): number => {
-      const cached = m.get(id);
-      if (cached !== undefined) return cached;
-      let n = recipesByFolder.get(id)?.length ?? 0;
-      for (const sub of childrenByParent.get(id) ?? []) n += visit(sub.id);
-      m.set(id, n);
-      return n;
-    };
-    for (const f of folders) visit(f.id);
-    return m;
-  }, [folders, childrenByParent, recipesByFolder]);
-  const unfiledRecipes = useMemo(() => {
-    const ids = new Set(folders.map(f => f.id));
-    return recipes.filter(r => !ids.has(r.folder));
-  }, [folders, recipes]);
-
-  const toggleOpen = (folderId: string) => {
-    setFolders(folders.map(f => f.id === folderId ? { ...f, open: !f.open } : f));
-  };
-
-  const renderFolder = (folder: Folder, depth: number): React.ReactNode => {
-    const indent = depth * 12;
-    const subs = childrenByParent.get(folder.id) ?? [];
-    const direct = recipesByFolder.get(folder.id) ?? [];
-    const empty = subs.length === 0 && direct.length === 0;
-    return (
-      <div key={folder.id} className="rb-folder">
-        <div
-          className="rb-folder-header"
-          style={{ paddingLeft: 8 + indent, cursor: 'pointer' }}
-          onClick={e => { e.stopPropagation(); toggleOpen(folder.id); }}
-          onContextMenu={e => e.stopPropagation() /* leave folder ctx to sidebar */}
-        >
-          <span className={`rb-folder-arrow${folder.open ? ' open' : ''}`}>▶</span>
-          <span className="rb-folder-icon">📁</span>
-          <span className="rb-folder-name">{folder.name}</span>
-          <span className="rb-folder-count">{descendantCount.get(folder.id) ?? 0}</span>
-        </div>
-        {folder.open && (
-          <div className="rb-folder-body">
-            {empty && <div className="rb-folder-empty" style={{ paddingLeft: 22 + indent }}>Empty</div>}
-            {subs.map(s => renderFolder(s, depth + 1))}
-            {direct.map(r => (
-              <ExplorerRow
-                key={r.id} recipe={r}
-                selected={r.id === previewId}
-                onPreview={() => onPreview(r.id)}
-                onOpen={() => onOpen(r.id)}
-                indentPx={(depth + 1) * 12}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const rootFolders = childrenByParent.get(null) ?? [];
-
-  return (
-    <div
-      style={listStyle}
-      onContextMenu={e => {
-        e.preventDefault();
-        onBlankContext(e);
-      }}
-    >
-      {rootFolders.map(f => renderFolder(f, 0))}
-      {unfiledRecipes.length > 0 && (
-        <div className="rb-folder">
-          <div className="rb-folder-header rb-folder-header-static" style={{ paddingLeft: 8 }}>
-            <span className="rb-folder-arrow rb-folder-arrow-spacer" />
-            <span className="rb-folder-icon">📁</span>
-            <span className="rb-folder-name">Unfiled</span>
-            <span className="rb-folder-count">{unfiledRecipes.length}</span>
-          </div>
-          {unfiledRecipes.map(r => (
-            <ExplorerRow
-              key={r.id} recipe={r}
-              selected={r.id === previewId}
-              onPreview={() => onPreview(r.id)}
-              onOpen={() => onOpen(r.id)}
-              indentPx={12}
-            />
-          ))}
-        </div>
-      )}
-      {folders.length === 0 && unfiledRecipes.length === 0 && recipes.length === 0 && (
-        <Empty />
-      )}
-    </div>
-  );
-}
-
 // ─── Row ─────────────────────────────────────────────────────────────
 
+/** Cell content for a column. taxBatch/style/date fall back to an em dash;
+ *  taxBatch renders amber when set. */
+function cellContent(col: ColKey, recipe: Recipe): React.ReactNode {
+  switch (col) {
+    case 'taxBatch': {
+      const v = (recipe.taxBatch || '').trim();
+      return v
+        ? <span style={{ color: 'var(--amber)' }}>{v}</span>
+        : <span style={{ color: 'var(--text-muted)' }}>—</span>;
+    }
+    case 'beerName': return recipe.beerName || recipe.name || '(unnamed)';
+    case 'style':    return recipe.style || '—';
+    case 'brewDate': return recipe.brewDate || '—';
+    case 'version':  return `v${recipe.version || '1.0'}`;
+  }
+}
+
 function ExplorerRow({
-  recipe, selected = false, onPreview, onOpen, indentPx = 0,
+  recipe, cols, selected = false, zebra = false, onPreview, onOpen,
 }: {
   recipe: Recipe;
+  cols: ColKey[];
   selected?: boolean;
+  zebra?: boolean;
   onPreview: () => void;
   onOpen: () => void;
-  indentPx?: number;
 }) {
-  const nameLine = recipe.beerName || recipe.name || '(unnamed)';
-  const styleLine = formatRecipeStyleLine(recipe.style);
-  const versionLine = `v${recipe.version || '1.0'}`;
+  const [hover, setHover] = useState(false);
 
   // Debounce single-click. Browsers fire onClick before onDoubleClick
-  // (~250-500ms gap), so without this, a double-click flashes the
-  // preview before the editor takes over. Hold the preview trigger in a
-  // 250ms timeout; cancel it if a second click lands and let onOpen
-  // run instead. Cleared on unmount so a row that disappears mid-delay
-  // (mode switch, recipe deleted) doesn't fire a stale preview.
+  // (~250-500ms gap), so without this a double-click flashes the preview
+  // before the editor takes over. Hold the preview trigger in a 250ms
+  // timeout; cancel it if a second click lands. Cleared on unmount so a
+  // row that disappears mid-delay doesn't fire a stale preview.
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelPending = () => {
     if (clickTimer.current !== null) {
@@ -606,42 +381,39 @@ function ExplorerRow({
   };
   useEffect(() => cancelPending, []);
 
+  const background = selected
+    ? 'var(--panel2)'
+    : hover
+      ? 'var(--panel)'
+      : zebra
+        ? 'rgba(255,255,255,0.03)'
+        : 'transparent';
+
   return (
-    <div
-      className={`recipe-item${selected ? ' selected' : ''}`}
-      style={{ paddingLeft: 10 + indentPx, cursor: 'pointer' }}
-      onClick={e => {
-        e.stopPropagation();
+    <tr
+      style={{ background, cursor: 'pointer' }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onClick={() => {
         cancelPending();
         clickTimer.current = setTimeout(() => {
           clickTimer.current = null;
           onPreview();
         }, 250);
       }}
-      onDoubleClick={e => {
-        e.stopPropagation();
+      onDoubleClick={() => {
         cancelPending();
         onOpen();
       }}
     >
-      <div className="recipe-item-info">
-        <div className="recipe-item-name">{nameLine}</div>
-        {styleLine && <div className="recipe-item-meta">{styleLine}</div>}
-        <div className="recipe-item-version">{versionLine}</div>
-      </div>
-    </div>
+      {cols.map(col => (
+        <td key={col} style={tdStyle}>{cellContent(col, recipe)}</td>
+      ))}
+    </tr>
   );
 }
 
 // ─── Misc ────────────────────────────────────────────────────────────
-
-function SubHeader({ label, count }: { label: string; count: number }) {
-  return (
-    <div style={subHeaderStyle}>
-      {label} <span style={{ color: 'var(--text-muted)' }}>· {count}</span>
-    </div>
-  );
-}
 
 function Empty() {
   return (
@@ -692,7 +464,7 @@ const searchClearStyle: React.CSSProperties = {
   padding: '2px 6px', fontSize: 11,
 };
 
-const originSelectStyle: React.CSSProperties = {
+const filterSelectStyle: React.CSSProperties = {
   background: 'var(--panel2)',
   border: '1px solid var(--border2)',
   color: 'var(--text)',
@@ -724,14 +496,34 @@ const closeBtnStyle: React.CSSProperties = {
   padding: '2px 8px', fontSize: 11,
 };
 
-const listStyle: React.CSSProperties = {
-  padding: '4px 0',
+const tableStyle: React.CSSProperties = {
+  width: '100%',
+  borderCollapse: 'collapse',
+  fontFamily: 'var(--mono)',
+  fontSize: 11,
 };
 
-const subHeaderStyle: React.CSSProperties = {
-  padding: '8px 14px 4px',
-  fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: 1,
-  color: 'var(--text-muted)', textTransform: 'uppercase',
+const thStyle: React.CSSProperties = {
+  position: 'sticky', top: 0, zIndex: 1,
+  background: 'var(--panel2)',
+  borderBottom: '1px solid var(--border)',
+  padding: '8px 10px',
+  textAlign: 'left',
+  color: 'var(--text-muted)',
+  fontWeight: 600,
+  cursor: 'pointer',
+  userSelect: 'none',
+  whiteSpace: 'nowrap',
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: '6px 10px',
+  color: 'var(--text)',
+  whiteSpace: 'nowrap',
+};
+
+const sortArrowStyle: React.CSSProperties = {
+  color: 'var(--amber)',
 };
 
 const emptyStyle: React.CSSProperties = {
