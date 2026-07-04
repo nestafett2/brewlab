@@ -1235,7 +1235,7 @@ export default function Desktop() {
       {isRecipeOpen && selectedRecipeForMeta && (
         <div
           className="recipe-meta-bar"
-          style={recipeSubTab === 'ingredients' ? { paddingLeft: 236 } : undefined}
+          style={undefined}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0, minWidth: 120 }}>
             <input
@@ -1349,7 +1349,7 @@ export default function Desktop() {
       {isRecipeOpen && (
         <div
           className="tabbar"
-          style={recipeSubTab === 'ingredients' ? { paddingLeft: 236 } : undefined}
+          style={undefined}
         >
           {([
             ['ingredients', 'Ingredients'],
