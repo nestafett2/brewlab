@@ -5,6 +5,7 @@
   --panel: #2c2c2e;
   --panel2: #3a3a3c;
   --panel3: #48484a;
+  --surface-raised: #242426;
   --border: rgba(255, 255, 255, 0.10);
   --border2: rgba(255, 255, 255, 0.16);
   --border3: rgba(255, 255, 255, 0.22);
@@ -63,6 +64,7 @@ body.light {
   --panel: #ffffff;
   --panel2: #e5e5ea;
   --panel3: #d1d1d6;
+  --surface-raised: #f8f8fa;
   --border: rgba(0, 0, 0, 0.10);
   --border2: rgba(0, 0, 0, 0.16);
   --border3: rgba(0, 0, 0, 0.22);
@@ -294,11 +296,12 @@ button, .btn, .sidebar-btn, .tab, .sub-tab, .menu-item, .menu-dd-item, .ctx-item
 
 .tab:hover {
   color: var(--text-dim);
-  background: var(--panel);
+  background: var(--amber-glow);
+  box-shadow: 0 0 10px var(--amber-glow);
 }
 
 .tab.active {
-  color: var(--text);
+  color: var(--amber);
   background: var(--panel2);
 }
 
@@ -326,7 +329,7 @@ button, .btn, .sidebar-btn, .tab, .sub-tab, .menu-item, .menu-dd-item, .ctx-item
 }
 
 .sub-tab {
-  padding: 0 16px;
+  padding: 0 12px;
   height: 36px;
   display: flex;
   align-items: center;
@@ -340,15 +343,18 @@ button, .btn, .sidebar-btn, .tab, .sub-tab, .menu-item, .menu-dd-item, .ctx-item
   background: none;
   border-bottom: 2px solid transparent;
   transition: all 0.12s;
+  white-space: nowrap;
 }
 
 .sub-tab:hover {
-  color: var(--text-dim);
+  color: var(--text);
+  background: var(--amber-glow);
+  box-shadow: 0 0 12px var(--amber-glow);
 }
 
 .sub-tab.active {
-  color: var(--text);
-  border-bottom-color: var(--blue);
+  color: var(--amber);
+  border-bottom-color: var(--amber);
 }
 
 /* --- Recipe Meta Bar --- */
@@ -582,11 +588,12 @@ button, .btn, .sidebar-btn, .tab, .sub-tab, .menu-item, .menu-dd-item, .ctx-item
 .recipe-item {
   display: flex;
   align-items: center;
-  padding: 8px 10px 8px 22px;
+  padding: 10px 10px 10px 22px;
   cursor: pointer;
   border-bottom: 1px solid var(--border);
   transition: all 0.08s;
   border-left: 2px solid transparent;
+  min-height: 44px;
 }
 
 .recipe-item:hover {

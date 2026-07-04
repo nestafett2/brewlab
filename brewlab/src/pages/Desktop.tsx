@@ -1491,7 +1491,6 @@ export default function Desktop() {
                             key={key}
                             className={`sub-tab${recipeSubTab === key ? ' active' : ''}`}
                             onClick={() => setRecipeSubTab(key)}
-                            style={{ flex: 1, justifyContent: 'center' }}
                           >
                             {label}
                           </div>

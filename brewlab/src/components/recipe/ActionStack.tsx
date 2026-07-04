@@ -71,7 +71,7 @@ export default function ActionStack({
 
 const containerStyle: React.CSSProperties = {
   width: 188, flexShrink: 0,
-  background: 'var(--bg)',
+  background: 'var(--panel)',
   borderLeft: '1px solid var(--border)',
   padding: '8px 0',
   overflowY: 'auto',

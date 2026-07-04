@@ -104,7 +104,7 @@ export default function RecipeActionLeft({
 
 const containerStyle: React.CSSProperties = {
   width: 188, flexShrink: 0,
-  background: 'var(--bg)',
+  background: 'var(--panel)',
   borderRight: '1px solid var(--border)',
   padding: '8px 0',
   overflowY: 'auto',
