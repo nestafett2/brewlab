@@ -122,7 +122,7 @@ export default function Desktop() {
   const getColdSide              = useStore(s => s.getColdSide);
   const [printMenuOpen, setPrintMenuOpen] = useState(false);
   const printMenuRef = useRef<HTMLDivElement>(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   // Close the Print dropdown on any click outside it, and on Escape.
   // Deferred mousedown listener so the click that opens the menu doesn't
