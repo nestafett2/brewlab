@@ -85,6 +85,13 @@ export default function NtaPage() {
   const [printSelecting, setPrintSelecting] = useState(false);
   const [printSelected, setPrintSelected]   = useState<Set<number>>(new Set());
 
+  // Page mode — checker workflow vs. full-page register table.
+  const [mode, setMode] = useState<'checker' | 'register'>('checker');
+  // Register sort lifted here so the same toolbar works from either the
+  // register card header (checker mode) or the page header (register mode).
+  const [registerSort, setRegisterSort] = useState<'asc' | 'desc'>('desc');
+  const toggleRegisterSort = () => setRegisterSort(o => o === 'desc' ? 'asc' : 'desc');
+
   const handleSelectRecipe = (newId: string) => {
     setSelectedRecipeId(newId);
     setCheckedRecipeId(null);
@@ -229,12 +236,42 @@ export default function NtaPage() {
         <span style={{ fontFamily: 'var(--display)', fontSize: 18, letterSpacing: 2, color: 'var(--amber)' }}>
           RECIPE SUBMITTER
         </span>
+        <div className="segmented-control">
+          <button
+            className={`seg-btn${mode === 'checker' ? ' active' : ''}`}
+            onClick={() => setMode('checker')}
+          >Recipe Checker</button>
+          <button
+            className={`seg-btn${mode === 'register' ? ' active' : ''}`}
+            onClick={() => setMode('register')}
+          >Submitted Register</button>
+        </div>
         <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-dim)' }}>
           ビール・発泡酒の１仕込製造方法 (CC1-5610-6)
         </span>
+        {mode === 'register' && (
+          <div style={{ marginLeft: 'auto' }}>
+            <RegisterControls
+              sortOrder={registerSort}
+              onToggleSort={toggleRegisterSort}
+              printSelecting={printSelecting}
+              printSelected={printSelected}
+              onSelectAllPrint={handleSelectAllPrint}
+              onPrintForm={handlePrintForm}
+              onCancelPrintSelect={handleCancelPrintSelect}
+              onPrintSelected={() => setPrintSelecting(true)}
+              onPrintAll={() => printNtaFormSummary(ntaRegister)}
+            />
+          </div>
+        )}
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={mode === 'register'
+        ? { flex: 1, overflow: 'hidden', padding: 16, display: 'flex', flexDirection: 'column' }
+        : { flex: 1, overflow: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }
+      }>
+        {mode === 'checker' && (
+        <>
         {/* Match found → show results first, above the checker. */}
         {matchFirst && matchResultsSection}
 
@@ -301,12 +338,17 @@ export default function NtaPage() {
 
         {/* ── 2. Match Results — below the checker when there's no match ── */}
         {!matchFirst && matchResultsSection}
+        </>
+        )}
 
         {/* ── 3. Submitted Recipes Register ── */}
         <SubmittedRegister
           rows={ntaRegister}
           onDelete={handleDelete}
           onShowDetail={i => setDetailIdx(i)}
+          fullPage={mode === 'register'}
+          sortOrder={registerSort}
+          onToggleSort={toggleRegisterSort}
           printSelecting={printSelecting}
           printSelected={printSelected}
           onTogglePrint={handleTogglePrint}
@@ -341,9 +383,45 @@ export default function NtaPage() {
 // Submitted Register
 // ═══════════════════════════════════════════════════════════════════
 
+function RegisterControls({
+  sortOrder, onToggleSort, printSelecting, printSelected,
+  onSelectAllPrint, onPrintForm, onCancelPrintSelect, onPrintSelected, onPrintAll,
+}: {
+  sortOrder: 'asc' | 'desc';
+  onToggleSort: () => void;
+  printSelecting: boolean;
+  printSelected: Set<number>;
+  onSelectAllPrint: () => void;
+  onPrintForm: () => void;
+  onCancelPrintSelect: () => void;
+  onPrintSelected: () => void;
+  onPrintAll: () => void;
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <button className="btn sm" onClick={onToggleSort}>
+        {sortOrder === 'desc' ? '↑ Oldest first' : '↓ Newest first'}
+      </button>
+      {printSelecting ? (
+        <>
+          <button className="btn sm" onClick={onSelectAllPrint}>Select All</button>
+          <button className="btn primary" disabled={printSelected.size === 0} onClick={onPrintForm}>Print Selected</button>
+          <button className="btn sm" onClick={onCancelPrintSelect}>Cancel</button>
+        </>
+      ) : (
+        <>
+          <button className="btn sm" onClick={onPrintSelected}>🖨 Print Form</button>
+          <button className="btn sm" onClick={onPrintAll}>🖨 Print All</button>
+        </>
+      )}
+    </div>
+  );
+}
+
 function SubmittedRegister({
   rows, onDelete, onShowDetail, printSelecting, printSelected, onTogglePrint, onPrintAll,
   onPrintSelected, onSelectAllPrint, onPrintForm, onCancelPrintSelect,
+  sortOrder, onToggleSort, fullPage = false,
 }: {
   rows: NtaSubmission[];
   onDelete: (idx: number) => void;
@@ -357,9 +435,12 @@ function SubmittedRegister({
   onSelectAllPrint: () => void;
   onPrintForm: () => void;
   onCancelPrintSelect: () => void;
+  sortOrder: 'asc' | 'desc';
+  onToggleSort: () => void;
+  /** Full-page mode: no card chrome, fills height, header toolbar hidden
+   *  (its controls live in the page header instead). */
+  fullPage?: boolean;
 }) {
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-
   const sortedRows = [...rows]
     .map((r, i) => ({ r, origIdx: i }))
     .sort((a, b) => sortOrder === 'desc'
@@ -367,45 +448,40 @@ function SubmittedRegister({
       : a.r.date.localeCompare(b.r.date));
 
   return (
-    <div style={{
-      background: 'var(--panel2)', border: '1px solid var(--border2)',
-      borderRadius: 10, overflow: 'hidden',
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '10px 16px', borderBottom: '1px solid var(--border2)',
-      }}>
-        <span style={{
-          fontFamily: 'var(--display)', fontSize: 13, color: 'var(--amber)',
-          letterSpacing: 2,
+    <div style={fullPage
+      ? { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }
+      : { background: 'var(--panel2)', border: '1px solid var(--border2)', borderRadius: 10, overflow: 'hidden' }
+    }>
+      {!fullPage && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 16px', borderBottom: '1px solid var(--border2)',
         }}>
-          SUBMITTED RECIPES
-        </span>
-        <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>
-          — all amounts per 1000L batch
-        </span>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button
-            className="btn sm"
-            onClick={() => setSortOrder(o => o === 'desc' ? 'asc' : 'desc')}
-          >
-            {sortOrder === 'desc' ? '↑ Oldest first' : '↓ Newest first'}
-          </button>
-          {printSelecting ? (
-            <>
-              <button className="btn sm" onClick={onSelectAllPrint}>Select All</button>
-              <button className="btn primary" disabled={printSelected.size === 0} onClick={onPrintForm}>Print Selected</button>
-              <button className="btn sm" onClick={onCancelPrintSelect}>Cancel</button>
-            </>
-          ) : (
-            <>
-              <button className="btn sm" onClick={onPrintSelected}>🖨 Print Form</button>
-              <button className="btn sm" onClick={onPrintAll}>🖨 Print All</button>
-            </>
-          )}
+          <span style={{
+            fontFamily: 'var(--display)', fontSize: 13, color: 'var(--amber)',
+            letterSpacing: 2,
+          }}>
+            SUBMITTED RECIPES
+          </span>
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>
+            — all amounts per 1000L batch
+          </span>
+          <div style={{ marginLeft: 'auto' }}>
+            <RegisterControls
+              sortOrder={sortOrder}
+              onToggleSort={onToggleSort}
+              printSelecting={printSelecting}
+              printSelected={printSelected}
+              onSelectAllPrint={onSelectAllPrint}
+              onPrintForm={onPrintForm}
+              onCancelPrintSelect={onCancelPrintSelect}
+              onPrintSelected={onPrintSelected}
+              onPrintAll={onPrintAll}
+            />
+          </div>
         </div>
-      </div>
-      <div style={{ overflowX: 'auto' }}>
+      )}
+      <div style={{ overflowX: 'auto', overflowY: fullPage ? 'auto' : 'visible', flex: fullPage ? 1 : undefined }}>
         <table style={{
           width: '100%', borderCollapse: 'collapse',
           fontFamily: 'var(--mono)', fontSize: 10,
