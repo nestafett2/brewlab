@@ -4,6 +4,28 @@
 
 ---
 
+## Finding and Browsing Recipes (Recipe Explorer)
+
+The Recipe Explorer gives you a spreadsheet-style view of every recipe in your brewery, which makes it easy to find a particular beer or compare your recipes at a glance.
+
+1. Open the Recipes tab and click the **Recipe Explorer** button. All of your recipes appear in a table, one beer per row.
+2. To sort the table, click any column heading. For example, click **Beer Name** to put the beers in alphabetical order, or click **Date** to order them by brew date. Click the same heading a second time to reverse the order.
+3. To rearrange the columns, click and hold a column heading and drag it left or right to wherever you want it. The layout you choose is remembered for next time.
+4. To change which columns are shown, right-click any column heading. A menu appears listing every column that is available — tick the ones you want to see and untick the ones you don't.
+5. To find one particular beer, start typing its name into the **search bar**. The table narrows down to matching recipes as you type.
+6. To show only beers of a certain style, choose the style from the **Style** dropdown. Choose "All Styles" again to clear the filter.
+7. To separate your own beers from collaborations and contract brews, use the **Origin** dropdown and choose Own Brand, Collab, or OEM. Choose "All Origins" to clear it.
+
+To open a recipe from the table, double-click its row.
+
+---
+
+## Opening Pages (Libraries, Notes, Settings)
+
+Libraries, Notes, and Settings each open as their own tab along the top of the screen, exactly the way an open recipe does. When you open one of them from the menu, a new tab appears alongside the others, and you can click that tab at any time to come back to it. When you have finished with a page, click the small **×** at the right-hand end of its tab to close it and keep your workspace tidy.
+
+---
+
 ## Workflow 1: Creating a Recipe
 
 **1. Open the Recipes tab**
@@ -42,20 +64,11 @@ File menu → Save as Template.
 
 ### Saving a Recipe as a Template
 
-Templates let you reuse a recipe's structure as the starting point for new brews.
+If you often brew variations on the same beer, you can save a recipe as a template and reuse it as the starting point for future brews.
 
-**1. Open the recipe you want to save as a template**
-Select it in the recipe browser so it's the active recipe.
-
-**2. Click File in the menu bar**
-
-**3. Click "Save as Template"**
-
-**4. The recipe is now saved as a template**
-It's available whenever you create a new recipe.
-
-**5. To use the template**
-Click + New in the recipe browser sidebar → select the **From Template** tab → choose your template.
+1. Open the recipe you want to turn into a template, so that it is the recipe currently on screen.
+2. Click **File** in the menu bar at the top of the window, then click **Save as Template**. Your recipe is now stored as a template and is ready to reuse.
+3. The next time you create a beer, click **+ New** in the recipe sidebar, choose the **From Template** tab, and pick your saved template to build the new recipe from it.
 
 ---
 
@@ -156,6 +169,16 @@ If you receive the same ingredient on a regular schedule (e.g. 200 kg of pilsner
 **4. Click Save**
 
 The recurring delivery will now appear as a delivery column in the forecast within the next 90 days.
+
+---
+
+## Production Planner
+
+The Production Planner is a calendar-style timeline that shows which beer is in which fermenter or tank, and when. You add brews to it from a recipe (see "Add the brew to the Planner" above), and it builds up automatically as you schedule your season.
+
+1. Click **PLANNER** in the top tab bar to open it. Each vessel has its own row, and time runs from left to right across the top.
+2. If your brewery has many vessels but only a few are in use, click **Hide Empty Vessels** to collapse every fermenter and tank that has nothing scheduled. This leaves only the vessels that are actually in use, which makes the planner much easier to read. Click the button again whenever you want to see all of your vessels.
+3. To print the schedule, click the **Print** button. This prints the planner exactly as you are currently viewing it — useful for pinning up on the brewery wall or handing to your team.
 
 ---
 
@@ -303,6 +326,26 @@ Fill in the notes sections at the bottom.
 
 ---
 
+## Rating a Beer and Writing Tasting Notes (Analysis Tab)
+
+Once a beer has been brewed and packaged, the Analysis tab is where you record how it turned out — a star rating, written tasting notes, and, if you like, scores from a full tasting panel.
+
+1. Open the recipe and click the **Analysis** sub-tab.
+2. To rate the beer, click the stars in the tasting section. Clicking the fourth star, for example, gives the beer four out of five. To clear the rating completely, click the same star again.
+3. Write your tasting notes in the five boxes provided: **Appearance**, **Aroma**, **Flavor**, **Mouthfeel**, and **Overall Impression**. Put as much or as little as you like in each box; your notes are saved automatically as you type.
+4. Use the **Brew Again?** buttons to record whether you would make this beer again — Yes, Maybe, or No. Click the button again to clear your choice.
+
+To run a full tasting panel and build up an average score across several people:
+
+5. Click **＋ Add Tasting**. A short step-by-step wizard opens.
+6. Enter the taster's name and the date, then click **Start Tasting**.
+7. Score the **Hop & Fruit Character** descriptors first. For each descriptor, click a number from 0 to 5 to say how strongly you detect it — half-point scores are available for anything in between. When you have scored them all, click **Next**.
+8. Score the **Malt & Fermentation Character** descriptors in the same way, then click **Save Tasting**.
+9. Repeat this for as many tasters as you like — you can invite the whole team. Each saved tasting appears as its own card, and the two radar charts update automatically to show the average score across everyone who has tasted the beer.
+10. To run a tasting session on paper, click **Print Tasting Sheet**. This prints blank scorecards you can hand out at the session; each person fills one in by hand, and you can type their scores into BrewLab afterwards.
+
+---
+
 ## Workflow 7: NTA Tax Filing
 
 > ⚠ Tax records are legally binding. Once you click "Record to Tax Master," figures are permanently frozen. Read this workflow carefully before proceeding.
@@ -321,13 +364,12 @@ This permanently snapshots all tax figures. Editing recipe or packaging data aft
 **4. Open Tax Master**
 Click TAX MASTER in the top tab bar. Filter by date range and classification, print individual sub-tabs, or export the full three-tab Excel workbook.
 
-**5. Generate NTA submission form (if required)**
-Click SUBMITTER in the top tab bar. Select the beer name. The app normalises all ingredients to per-1000L quantities and checks it against your submission register.
+**5. Check and submit the recipe (NTA Submitter)**
+Click SUBMITTER in the top tab bar. The NTA Submitter has two modes, and you switch between them using the buttons at the top of the screen.
 
-- Click **🔍 Check** to run the comparison. If a match is found, the recipe is already on file and no new submission is needed.
-- If no match is found, click **✓ Mark as Submitted** to add it to your register.
-- Click **🖨 Print Form** to print selected recipes in the official CC1-5610-6 horizontal layout (4 per A4 page). This button only appears after a Check has confirmed a match.
-- Click **🖨 Print All** in the Submitted Recipes Register to print your full submission history as a compact summary table (~50 recipes per A4 page). Use this when the tax office asks for a complete record.
+Use **Recipe Checker** to check a recipe before you submit it. Choose the beer from the dropdown and click **Check**. BrewLab converts every ingredient to standard per-1,000-litre quantities and compares them against everything you have already submitted. If it finds a match, the recipe is already on file and there is nothing more to do. If it finds no match, click **Mark as Submitted** to add the recipe to your register, then click **Print Form** to print the official CC1-5610-6 form (four recipes per A4 page) to send to the tax office.
+
+Use **Submitted Register** to see the full list of recipes you have already submitted to the NTA. From here you can click **Print All** to print your entire submission history as a compact summary table — useful whenever the tax office asks you for a complete record.
 
 ---
 
