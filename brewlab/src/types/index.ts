@@ -988,6 +988,26 @@ export interface TabVisibility {
   notes: boolean;
 }
 
+// === Tasting Panel (Analysis-tab sensory scoring) ===
+
+export interface TasterScore {
+  id: string;
+  name: string;
+  date: string;
+  hopChart: {
+    citrus: number; tropical: number; berry: number; stoneFruit: number;
+    floral: number; piney: number; dank: number; earthy: number; spicy: number;
+  };
+  maltChart: {
+    lightGrain: number; darkGrain: number; sweet: number; nutty: number;
+    sour: number; funky: number; fullBody: number; clean: number;
+  };
+}
+
+export interface TastingPanel {
+  tasters: TasterScore[];
+}
+
 // === Tax Ledger ===
 
 /**

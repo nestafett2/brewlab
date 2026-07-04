@@ -23,9 +23,10 @@ import {
   platoToSg, calcActualEfficiency,
 } from '../../lib/calculations';
 import { printAnalysisSheet } from './analysisSheetPrint';
+import TastingModal from './TastingModal';
 import type {
   Ingredient, BrewDayData, FermLogEntry, FermMeta, ColdSideData,
-  TaxRecord,
+  TaxRecord, TasterScore,
 } from '../../types';
 
 interface Props { recipeId: string }
@@ -62,6 +63,19 @@ export default function AnalysisTab({ recipeId }: Props) {
   // Subscribe so external edits to the cached tax/cold blobs trigger re-render.
   const taxRecordCache = useStore(s => s.taxRecordsByRecipe[recipeId]);
   void taxRecordCache;
+
+  // ── Tasting panel ────────────────────────────────────────────────────
+  const tastingPanel     = useStore(s => s.tastingPanelByRecipe[recipeId]);
+  const getTastingPanel  = useStore(s => s.getTastingPanel);
+  const addTaster        = useStore(s => s.addTaster);
+  const deleteTaster     = useStore(s => s.deleteTaster);
+  const [tastingModalOpen, setTastingModalOpen] = useState(false);
+  // Lazy-prime the tasting-panel cache on mount (same pattern as mash /
+  // recipe-profiles). Subsequent renders read `tastingPanel` directly.
+  useEffect(() => {
+    if (tastingPanel === undefined) getTastingPanel(recipeId);
+  }, [tastingPanel, recipeId, getTastingPanel]);
+  const tasters = tastingPanel?.tasters ?? [];
 
   // ── Local state — only the editable analysis-notes textarea ──────────
   const [cs, setCs] = useState<ColdSideData>(() => getColdSide(recipeId));
@@ -280,10 +294,6 @@ export default function AnalysisTab({ recipeId }: Props) {
         <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-dim)' }}>
           Printable brew summary
         </span>
-        <StarRating
-          rating={recipe.rating || 0}
-          onSet={n => updateRecipe(recipeId, { rating: n })}
-        />
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button className="btn" onClick={handlePrint}>🖨 Print / PDF</button>
         </div>
@@ -507,8 +517,188 @@ export default function AnalysisTab({ recipeId }: Props) {
               />
             </div>
           </SectionPanel>
+
+          {/* ── Sensory: star rating + tasting panel ── */}
+          <SectionPanel title="Tasting Panel">
+            <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* 5a — overall star rating */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{
+                  fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: 1,
+                  textTransform: 'uppercase', color: 'var(--text-muted)',
+                }}>Overall</span>
+                <StarRating
+                  rating={recipe.rating || 0}
+                  onSet={n => updateRecipe(recipeId, { rating: n })}
+                />
+              </div>
+
+              {/* 5b — tasting panel header + add */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{
+                  fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: 1,
+                  textTransform: 'uppercase', color: 'var(--amber)',
+                }}>Tasting Panel</span>
+                <button
+                  className="btn sm primary"
+                  style={{ marginLeft: 'auto' }}
+                  onClick={() => setTastingModalOpen(true)}
+                >＋ Add Tasting</button>
+              </div>
+
+              {/* Saved taster cards */}
+              {tasters.length === 0 ? (
+                <div style={{
+                  padding: '10px 0', textAlign: 'center', color: 'var(--text-muted)',
+                  fontFamily: 'var(--mono)', fontSize: 10,
+                }}>No tastings yet.</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {tasters.map(t => (
+                    <TasterCard key={t.id} taster={t} onDelete={() => deleteTaster(recipeId, t.id)} />
+                  ))}
+                </div>
+              )}
+
+              {/* 5c — averaged radar charts */}
+              {tasters.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 24 }}>
+                  <RadarChart
+                    title="HOP & FRUIT"
+                    axes={HOP_AXES}
+                    values={HOP_KEYS.map(k => avg(tasters.map(t => t.hopChart[k])))}
+                  />
+                  <RadarChart
+                    title="MALT & FERMENTATION"
+                    axes={MALT_AXES}
+                    values={MALT_KEYS.map(k => avg(tasters.map(t => t.maltChart[k])))}
+                  />
+                </div>
+              )}
+            </div>
+          </SectionPanel>
         </>
       </div>
+
+      {tastingModalOpen && (
+        <TastingModal
+          recipeId={recipeId}
+          onSave={score => addTaster(recipeId, score)}
+          onClose={() => setTastingModalOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Tasting-panel descriptors / helpers ─────────────────────────────────
+
+const HOP_KEYS: (keyof TasterScore['hopChart'])[] = [
+  'citrus', 'tropical', 'berry', 'stoneFruit', 'floral', 'piney', 'dank', 'earthy', 'spicy',
+];
+const HOP_AXES = ['Citrus', 'Tropical', 'Berry', 'Stone Fruit', 'Floral', 'Piney', 'Dank', 'Earthy', 'Spicy'];
+
+const MALT_KEYS: (keyof TasterScore['maltChart'])[] = [
+  'lightGrain', 'darkGrain', 'sweet', 'nutty', 'sour', 'funky', 'fullBody', 'clean',
+];
+const MALT_AXES = ['Light Grain', 'Dark Grain', 'Sweet', 'Nutty', 'Sour', 'Funky', 'Full Body', 'Clean'];
+
+function avg(xs: number[]): number {
+  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+}
+
+function fmtScore(s: number): string {
+  const whole = Math.floor(s);
+  const half = s - whole >= 0.5;
+  if (half) return whole === 0 ? '½' : `${whole}½`;
+  return String(whole);
+}
+
+// Read-only card for one saved taster: name/date + delete, then two rows
+// of compact score pills (hop chart, malt chart).
+function TasterCard({ taster, onDelete }: { taster: TasterScore; onDelete: () => void }) {
+  const pill = (label: string, v: number) => (
+    <span key={label} style={{
+      fontFamily: 'var(--mono)', fontSize: 9, padding: '2px 5px', borderRadius: 4,
+      background: 'var(--panel2)', color: v > 0 ? 'var(--text)' : 'var(--text-muted)',
+      whiteSpace: 'nowrap',
+    }}>{label} {fmtScore(v)}</span>
+  );
+  return (
+    <div style={{
+      border: '1px solid var(--border2)', borderRadius: 8, padding: '8px 10px',
+      display: 'flex', flexDirection: 'column', gap: 6,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>
+          {taster.name}
+        </span>
+        <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>
+          {taster.date}
+        </span>
+        <button
+          className="btn sm"
+          style={{ marginLeft: 'auto', padding: '1px 7px' }}
+          title="Delete tasting"
+          onClick={onDelete}
+        >✕</button>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+        {HOP_KEYS.map((k, i) => pill(HOP_AXES[i], taster.hopChart[k]))}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+        {MALT_KEYS.map((k, i) => pill(MALT_AXES[i], taster.maltChart[k]))}
+      </div>
+    </div>
+  );
+}
+
+// Averaged radar chart. viewBox -140..280, radius 110, axis i at
+// angle (2π·i/N) − π/2.
+function RadarChart({ title, axes, values }: { title: string; axes: string[]; values: number[] }) {
+  const R = 110;
+  const N = axes.length;
+  const pt = (s: number, i: number): { x: number; y: number } => {
+    const a = (2 * Math.PI * i / N) - Math.PI / 2;
+    return { x: (s / 5) * R * Math.cos(a), y: (s / 5) * R * Math.sin(a) };
+  };
+  const ring = (s: number) =>
+    axes.map((_, i) => { const p = pt(s, i); return `${p.x.toFixed(1)},${p.y.toFixed(1)}`; }).join(' ');
+  const dataPoly = values.map((v, i) => { const p = pt(v, i); return `${p.x.toFixed(1)},${p.y.toFixed(1)}`; }).join(' ');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: 1, color: 'var(--amber)', marginBottom: 4 }}>
+        {title}
+      </div>
+      <svg width={280} height={280} viewBox="-140 -140 280 280">
+        {/* grid rings at scores 1..5 */}
+        {[1, 2, 3, 4, 5].map(s => (
+          <polygon key={s} points={ring(s)} fill="none" stroke="var(--border2)" strokeWidth={0.5} />
+        ))}
+        {/* axis lines */}
+        {axes.map((_, i) => {
+          const p = pt(5, i);
+          return <line key={i} x1={0} y1={0} x2={p.x} y2={p.y} stroke="var(--border2)" strokeWidth={0.5} />;
+        })}
+        {/* averaged polygon */}
+        <polygon points={dataPoly} fill="var(--amber)" fillOpacity={0.35} stroke="var(--amber)" strokeWidth={1.5} />
+        {/* axis labels at tips */}
+        {axes.map((label, i) => {
+          const p = pt(5.6, i);
+          return (
+            <text
+              key={i}
+              x={p.x}
+              y={p.y}
+              fontSize={9}
+              fill="var(--text-muted)"
+              fontFamily="var(--mono)"
+              textAnchor="middle"
+              dominantBaseline="middle"
+            >{label}</text>
+          );
+        })}
+      </svg>
     </div>
   );
 }
@@ -533,7 +723,7 @@ function StarRating({ rating, onSet }: { rating: number; onSet: (n: number) => v
               onClick={() => onSet(rating === n ? 0 : n)}
               onMouseEnter={() => setHover(n)}
               style={{
-                cursor: 'pointer', fontSize: 22, padding: '0 2px',
+                cursor: 'pointer', fontSize: 24, padding: '0 2px',
                 color: active ? 'var(--amber)' : 'var(--border3)',
               }}
             >{active ? '★' : '☆'}</span>

@@ -35,6 +35,7 @@ import type {
   TaxRecord, TaxMasterRow, Classification, NtaSubmission,
   RecipeProfileSelections, RecipeProfileKind,
   Template, TariffData,
+  TastingPanel, TasterScore,
 } from '../types';
 
 // === Toast timer state ===
@@ -217,6 +218,9 @@ export interface BrewLabState {
   // writer). `undefined` = not yet loaded into cache; `null` = loaded but
   // user has no saved profile (consumers fall back to DEFAULT_MASH_PROFILE).
   mashByRecipe: Record<string, MashProfile | null>;
+  // Per-recipe sensory tasting panel (Analysis tab). Reactive map keyed by
+  // recipeId — `undefined` = not yet loaded into cache.
+  tastingPanelByRecipe: Record<string, TastingPanel>;
 
   // Tax records — per-recipe working blob, lazy-loaded like ingredientsByRecipe
   taxRecordsByRecipe: Record<string, TaxRecord>;
@@ -392,6 +396,11 @@ export interface BrewLabState {
   setWaterChem: (recipeId: string, data: WaterChemData) => void;
   getMash: (recipeId: string) => MashProfile | null;
   setMash: (recipeId: string, profile: MashProfile | null) => void;
+  getTastingPanel: (recipeId: string) => TastingPanel;
+  setTastingPanel: (recipeId: string, panel: TastingPanel) => void;
+  addTaster: (recipeId: string, taster: TasterScore) => void;
+  updateTaster: (recipeId: string, tasterId: string, updates: Partial<TasterScore>) => void;
+  deleteTaster: (recipeId: string, tasterId: string) => void;
 
   // Actions — libraries
   setMaltLib: (lib: MaltLib[]) => void;
@@ -578,6 +587,7 @@ export const useStore = create<BrewLabState>((set, get) => ({
   ingredientsByRecipe: {},
   recipeProfilesByRecipe: {},
   mashByRecipe: {},
+  tastingPanelByRecipe: {},
   taxRecordsByRecipe: {},
   taxManualOverrides: {},
   taxMaster: lsGet<TaxMasterRow[]>('bl_tax_master', []),
@@ -1187,6 +1197,45 @@ export const useStore = create<BrewLabState>((set, get) => ({
     });
   },
 
+  // Per-recipe sensory tasting panel (Analysis tab). Same lazy-cache +
+  // reactive-map pattern as getMash; syncs to the tasting_panel JSONB blob
+  // table (recipe_id PK) via lsSet → sbDispatch.
+  getTastingPanel: (recipeId) => {
+    const cached = get().tastingPanelByRecipe[recipeId];
+    if (cached !== undefined) return cached;
+    const fromLs = lsGet<TastingPanel>(`bl_tasting_panel_${recipeId}`, { tasters: [] });
+    setTimeout(() => {
+      if (get().tastingPanelByRecipe[recipeId] === undefined) {
+        set({
+          tastingPanelByRecipe: { ...get().tastingPanelByRecipe, [recipeId]: fromLs },
+        });
+      }
+    }, 0);
+    return fromLs;
+  },
+  setTastingPanel: (recipeId, panel) => {
+    lsSet(`bl_tasting_panel_${recipeId}`, panel);
+    set({
+      tastingPanelByRecipe: { ...get().tastingPanelByRecipe, [recipeId]: panel },
+    });
+  },
+  addTaster: (recipeId, taster) => {
+    const current = get().getTastingPanel(recipeId);
+    get().setTastingPanel(recipeId, { tasters: [...current.tasters, taster] });
+  },
+  updateTaster: (recipeId, tasterId, updates) => {
+    const current = get().getTastingPanel(recipeId);
+    get().setTastingPanel(recipeId, {
+      tasters: current.tasters.map(t => t.id === tasterId ? { ...t, ...updates } : t),
+    });
+  },
+  deleteTaster: (recipeId, tasterId) => {
+    const current = get().getTastingPanel(recipeId);
+    get().setTastingPanel(recipeId, {
+      tasters: current.tasters.filter(t => t.id !== tasterId),
+    });
+  },
+
   // --- Libraries ---
   setMaltLib: (lib) => { lsSet('bl_lib_malts', lib); set({ maltLib: lib }); },
   setHopLib: (lib) => { lsSet('bl_lib_hops', lib); set({ hopLib: lib }); },
@@ -1759,6 +1808,7 @@ export const useStore = create<BrewLabState>((set, get) => ({
         ingredientsByRecipe: {},      // ← clear cache so ingredients reload from hydrated localStorage
         recipeProfilesByRecipe: {},   // ← clear cache so per-recipe profile selections reload
         mashByRecipe: {},             // ← clear cache so per-recipe mash blobs reload
+        tastingPanelByRecipe: {},     // ← clear cache so tasting panels reload from hydrated localStorage
         taxRecordsByRecipe: {},   // ← clear cache so tax records reload from hydrated localStorage
         taxManualOverrides: {},   // ← override flags are local-only; reset on hydrate
         taxMaster: lsGet<TaxMasterRow[]>('bl_tax_master', []),

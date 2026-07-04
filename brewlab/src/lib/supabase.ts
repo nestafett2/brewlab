@@ -192,6 +192,16 @@ export async function sbDispatch(key: string, value: unknown): Promise<void> {
       const row = { recipe_id: recipeId, data: value };
       const res = await sb.from('mash').upsert(row, { onConflict: 'recipe_id' });
       logIfError('upsert', 'mash', res, { recipe_id: recipeId });
+    } else if (key.startsWith('bl_tasting_panel_')) {
+      // Per-recipe sensory tasting panel (Analysis tab). JSONB blob,
+      // recipe_id PK — same pattern as brew_day / ferm_meta / cold_side.
+      // Requires the tasting_panel table from
+      // migrations/2026-07-05_add_tasting_panel_table.sql; if absent the
+      // error is logged and the local lsSet still succeeds.
+      const recipeId = key.replace('bl_tasting_panel_', '');
+      const row = { recipe_id: recipeId, data: value };
+      const res = await sb.from('tasting_panel').upsert(row, { onConflict: 'recipe_id' });
+      logIfError('upsert', 'tasting_panel', res, { recipe_id: recipeId });
     } else if (key === 'bl_harvested_yeast') {
       // Mirrors HTML sbSyncHarvestedYeast (line 6857). Delete-all + reinsert.
       // Input shape: { [strain]: { generation: number, entries: Entry[] } }.
@@ -377,6 +387,7 @@ export const PER_RECIPE_TABLES: readonly string[] = [
   'water_chem',
   'recipe_profiles',
   'mash',
+  'tasting_panel',
   'ferm_log',
 ];
 
@@ -553,14 +564,15 @@ export async function sbFetchHydration(local: LocalContext): Promise<HydrationPl
 
     // ── JSONB blob tables ───────────────────────────────────────────
     // brew_day / ferm_meta / cold_side / water_chem / recipe_profiles / mash.
-    for (const table of ['brew_day', 'ferm_meta', 'cold_side', 'water_chem', 'recipe_profiles', 'mash'] as const) {
+    for (const table of ['brew_day', 'ferm_meta', 'cold_side', 'water_chem', 'recipe_profiles', 'mash', 'tasting_panel'] as const) {
       const prefix =
         table === 'brew_day'        ? 'bl_bd_'              :
         table === 'ferm_meta'       ? 'bl_ferm_meta_'       :
         table === 'cold_side'       ? 'bl_cold_'            :
         table === 'water_chem'      ? 'bl_water_chem_'      :
         table === 'recipe_profiles' ? 'bl_recipe_profiles_' :
-                                      'bl_mash_';
+        table === 'mash'            ? 'bl_mash_'            :
+                                      'bl_tasting_panel_';
       const { data } = await sb.from(table).select('*').limit(1000000);
       if (data) {
         for (const row of data) {
@@ -816,7 +828,7 @@ export async function sbWipeAll(): Promise<void> {
     'Content-Type': 'application/json',
   };
   const idTables = ['recipe_ingredients', 'ferm_log', 'harvested_yeast', 'tax_records', 'tax_master', 'recipes', 'settings'];
-  const recipeIdTables = ['brew_day', 'ferm_meta', 'cold_side', 'water_chem', 'recipe_profiles', 'mash'];
+  const recipeIdTables = ['brew_day', 'ferm_meta', 'cold_side', 'water_chem', 'recipe_profiles', 'mash', 'tasting_panel'];
   for (const t of idTables) {
     try {
       await fetch(`${cfg.url}/rest/v1/${t}?id=not.is.null`, { method: 'DELETE', headers });
