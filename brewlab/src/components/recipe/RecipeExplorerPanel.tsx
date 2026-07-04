@@ -723,6 +723,8 @@ const colMenuStyle: React.CSSProperties = {
   minWidth: 200,
   zIndex: 1000,
   overflow: 'hidden',
+  maxHeight: 'calc(100vh - 100px)',
+  overflowY: 'auto',
 };
 
 const colMenuDividerStyle: React.CSSProperties = {
