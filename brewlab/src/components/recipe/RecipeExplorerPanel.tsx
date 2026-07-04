@@ -61,6 +61,27 @@ function loadColOrder(): ColKey[] {
   return DEFAULT_COLS.slice();
 }
 
+const VISIBLE_COLS_LS_KEY = 'bl_explorer_visible_cols';
+
+/** Read the persisted set of visible columns. Falls back to "all columns
+ *  visible" unless the stored value is a non-empty array of valid ColKeys. */
+function loadVisibleCols(): Set<ColKey> {
+  try {
+    const raw = localStorage.getItem(VISIBLE_COLS_LS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (
+        Array.isArray(parsed)
+        && parsed.length > 0
+        && parsed.every((c: unknown) => DEFAULT_COLS.includes(c as ColKey))
+      ) {
+        return new Set(parsed as ColKey[]);
+      }
+    }
+  } catch { /* localStorage unavailable / invalid JSON — keep default */ }
+  return new Set(DEFAULT_COLS);
+}
+
 /** Sort comparator for a given column + direction. Empty values always
  *  sort last regardless of direction. */
 function compareRecipes(a: Recipe, b: Recipe, col: ColKey, dir: 1 | -1): number {
@@ -134,11 +155,34 @@ export default function RecipeExplorerPanel({
   const [sort, setSort] = useState<{ col: ColKey; dir: 1 | -1 }>({ col: 'taxBatch', dir: 1 });
   const [colOrder, setColOrder] = useState<ColKey[]>(loadColOrder);
   const [draggingCol, setDraggingCol] = useState<ColKey | null>(null);
+  const [visibleCols, setVisibleCols] = useState<Set<ColKey>>(loadVisibleCols);
+  const [colCtxMenu, setColCtxMenu] = useState<{ x: number; y: number } | null>(null);
 
   // Persist column order whenever it changes.
   useEffect(() => {
     try { localStorage.setItem(COLS_LS_KEY, JSON.stringify(colOrder)); } catch { /* ignore */ }
   }, [colOrder]);
+
+  // Persist visible-column set whenever it changes.
+  useEffect(() => {
+    try { localStorage.setItem(VISIBLE_COLS_LS_KEY, JSON.stringify([...visibleCols])); } catch { /* ignore */ }
+  }, [visibleCols]);
+
+  // Close the column context menu on outside mousedown / Escape. Deferred
+  // mousedown attach mirrors the recipe/folder ctx-menu pattern in Desktop
+  // so the right-click that opened it doesn't immediately close it.
+  useEffect(() => {
+    if (!colCtxMenu) return;
+    const close = () => setColCtxMenu(null);
+    const onKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape') close(); };
+    const id = setTimeout(() => document.addEventListener('mousedown', close), 0);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [colCtxMenu]);
 
   const [showAll, setShowAll] = useState(false);
   // Reset showAll when the selected folder changes.
@@ -214,6 +258,25 @@ export default function RecipeExplorerPanel({
     setDraggingCol(null);
   };
 
+  // Columns actually rendered: ordered by colOrder, filtered to visible.
+  const shownCols = useMemo(
+    () => colOrder.filter(c => visibleCols.has(c)),
+    [colOrder, visibleCols],
+  );
+
+  // Toggle a column's visibility. Never allow hiding the last visible
+  // column (the checkbox is also disabled in that case).
+  const toggleColVisible = (col: ColKey) => setVisibleCols(prev => {
+    const next = new Set(prev);
+    if (next.has(col)) {
+      if (next.size <= 1) return prev;
+      next.delete(col);
+    } else {
+      next.add(col);
+    }
+    return next;
+  });
+
   return (
     <div style={pageStyle}>
       <div style={toolbarStyle}>
@@ -281,7 +344,7 @@ export default function RecipeExplorerPanel({
             <table style={tableStyle}>
               <thead>
                 <tr>
-                  {colOrder.map(col => (
+                  {shownCols.map(col => (
                     <th
                       key={col}
                       draggable
@@ -290,8 +353,9 @@ export default function RecipeExplorerPanel({
                       onDrop={() => handleDrop(col)}
                       onDragEnd={() => setDraggingCol(null)}
                       onClick={() => onSort(col)}
+                      onContextMenu={e => { e.preventDefault(); setColCtxMenu({ x: e.pageX, y: e.pageY }); }}
                       style={{ ...thStyle, opacity: draggingCol === col ? 0.5 : 1 }}
-                      title="Click to sort · drag to reorder"
+                      title="Click to sort · drag to reorder · right-click for columns"
                     >
                       {COL_LABELS[col]}
                       {sort.col === col && (
@@ -306,7 +370,7 @@ export default function RecipeExplorerPanel({
                   <ExplorerRow
                     key={r.id}
                     recipe={r}
-                    cols={colOrder}
+                    cols={shownCols}
                     selected={r.id === previewId}
                     zebra={i % 2 === 1}
                     onPreview={() => handlePreview(r.id)}
@@ -332,6 +396,36 @@ export default function RecipeExplorerPanel({
           </div>
         )}
       </div>
+      {colCtxMenu && (
+        <div
+          className="ctx-menu open"
+          style={{ left: colCtxMenu.x, top: colCtxMenu.y }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          {DEFAULT_COLS.map(col => {
+            const checked = visibleCols.has(col);
+            // Can't hide the last remaining column.
+            const disabled = checked && visibleCols.size <= 1;
+            return (
+              <div
+                key={col}
+                className="ctx-item"
+                onClick={() => { if (!disabled) toggleColVisible(col); }}
+                style={disabled ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={disabled}
+                  readOnly
+                  style={{ marginRight: 8 }}
+                />
+                {COL_LABELS[col]}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
