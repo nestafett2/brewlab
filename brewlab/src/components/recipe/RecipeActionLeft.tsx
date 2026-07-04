@@ -149,7 +149,7 @@ const selectStyle: React.CSSProperties = {
   fontSize: 11,
   padding: '3px 6px',
   outline: 'none',
-  borderRadius: 3,
+  borderRadius: 8,
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap' as const,
   overflow: 'hidden',

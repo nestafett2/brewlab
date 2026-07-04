@@ -1034,7 +1034,7 @@ tbody td {
   font-weight: 500;
   padding: 1px 4px;
   outline: none;
-  border-radius: 3px;
+  border-radius: var(--radius-md);
 }
 
 .amt-input:focus {
@@ -1046,7 +1046,7 @@ tbody td {
 .use-pill {
   display: inline-block;
   background: var(--panel2);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 3px 8px;
   font-size: 11px;
   color: var(--text-dim);
@@ -1255,7 +1255,7 @@ tbody td {
   font-size: 11px;
   padding: 3px 6px;
   outline: none;
-  border-radius: 3px;
+  border-radius: var(--radius-md);
   width: 80px;
   text-align: right;
 }
@@ -1484,7 +1484,7 @@ tbody td {
   outline: none;
   transition: border-color 0.12s;
   width: 100%;
-  border-radius: 4px;
+  border-radius: var(--radius-md);
 }
 
 .settings-field input:focus,
@@ -1701,7 +1701,7 @@ input, textarea, select {
   background: var(--panel2);
   border: 1px solid var(--border2);
   color: var(--text);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 6px 10px;
   font-size: 13px;
 }
@@ -1735,7 +1735,7 @@ input[type=number] {
 .wc-tgt-input {
   background: var(--panel); border: 1px solid var(--border2); color: var(--text);
   font-family: var(--mono); font-size: 12px; padding: 4px 6px;
-  border-radius: 4px; outline: none; width: 100%; box-sizing: border-box;
+  border-radius: var(--radius-md); outline: none; width: 100%; box-sizing: border-box;
 }
 .wc-tgt-input:focus { border-color: var(--blue); }
 
@@ -1744,7 +1744,7 @@ input[type=number] {
 .wc-vol-input {
   background: var(--panel); border: 1px solid var(--border2); color: var(--text);
   font-family: var(--mono); font-size: 13px; padding: 5px 8px;
-  border-radius: 5px; outline: none; width: 90px;
+  border-radius: var(--radius-md); outline: none; width: 90px;
 }
 
 .wc-mineral-col {
@@ -1761,7 +1761,7 @@ input[type=number] {
 .wc-mineral-input {
   background: var(--panel2); border: 1px solid var(--border2); color: var(--text);
   font-family: var(--mono); font-size: 12px; padding: 4px 6px;
-  border-radius: 4px; outline: none; width: 100%; box-sizing: border-box;
+  border-radius: var(--radius-md); outline: none; width: 100%; box-sizing: border-box;
 }
 .wc-mineral-input:focus { border-color: var(--blue); }
 
@@ -1906,7 +1906,7 @@ input[type=number] {
   background: var(--panel2); border: 1px solid var(--border2);
   color: var(--text); font-family: var(--sans); font-size: 13px;
   padding: 4px 8px; outline: none; width: 100px; text-align: right;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 .bd-readings-table input {
   background: var(--panel2) !important; color: var(--text) !important;
@@ -2032,7 +2032,7 @@ input[type=number] {
   border: 1px solid var(--border2); color: var(--text);
   font-family: var(--mono); font-size: 12px;
   padding: 5px 8px; outline: none; box-sizing: border-box;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 .picker-search:focus { border-color: var(--blue); }
 
