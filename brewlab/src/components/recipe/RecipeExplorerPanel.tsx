@@ -6,7 +6,8 @@
  *                  state); right-click blank area → "+ New Folder".
  *   • By Style   — grouped by styleKey ("BJCP 21A") with display label;
  *                  recipes sorted alphabetically by beerName within group.
- *   • By Name    — flat, alphabetical case-insensitive on beerName||name.
+ *   • By Name    — collapsible A–Z groups (first letter of beerName||name;
+ *                  non-alpha under "#" last); recipes alphabetical within.
  *   • By Tax #   — flat by taxBatch ascending; "No tax batch" subgroup last.
  *
  * A free-text search box and Own/Collab/OEM origin-filter chips in the
@@ -143,6 +144,7 @@ export default function RecipeExplorerPanel({
   return (
     <div style={pageStyle}>
       <div style={toolbarStyle}>
+        <span style={titleStyle}>RECIPE EXPLORER</span>
         <div style={searchWrapStyle}>
           <input
             type="text"
@@ -160,7 +162,6 @@ export default function RecipeExplorerPanel({
             >✕</button>
           )}
         </div>
-        <span style={titleStyle}>RECIPE EXPLORER</span>
         <div style={{ display: 'flex', gap: 4, marginLeft: 14 }}>
           {MODE_ORDER.map(m => (
             <button
@@ -277,20 +278,70 @@ function ByDate({ recipes, onPreview, onOpen, previewId }: ModeProps) {
 
 // ─── Mode: By Name ───────────────────────────────────────────────────
 
+interface NameGroup {
+  key: string;   // 'A'..'Z', or '#' for non-alpha first characters
+  recipes: Recipe[];
+}
+
 function ByName({ recipes, onPreview, onOpen, previewId }: ModeProps) {
-  const sorted = useMemo(() => {
-    const out = recipes.slice();
-    out.sort((a, b) =>
-      (a.beerName || a.name || '').toLowerCase()
-        .localeCompare((b.beerName || b.name || '').toLowerCase()));
+  const groups = useMemo<NameGroup[]>(() => {
+    const m = new Map<string, NameGroup>();
+    for (const r of recipes) {
+      const ch = (r.beerName || r.name || '').trim().charAt(0).toUpperCase();
+      const key = /[A-Z]/.test(ch) ? ch : '#';
+      const g = m.get(key);
+      if (g) g.recipes.push(r);
+      else m.set(key, { key, recipes: [r] });
+    }
+    const out = Array.from(m.values());
+    // A→Z, with the '#' (non-alpha) bucket last.
+    out.sort((a, b) => {
+      if (a.key === '#') return 1;
+      if (b.key === '#') return -1;
+      return a.key.localeCompare(b.key);
+    });
+    for (const g of out) {
+      g.recipes.sort((a, b) =>
+        (a.beerName || a.name || '').toLowerCase()
+          .localeCompare((b.beerName || b.name || '').toLowerCase()));
+    }
     return out;
   }, [recipes]);
-  if (sorted.length === 0) return <Empty />;
+
+  // Per-group collapsed state. Default open. Local-only — same pattern
+  // as ByStyle (letter groups have no model object to persist against).
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggle = (key: string) => setCollapsed(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+
+  if (groups.length === 0) return <Empty />;
   return (
     <div style={listStyle}>
-      {sorted.map(r => (
-        <ExplorerRow key={r.id} recipe={r} selected={r.id === previewId}
-          onPreview={() => onPreview(r.id)} onOpen={() => onOpen(r.id)} />
+      {groups.map(g => (
+        <div key={g.key}>
+          <div
+            className="rb-folder-header"
+            style={{ paddingLeft: 8, cursor: 'pointer' }}
+            onClick={() => toggle(g.key)}
+          >
+            <span className={`rb-folder-arrow${!collapsed.has(g.key) ? ' open' : ''}`}>▶</span>
+            <span className="rb-folder-icon">🔤</span>
+            <span className="rb-folder-name">{g.key}</span>
+            <span className="rb-folder-count">{g.recipes.length}</span>
+          </div>
+          {!collapsed.has(g.key) && (
+            <div className="rb-folder-body">
+              {g.recipes.map(r => (
+                <ExplorerRow key={r.id} recipe={r} selected={r.id === previewId}
+                  onPreview={() => onPreview(r.id)} onOpen={() => onOpen(r.id)}
+                  indentPx={12} />
+              ))}
+            </div>
+          )}
+        </div>
       ))}
     </div>
   );
