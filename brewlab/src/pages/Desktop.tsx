@@ -1349,17 +1349,7 @@ export default function Desktop() {
       {isRecipeOpen && (
         <div
           className="tabbar"
-          style={{
-            background: 'var(--bg)',
-            borderTop: '1px solid var(--border)',
-            // On Ingredients: align left edge with content-column edge
-            // (sidebar width + 16) and right edge with beer glass (20).
-            // Tabs flex-grow so Brew History / Checklist land at known
-            // fractional positions of the row.
-            paddingLeft: recipeSubTab === 'ingredients' ? 236 : 16,
-            paddingRight: 20,
-            justifyContent: 'flex-start',
-          }}
+          style={recipeSubTab === 'ingredients' ? { paddingLeft: 236 } : undefined}
         >
           {([
             ['ingredients', 'Ingredients'],
