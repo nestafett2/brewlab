@@ -428,7 +428,6 @@ const rowStyle: React.CSSProperties = {
   padding: '3px 8px',
   cursor: 'pointer',
   borderLeft: '2px solid transparent',
-  borderBottom: '1px solid var(--border)',
 };
 
 const rowSelectedStyle: React.CSSProperties = {
