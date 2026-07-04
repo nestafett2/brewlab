@@ -671,13 +671,9 @@ interface DetailPaneProps {
 }
 
 function DetailPane({ section, selectedCount, entry }: DetailPaneProps) {
-  // 0 selected → placeholder
+  // 0 selected → hide the pane entirely
   if (selectedCount === 0) {
-    return (
-      <div style={detailPaneStyle}>
-        <div style={detailEmptyStyle}>Select an item to view details.</div>
-      </div>
-    );
+    return null;
   }
   // >1 selected → count
   if (selectedCount > 1 || !entry) {
