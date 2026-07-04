@@ -8,7 +8,7 @@ import {
 } from '../../lib/calculations';
 import { fmtNum } from '../../lib/format';
 import { isWaterChem } from '../../lib/waterChem';
-import type { Ingredient, IngredientType, RecipeOrigin } from '../../types';
+import type { Ingredient, IngredientType } from '../../types';
 import IngredientCard from './IngredientCard';
 import ActionStack from './ActionStack';
 import StyleSummaryPanel from './StyleSummaryPanel';
@@ -357,38 +357,7 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
             placeholder={settings.breweryName ? `(default: ${settings.breweryName})` : '—'}
             style={brewerInputStyle}
           />
-          {(['own', 'collab', 'oem'] as RecipeOrigin[]).map(opt => (
-            <button
-              key={opt}
-              className="btn sm"
-              style={{
-                padding: '2px 8px', fontSize: 11,
-                ...(recipe.recipeOrigin === opt
-                  ? { color: 'var(--amber)', borderColor: 'var(--amber)' }
-                  : {}),
-              }}
-              onClick={() => updateRecipe(recipeId, {
-                recipeOrigin: recipe.recipeOrigin === opt ? null : opt,
-              })}
-            >
-              {opt === 'own' ? 'Own Brand' : opt === 'collab' ? 'Collab' : 'OEM'}
-            </button>
-          ))}
         </div>
-
-        {(recipe.recipeOrigin === 'collab' || recipe.recipeOrigin === 'oem') && (
-          <div style={brewerRowStyle}>
-            <label style={brewerLabelStyle}>
-              {recipe.recipeOrigin === 'oem' ? 'OEM For' : 'Collab With'}
-            </label>
-            <input
-              value={recipe.oemFor ?? ''}
-              onChange={e => updateRecipe(recipeId, { oemFor: e.target.value })}
-              placeholder="Partner name..."
-              style={brewerInputStyle}
-            />
-          </div>
-        )}
 
         <div className="content" style={contentStyle}>
           <div className="table-wrap" style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-start' }}>

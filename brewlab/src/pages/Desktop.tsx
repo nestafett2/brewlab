@@ -41,7 +41,7 @@ import {
   type BackupFile,
 } from '../lib/dataBackup';
 import UndoButton from '../components/shared/UndoButton';
-import type { Folder, Ingredient, Recipe } from '../types';
+import type { Folder, Ingredient, Recipe, RecipeOrigin } from '../types';
 import { parseRecipeXML, type ParsedRecipe } from '../components/recipe/recipeImport';
 import {
   recipeToBeerXML,
@@ -1256,6 +1256,34 @@ export default function Desktop() {
                 placeholder="仕込記号"
                 style={{ fontSize: 11, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed rgba(255,255,255,0.15)', outline: 'none', padding: 0, fontFamily: 'var(--sans)', minWidth: 60 }}
               />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+              {(['own', 'collab', 'oem'] as RecipeOrigin[]).map(opt => (
+                <button
+                  key={opt}
+                  className="btn sm"
+                  style={{
+                    padding: '1px 7px', fontSize: 10,
+                    ...(selectedRecipeForMeta.recipeOrigin === opt
+                      ? { color: 'var(--amber)', borderColor: 'var(--amber)' }
+                      : {}),
+                  }}
+                  onClick={() => updateRecipe(selectedRecipeForMeta.id, {
+                    recipeOrigin: selectedRecipeForMeta.recipeOrigin === opt ? null : opt,
+                  })}
+                >
+                  {opt === 'own' ? 'Own' : opt === 'collab' ? 'Collab' : 'OEM'}
+                </button>
+              ))}
+              {(selectedRecipeForMeta.recipeOrigin === 'collab' || selectedRecipeForMeta.recipeOrigin === 'oem') && (
+                <input
+                  type="text"
+                  value={selectedRecipeForMeta.oemFor ?? ''}
+                  onChange={e => updateRecipe(selectedRecipeForMeta.id, { oemFor: e.target.value })}
+                  placeholder={selectedRecipeForMeta.recipeOrigin === 'oem' ? 'OEM for...' : 'Collab with...'}
+                  style={{ fontSize: 10, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed rgba(255,255,255,0.15)', outline: 'none', padding: 0, fontFamily: 'var(--sans)', minWidth: 80 }}
+                />
+              )}
             </div>
           </div>
           {/* Metadata pills + beer glass — pushed right via marginLeft auto */}
