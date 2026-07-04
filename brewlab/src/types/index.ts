@@ -983,6 +983,9 @@ export interface TabVisibility {
   submitter: boolean;
   taxMaster: boolean;
   tariffReduction: boolean;
+  libraries: boolean;
+  settings: boolean;
+  notes: boolean;
 }
 
 // === Tax Ledger ===

@@ -117,6 +117,9 @@ const DEFAULT_TAB_VISIBILITY: TabVisibility = {
   submitter: false,
   taxMaster: false,
   tariffReduction: false,
+  libraries: false,
+  settings: false,
+  notes: false,
 };
 
 // === Snapshot shape for delete/undo ===

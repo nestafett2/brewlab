@@ -1089,19 +1089,19 @@ export default function Desktop() {
             {/* Each item routes to the Libraries page AND points it at the
                 requested sub-section (Malt / Hop / Yeast / Misc). Mirrors
                 HTML openLibrariesTab(section) (brewlab-desktop.html:16573). */}
-            <div className="menu-dd-item" onClick={() => { setLibrariesSection('malts'); setActiveTab('libraries'); closeMenus(); }}>Malt Library</div>
-            <div className="menu-dd-item" onClick={() => { setLibrariesSection('hops');  setActiveTab('libraries'); closeMenus(); }}>Hop Library</div>
-            <div className="menu-dd-item" onClick={() => { setLibrariesSection('yeast'); setActiveTab('libraries'); closeMenus(); }}>Yeast Library</div>
-            <div className="menu-dd-item" onClick={() => { setLibrariesSection('misc');  setActiveTab('libraries'); closeMenus(); }}>Misc Library</div>
+            <div className="menu-dd-item" onClick={() => { setLibrariesSection('malts'); setTabVisibility({ libraries: true }); setActiveTab('libraries'); closeMenus(); }}>Malt Library</div>
+            <div className="menu-dd-item" onClick={() => { setLibrariesSection('hops');  setTabVisibility({ libraries: true }); setActiveTab('libraries'); closeMenus(); }}>Hop Library</div>
+            <div className="menu-dd-item" onClick={() => { setLibrariesSection('yeast'); setTabVisibility({ libraries: true }); setActiveTab('libraries'); closeMenus(); }}>Yeast Library</div>
+            <div className="menu-dd-item" onClick={() => { setLibrariesSection('misc');  setTabVisibility({ libraries: true }); setActiveTab('libraries'); closeMenus(); }}>Misc Library</div>
             <div className="menu-dd-sep" />
             {/* Import / Export from the menu — opens the Libraries page first
                 (so the in-page toolbar buttons can do the file work) and lets
                 the user choose the destination section before importing. */}
-            <div className="menu-dd-item" onClick={() => { setActiveTab('libraries'); closeMenus(); }}>Import Library (BeerXML)</div>
-            <div className="menu-dd-item" onClick={() => { setActiveTab('libraries'); closeMenus(); }}>Export Library (BeerXML)</div>
+            <div className="menu-dd-item" onClick={() => { setTabVisibility({ libraries: true }); setActiveTab('libraries'); closeMenus(); }}>Import Library (BeerXML)</div>
+            <div className="menu-dd-item" onClick={() => { setTabVisibility({ libraries: true }); setActiveTab('libraries'); closeMenus(); }}>Export Library (BeerXML)</div>
           </div>
         </div>
-        <div className="menu-item" onClick={() => { setActiveTab('notes'); closeMenus(); }}>Notes</div>
+        <div className="menu-item" onClick={() => { setTabVisibility({ notes: true }); setActiveTab('notes'); closeMenus(); }}>Notes</div>
         <div
           className={`menu-item ${openMenu === 'settings' ? 'open' : ''}`}
           onClick={e => { if (e.target === e.currentTarget) toggleMenu('settings'); }}
@@ -1120,7 +1120,7 @@ export default function Desktop() {
               <div
                 key={name}
                 className="menu-dd-item"
-                onClick={() => { setSettingsSection(name); setActiveTab('settings'); closeMenus(); }}
+                onClick={() => { setSettingsSection(name); setTabVisibility({ settings: true }); setActiveTab('settings'); closeMenus(); }}
               >{name}</div>
             ))}
           </div>
@@ -1221,6 +1221,48 @@ export default function Desktop() {
                 e.stopPropagation();
                 setTabVisibility({ taxMaster: false });
                 if (activeTab === 'taxMaster') setActiveTab('recipes');
+              }}
+            >&times;</span>
+          </div>
+        )}
+        {tabVisibility.libraries && (
+          <div className={`tab ${activeTab === 'libraries' ? 'active' : ''}`} style={{ paddingRight: 4 }} onClick={() => setActiveTab('libraries')}>
+            <span className="tab-label">LIBRARIES</span>
+            <span
+              className="tab-close"
+              title="Close"
+              onClick={e => {
+                e.stopPropagation();
+                setTabVisibility({ libraries: false });
+                if (activeTab === 'libraries') setActiveTab('recipes');
+              }}
+            >&times;</span>
+          </div>
+        )}
+        {tabVisibility.settings && (
+          <div className={`tab ${activeTab === 'settings' ? 'active' : ''}`} style={{ paddingRight: 4 }} onClick={() => setActiveTab('settings')}>
+            <span className="tab-label">SETTINGS</span>
+            <span
+              className="tab-close"
+              title="Close"
+              onClick={e => {
+                e.stopPropagation();
+                setTabVisibility({ settings: false });
+                if (activeTab === 'settings') setActiveTab('recipes');
+              }}
+            >&times;</span>
+          </div>
+        )}
+        {tabVisibility.notes && (
+          <div className={`tab ${activeTab === 'notes' ? 'active' : ''}`} style={{ paddingRight: 4 }} onClick={() => setActiveTab('notes')}>
+            <span className="tab-label">NOTES</span>
+            <span
+              className="tab-close"
+              title="Close"
+              onClick={e => {
+                e.stopPropagation();
+                setTabVisibility({ notes: false });
+                if (activeTab === 'notes') setActiveTab('recipes');
               }}
             >&times;</span>
           </div>
