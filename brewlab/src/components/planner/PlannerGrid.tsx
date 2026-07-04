@@ -36,6 +36,9 @@ interface Props {
   brews: PlannerBrew[];
   onCellClick: (vesselId: string, dateStr: string) => void;
   onBrewClick: (brewId: string) => void;
+  /** When true, vessel rows with no brew in the visible window are hidden
+   *  (and any group left with no vessels drops its header too). */
+  hideEmpty?: boolean;
 }
 
 interface Row {
@@ -53,7 +56,7 @@ interface PlacedAction extends PlannerAction {
 }
 
 export default function PlannerGrid({
-  startDate, vesselGroups, brews, onCellClick, onBrewClick,
+  startDate, vesselGroups, brews, onCellClick, onBrewClick, hideEmpty = false,
 }: Props) {
   const today = todayDate();
 
@@ -63,6 +66,27 @@ export default function PlannerGrid({
     for (let i = 0; i < PLANNER_DAYS; i++) out.push(addDays(startDate, i));
     return out;
   }, [startDate]);
+
+  // Vessels with at least one brew overlapping the visible window — used
+  // by the "Hide empty vessels" toggle. The brewhouse row ('bh') shows a
+  // day-1 swatch for every brew, so it counts as occupied when any brew
+  // *starts* within the window.
+  const occupiedVessels = useMemo(() => {
+    const visEnd = addDays(startDate, PLANNER_DAYS - 1);
+    const set = new Set<string>();
+    for (const brew of brews) {
+      const s = strToDate(brew.start);
+      const e = strToDate(brew.end);
+      if (s <= visEnd && e >= startDate) set.add(brew.vessel);
+      if (s >= startDate && s <= visEnd) set.add('bh');
+    }
+    return set;
+  }, [brews, startDate]);
+
+  // Today's column index / x — drives the full-height "today" line.
+  const todayIdx = diffDays(startDate, today);
+  const todayX = LABEL_W + todayIdx * DAY_W;
+  const showTodayLine = todayIdx >= 0 && todayIdx < PLANNER_DAYS;
 
   // Month spans for the top header.
   const monthSpans = useMemo(() => {
@@ -86,15 +110,20 @@ export default function PlannerGrid({
     return out;
   }, [days]);
 
-  // Rows = group header + per-vessel.
+  // Rows = group header + per-vessel. When hideEmpty is on, drop vessels
+  // with no brew in the window (and any group left with no vessels).
   const rows: Row[] = useMemo(() => {
     const out: Row[] = [];
     for (const g of vesselGroups) {
+      const vessels = hideEmpty
+        ? g.vessels.filter(v => occupiedVessels.has(v.id))
+        : g.vessels;
+      if (vessels.length === 0) continue;
       out.push({ type: 'group', group: g });
-      for (const v of g.vessels) out.push({ type: 'vessel', vessel: v });
+      for (const v of vessels) out.push({ type: 'vessel', vessel: v });
     }
     return out;
-  }, [vesselGroups]);
+  }, [vesselGroups, hideEmpty, occupiedVessels]);
 
   // Vertical offset of each vessel row in the bar overlay.
   const rowTops = useMemo(() => {
@@ -184,6 +213,17 @@ export default function PlannerGrid({
         })}
       </div>
 
+      {/* ── Today vertical line — full grid height ──────────────────── */}
+      {showTodayLine && (
+        <div
+          style={{
+            position: 'absolute', top: 0, bottom: 0, left: todayX,
+            width: 2, background: 'var(--amber)', opacity: 0.4,
+            pointerEvents: 'none', zIndex: 5,
+          }}
+        />
+      )}
+
       {/* ── Bar overlay ─────────────────────────────────────────────── */}
       <div
         style={{
@@ -199,7 +239,7 @@ export default function PlannerGrid({
           >
             <div
               style={{
-                width: '100%', height: PRIMARY_H, background: b.brew.color,
+                width: '100%', height: PRIMARY_H, background: barColor(b.brew, today),
                 borderRadius: '2px 2px 0 0',
                 display: 'flex', alignItems: 'center', padding: '0 8px',
                 cursor: 'pointer', overflow: 'hidden', whiteSpace: 'nowrap',
@@ -256,7 +296,7 @@ export default function PlannerGrid({
             onClick={e => { e.stopPropagation(); onBrewClick(b.brew.id); }}
             style={{
               position: 'absolute', left: b.x, top: b.top, width: b.w, height: b.h,
-              background: b.brew.color, opacity: 0.9, borderRadius: 2,
+              background: barColor(b.brew, today), opacity: 0.9, borderRadius: 2,
               cursor: 'pointer', overflow: 'hidden', pointerEvents: 'all',
             }}
           >
@@ -285,11 +325,11 @@ function RowGroup({ groupName, dayCount }: { groupName: string; dayCount: number
         borderRight: '1px solid var(--border2)',
         position: 'sticky' as const, left: 0, zIndex: 10,
         display: 'flex', alignItems: 'center',
-        padding: '0 10px', height: GROUP_H, minWidth: LABEL_W,
+        padding: '4px 10px', height: GROUP_H, minWidth: LABEL_W,
       }}>
         <span style={{
-          fontFamily: 'var(--display)', fontSize: 10, letterSpacing: 2,
-          color: 'var(--amber)',
+          fontFamily: 'var(--display)', fontSize: 10, fontWeight: 700,
+          letterSpacing: '0.1em', color: 'var(--amber)',
         }}>{groupName}</span>
       </div>
       {Array.from({ length: dayCount }, (_, i) => (
@@ -335,7 +375,7 @@ function RowVessel({
           <div
             key={i}
             style={{
-              background: isTd ? 'rgba(212,130,15,0.05)' : isWe ? 'rgba(255,255,255,0.03)' : 'var(--bg)',
+              background: isTd ? 'rgba(212,130,15,0.05)' : isWe ? 'var(--weekend-tint)' : 'var(--bg)',
               borderBottom: '1px solid var(--border)',
               borderRight: '1px solid var(--border)',
               height: ROW_H, width: DAY_W,
@@ -346,7 +386,7 @@ function RowVessel({
             onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--panel2)'; }}
             onMouseLeave={e => {
               (e.currentTarget as HTMLDivElement).style.background =
-                isTd ? 'rgba(212,130,15,0.05)' : isWe ? 'rgba(255,255,255,0.03)' : 'var(--bg)';
+                isTd ? 'rgba(212,130,15,0.05)' : isWe ? 'var(--weekend-tint)' : 'var(--bg)';
             }}
           />
         );
@@ -461,6 +501,19 @@ function buildBrewhouseDayBars(
     });
   });
   return out;
+}
+
+// ─── Phase color coding (HTML had per-brew colours; this derives the
+//     bar colour from the vessel's phase, with completed brews greyed) ──
+
+function barColor(brew: PlannerBrew, today: Date): string {
+  // Past / completed — end date before today → grey.
+  if (strToDate(brew.end) < today) return 'var(--panel3)';
+  const key = brew.vessel.toLowerCase();
+  if (key === 'bh' || key.includes('brewhouse')) return '#2a6496';          // brewhouse → blue
+  if (key.includes('fv') || key.includes('ferm')) return '#2d6a4f';         // fermenter (active) → green
+  if (key.includes('bt') || key.includes('bright')) return 'rgba(180,110,0,0.8)'; // bright tank → amber
+  return brew.color;                                                        // fallback: stored colour
 }
 
 // ─── Header styles ───────────────────────────────────────────────────

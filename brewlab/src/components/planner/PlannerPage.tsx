@@ -105,6 +105,9 @@ export default function PlannerPage() {
   // Yearly modal
   const [yearlyOpen, setYearlyOpen] = useState(false);
 
+  // Toggle: hide vessel rows with no brews in the visible window.
+  const [hideEmpty, setHideEmpty] = useState(false);
+
   // Date range label
   const rangeLabel = useMemo(() => {
     const last = addDays(start, PLANNER_DAYS - 1);
@@ -210,6 +213,11 @@ export default function PlannerPage() {
         </div>
         <div style={dateRangeStyle}>{rangeLabel}</div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <button
+            className={`btn sm ${hideEmpty ? 'active' : ''}`}
+            onClick={() => setHideEmpty(v => !v)}
+            title="Hide vessel rows with no brews in the visible range"
+          >{hideEmpty ? '☑' : '☐'} HIDE EMPTY</button>
           <button className="btn sm" onClick={() => setYearlyOpen(true)}>📅 YEARLY</button>
           <button
             className="btn sm primary"
@@ -227,6 +235,7 @@ export default function PlannerPage() {
             brews={plannerBrews}
             onCellClick={handleCellClick}
             onBrewClick={handleBrewClick}
+            hideEmpty={hideEmpty}
           />
         </div>
         <PlannerUpcoming plannerBrews={plannerBrews} />

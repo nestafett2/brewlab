@@ -6,6 +6,7 @@
   --panel2: #3a3a3c;
   --panel3: #48484a;
   --surface-raised: #242426;
+  --weekend-tint: rgba(255, 255, 255, 0.03);
   --border: rgba(255, 255, 255, 0.10);
   --border2: rgba(255, 255, 255, 0.16);
   --border3: rgba(255, 255, 255, 0.22);
@@ -65,6 +66,7 @@ body.light {
   --panel2: #e5e5ea;
   --panel3: #d1d1d6;
   --surface-raised: #f8f8fa;
+  --weekend-tint: rgba(0, 0, 0, 0.03);
   --border: rgba(0, 0, 0, 0.10);
   --border2: rgba(0, 0, 0, 0.16);
   --border3: rgba(0, 0, 0, 0.22);

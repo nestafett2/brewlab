@@ -19,7 +19,7 @@ import type { TankCalibration } from '../../types';
 export const PLANNER_DAYS = 42;
 export const PRIMARY_H    = 28;          // primary brew bar height
 export const LANE_H       = 14;          // per-action strip lane
-export const ROW_H        = PRIMARY_H + LANE_H * 2 + 2; // 58 — fits 2 lanes
+export const ROW_H        = 48;          // compact vessel row (was 58 = 2 action lanes)
 export const GROUP_H      = 22;          // vessel-group header strip
 export const LABEL_W      = 120;         // sticky vessel-label column
 export const DAY_W        = 28;
