@@ -192,6 +192,32 @@ export default function NtaPage() {
     });
   };
 
+  // When an existing match is found, surface the Match Results section
+  // above the Recipe Checker so it's the first thing the user sees.
+  const matchFirst = isChecked && matches.length > 0;
+
+  // Match Results section (banner + comparison grid). Rendered once,
+  // positioned before or after the checker depending on `matchFirst`.
+  const matchResultsSection = (isChecked && declared && declaredKey) ? (
+    <div style={{
+      background: 'var(--panel2)', border: '1px solid var(--border2)',
+      borderRadius: 10, padding: 16,
+    }}>
+      <div style={{
+        fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-muted)',
+        textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14,
+      }}>
+        Match Results
+      </div>
+      <CheckResult
+        declared={declared}
+        declaredKey={declaredKey}
+        register={ntaRegister}
+        onShowDetail={i => setDetailIdx(i)}
+      />
+    </div>
+  ) : null;
+
   // ── Render ────────────────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', width: '100%' }}>
@@ -206,22 +232,12 @@ export default function NtaPage() {
         <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-dim)' }}>
           ビール・発泡酒の１仕込製造方法 (CC1-5610-6)
         </span>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-          {printSelecting ? (
-            <>
-              <button className="btn sm" onClick={handleSelectAllPrint}>Select All</button>
-              <button className="btn primary" disabled={printSelected.size === 0} onClick={handlePrintForm}>Print Selected</button>
-              <button className="btn sm" onClick={handleCancelPrintSelect}>Cancel</button>
-            </>
-          ) : (
-            isChecked && matches.length > 0 && (
-              <button className="btn" onClick={() => setPrintSelecting(true)}>🖨 Print Form</button>
-            )
-          )}
-        </div>
       </div>
 
       <div style={{ flex: 1, overflow: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Match found → show results first, above the checker. */}
+        {matchFirst && matchResultsSection}
+
         {/* ── 1. Recipe Checker — the beer you're checking ── */}
         <div style={{
           background: 'var(--panel2)', border: '1px solid var(--border2)',
@@ -283,26 +299,8 @@ export default function NtaPage() {
           )}
         </div>
 
-        {/* ── 2. Match Results — banner + comparison grid (post-Check) ── */}
-        {isChecked && declared && declaredKey && (
-          <div style={{
-            background: 'var(--panel2)', border: '1px solid var(--border2)',
-            borderRadius: 10, padding: 16,
-          }}>
-            <div style={{
-              fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-muted)',
-              textTransform: 'uppercase', letterSpacing: 1, marginBottom: 14,
-            }}>
-              Match Results
-            </div>
-            <CheckResult
-              declared={declared}
-              declaredKey={declaredKey}
-              register={ntaRegister}
-              onShowDetail={i => setDetailIdx(i)}
-            />
-          </div>
-        )}
+        {/* ── 2. Match Results — below the checker when there's no match ── */}
+        {!matchFirst && matchResultsSection}
 
         {/* ── 3. Submitted Recipes Register ── */}
         <SubmittedRegister
@@ -313,6 +311,10 @@ export default function NtaPage() {
           printSelected={printSelected}
           onTogglePrint={handleTogglePrint}
           onPrintAll={() => printNtaFormSummary(ntaRegister)}
+          onPrintSelected={() => setPrintSelecting(true)}
+          onSelectAllPrint={handleSelectAllPrint}
+          onPrintForm={handlePrintForm}
+          onCancelPrintSelect={handleCancelPrintSelect}
         />
       </div>
 
@@ -341,6 +343,7 @@ export default function NtaPage() {
 
 function SubmittedRegister({
   rows, onDelete, onShowDetail, printSelecting, printSelected, onTogglePrint, onPrintAll,
+  onPrintSelected, onSelectAllPrint, onPrintForm, onCancelPrintSelect,
 }: {
   rows: NtaSubmission[];
   onDelete: (idx: number) => void;
@@ -349,6 +352,11 @@ function SubmittedRegister({
   printSelected: Set<number>;
   onTogglePrint: (idx: number) => void;
   onPrintAll: () => void;
+  /** Enter print-selection mode (pick a subset to print). */
+  onPrintSelected: () => void;
+  onSelectAllPrint: () => void;
+  onPrintForm: () => void;
+  onCancelPrintSelect: () => void;
 }) {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
@@ -368,10 +376,10 @@ function SubmittedRegister({
         padding: '10px 16px', borderBottom: '1px solid var(--border2)',
       }}>
         <span style={{
-          fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-muted)',
-          textTransform: 'uppercase', letterSpacing: 1,
+          fontFamily: 'var(--display)', fontSize: 13, color: 'var(--amber)',
+          letterSpacing: 2,
         }}>
-          Submitted Recipes Register
+          SUBMITTED RECIPES
         </span>
         <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>
           — all amounts per 1000L batch
@@ -383,7 +391,18 @@ function SubmittedRegister({
           >
             {sortOrder === 'desc' ? '↑ Oldest first' : '↓ Newest first'}
           </button>
-          <button className="btn sm" onClick={onPrintAll}>🖨 Print All</button>
+          {printSelecting ? (
+            <>
+              <button className="btn sm" onClick={onSelectAllPrint}>Select All</button>
+              <button className="btn primary" disabled={printSelected.size === 0} onClick={onPrintForm}>Print Selected</button>
+              <button className="btn sm" onClick={onCancelPrintSelect}>Cancel</button>
+            </>
+          ) : (
+            <>
+              <button className="btn sm" onClick={onPrintSelected}>🖨 Print Form</button>
+              <button className="btn sm" onClick={onPrintAll}>🖨 Print All</button>
+            </>
+          )}
         </div>
       </div>
       <div style={{ overflowX: 'auto' }}>
@@ -575,23 +594,24 @@ function CheckResult({
       {/* Summary banner */}
       {matches.length > 0 ? (
         <div style={{
-          background: 'rgba(90,181,104,0.15)', border: '1px solid #5ab568',
-          color: '#5ab568', fontFamily: 'var(--mono)', fontSize: 11,
-          padding: '6px 12px', borderRadius: 6, marginBottom: 10,
+          background: 'rgba(50,215,75,0.12)', border: '1px solid rgba(50,215,75,0.4)',
+          fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600,
+          padding: '10px 16px', borderRadius: 6, marginBottom: 10,
         }}>
+          <span style={{ color: 'var(--amber)', marginRight: 8 }}>✓ MATCHES</span>
           {matches.map(m => (
-            <span key={m.idx} style={{ display: 'inline-block', marginRight: 8 }}>
-              ✓ Matches <strong>{m.r.code}</strong> ({m.r.date})
+            <span key={m.idx} style={{ display: 'inline-block', marginRight: 8, color: '#5ab568' }}>
+              <strong>{m.r.code}</strong> ({m.r.date})
             </span>
           ))}
         </div>
       ) : (
         <div style={{
-          background: 'rgba(224,82,82,0.12)', border: '1px solid var(--red)',
-          color: 'var(--red)', fontFamily: 'var(--mono)', fontSize: 11,
-          padding: '6px 12px', borderRadius: 6, marginBottom: 10,
+          background: 'rgba(255,159,10,0.08)', border: '1px solid rgba(255,159,10,0.3)',
+          color: 'var(--amber)', fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600,
+          padding: '10px 16px', borderRadius: 6, marginBottom: 10,
         }}>
-          ⚠ No matching submission found
+          ⚠ No existing match found — safe to submit as new recipe
         </div>
       )}
 
