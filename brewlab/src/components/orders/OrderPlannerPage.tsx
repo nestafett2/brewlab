@@ -4,7 +4,6 @@
  *
  * Toolbar:
  *   • Section dropdown: ALL / MALTS / HOPS / YEAST / ADJUNCTS.
- *   • 🔗 GOOGLE SHEETS — disabled with title="Coming soon" per spec.
  *   • 📦 ORDERS — toggles OrdersPanel.
  *   • ⬇ EXPORT XLSX — exportOrderPlannerXlsx.
  *   • ＋ NEW ORDER — opens AddOrderModal.
@@ -120,11 +119,6 @@ export default function OrderPlannerPage() {
         </select>
         <button className="btn sm" onClick={printForecast}>🖨 PRINT</button>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
-          <button
-            className="btn sm"
-            disabled
-            title="Coming soon"
-          >🔗 GOOGLE SHEETS</button>
           <button className="btn sm" onClick={() => setOrdersOpen(true)}>📦 ORDERS</button>
           <button className="btn sm" onClick={exportXlsx}>⬇ EXPORT XLSX</button>
           <button className="btn sm primary" onClick={() => setAddOrderOpen(true)}>＋ NEW ORDER</button>
