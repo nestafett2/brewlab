@@ -293,7 +293,27 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
 
   return (
     <div style={pageStyle}>
-      {/* LEFT COLUMN — pill strip on top, ingredient cards in the middle,
+      {/* LEFT COLUMN — ActionStack runs full RecipeTab height. */}
+      <ActionStack
+        recipeId={recipeId}
+        selectedId={selectedId}
+        onAddIngredient={t => { setSubstituteMode(false); setAddType(t); }}
+        onQuickAddCarrageenan={quickAddCarrageenan}
+        onSubstitute={handleSubstitute}
+        onDuplicate={handleDuplicate}
+        onDelete={handleDelete}
+        onMashProfile={() => setMashProfileModal(true)}
+        // Scale placeholder — File menu's "Scale Recipe..." entry was
+        // unwired (closeMenus only). Relocated here under TOOLS; modal
+        // not yet ported. Stub alert so the click is acknowledged
+        // rather than silently dead.
+        onScale={() => pushToast({ message: 'Scale Recipe not yet ported.', variant: 'info' })}
+        onGrainPct={() => { if (grains.length === 0) { pushToast({ message: 'No grains in recipe.', variant: 'info' }); return; } setGrainPctModal(true); }}
+        onHopIbu={() => { const bh = hops.filter(h => (h.use || '').toLowerCase() !== 'dry hop'); if (bh.length === 0) { pushToast({ message: 'No bittering hops in recipe.', variant: 'info' }); return; } setHopIbuModal(true); }}
+        onAddToPlanner={handleAddToPlanner}
+      />
+
+      {/* RIGHT COLUMN — pill strip on top, ingredient cards in the middle,
           bottom 3-panel grid below. All three share the column, aligned
           to the recipe explorer on the far left. */}
       <div style={leftColStyle}>
@@ -433,26 +453,6 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
           />
         </div>
       </div>
-
-      {/* RIGHT COLUMN — ActionStack runs full RecipeTab height. */}
-      <ActionStack
-        recipeId={recipeId}
-        selectedId={selectedId}
-        onAddIngredient={t => { setSubstituteMode(false); setAddType(t); }}
-        onQuickAddCarrageenan={quickAddCarrageenan}
-        onSubstitute={handleSubstitute}
-        onDuplicate={handleDuplicate}
-        onDelete={handleDelete}
-        onMashProfile={() => setMashProfileModal(true)}
-        // Scale placeholder — File menu's "Scale Recipe..." entry was
-        // unwired (closeMenus only). Relocated here under TOOLS; modal
-        // not yet ported. Stub alert so the click is acknowledged
-        // rather than silently dead.
-        onScale={() => pushToast({ message: 'Scale Recipe not yet ported.', variant: 'info' })}
-        onGrainPct={() => { if (grains.length === 0) { pushToast({ message: 'No grains in recipe.', variant: 'info' }); return; } setGrainPctModal(true); }}
-        onHopIbu={() => { const bh = hops.filter(h => (h.use || '').toLowerCase() !== 'dry hop'); if (bh.length === 0) { pushToast({ message: 'No bittering hops in recipe.', variant: 'info' }); return; } setHopIbuModal(true); }}
-        onAddToPlanner={handleAddToPlanner}
-      />
 
       {addType && (
         <AddIngredientModal
