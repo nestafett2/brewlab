@@ -11,6 +11,7 @@ import { isWaterChem } from '../../lib/waterChem';
 import type { Ingredient, IngredientType } from '../../types';
 import IngredientCard from './IngredientCard';
 import ActionStack from './ActionStack';
+import RecipeActionLeft from './RecipeActionLeft';
 import StyleSummaryPanel from './StyleSummaryPanel';
 import AddIngredientModal from './AddIngredientModal';
 import EditIngredientModal from './EditIngredientModal';
@@ -295,14 +296,10 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
     <div style={pageStyle}>
       {/* LEFT COLUMN — ActionStack runs full RecipeTab height. */}
       <ActionStack
-        recipeId={recipeId}
         selectedId={selectedId}
-        onAddIngredient={t => { setSubstituteMode(false); setAddType(t); }}
-        onQuickAddCarrageenan={quickAddCarrageenan}
         onSubstitute={handleSubstitute}
         onDuplicate={handleDuplicate}
         onDelete={handleDelete}
-        onMashProfile={() => setMashProfileModal(true)}
         // Scale placeholder — File menu's "Scale Recipe..." entry was
         // unwired (closeMenus only). Relocated here under TOOLS; modal
         // not yet ported. Stub alert so the click is acknowledged
@@ -311,6 +308,13 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
         onGrainPct={() => { if (grains.length === 0) { pushToast({ message: 'No grains in recipe.', variant: 'info' }); return; } setGrainPctModal(true); }}
         onHopIbu={() => { const bh = hops.filter(h => (h.use || '').toLowerCase() !== 'dry hop'); if (bh.length === 0) { pushToast({ message: 'No bittering hops in recipe.', variant: 'info' }); return; } setHopIbuModal(true); }}
         onAddToPlanner={handleAddToPlanner}
+      />
+
+      <RecipeActionLeft
+        recipeId={recipeId}
+        onAddIngredient={t => { setSubstituteMode(false); setAddType(t); }}
+        onQuickAddCarrageenan={quickAddCarrageenan}
+        onMashProfile={() => setMashProfileModal(true)}
       />
 
       {/* RIGHT COLUMN — pill strip on top, ingredient cards in the middle,
