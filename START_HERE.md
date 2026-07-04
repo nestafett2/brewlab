@@ -103,6 +103,7 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 - Google Sheets monthly backup script (shell script + cron, post-launch).
 - Teiban / Gentei / One-off classification.
 - Typography pass (after all tabs visible together).
+- Sync layer rebuild with `deleted_at` soft deletes — only needed if multiple users per brewery are added. Current hard-delete is fine for single-brewery/3-device use.
 
 ### Future products
 - AI-powered recipe analysis tool (claude.ai not API).
