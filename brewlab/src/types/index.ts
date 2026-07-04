@@ -471,9 +471,20 @@ export interface ColdSideData {
 
   // Notes
   'cs-process-notes'?: string;
-  'cs-tasting-notes'?: string;
+  'cs-tasting-notes'?: string;      // legacy single tasting-notes field (still
+                                    // edited by PackagingTab / printed / HistoryTab);
+                                    // migrated into `overallImpression` on the Analysis tab.
   'cs-changes-notes'?: string;
   'cs-analysis-notes'?: string;
+
+  // Structured tasting notes (Analysis tab). All optional — the cold-side
+  // blob defaults to {}. `overallImpression` falls back to the legacy
+  // 'cs-tasting-notes' value so existing data isn't lost.
+  appearance?: string;
+  aroma?: string;
+  flavor?: string;
+  mouthfeel?: string;
+  overallImpression?: string;
 
   // Cold-side variant of "Brew Again?" — distinct from recipe.brewAgain
   // (the recipe column accepts 'yes' | 'no' | 'maybe' per SCHEMA.md;

@@ -31,6 +31,20 @@ import type {
 
 interface Props { recipeId: string }
 
+// String-valued cold-side keys the Analysis tab edits (drives updateColdField).
+type ColdNoteField =
+  | 'cs-analysis-notes'
+  | 'appearance' | 'aroma' | 'flavor' | 'mouthfeel' | 'overallImpression';
+
+// The five structured tasting-note fields, in order.
+const TASTING_FIELDS: { key: ColdNoteField; label: string; placeholder: string }[] = [
+  { key: 'appearance',        label: 'Appearance',         placeholder: 'Color, clarity, head retention…' },
+  { key: 'aroma',             label: 'Aroma',              placeholder: 'Hop, malt, yeast character…' },
+  { key: 'flavor',            label: 'Flavor',             placeholder: 'Taste profile, balance, finish…' },
+  { key: 'mouthfeel',         label: 'Mouthfeel',          placeholder: 'Body, carbonation, texture…' },
+  { key: 'overallImpression', label: 'Overall Impression', placeholder: 'General impression, serving suggestions…' },
+];
+
 const fmtY = (v: number): string =>
   v > 0 ? '¥' + Math.round(v).toLocaleString('ja-JP') : '—';
 const orDash = (v: unknown): string => {
@@ -77,25 +91,39 @@ export default function AnalysisTab({ recipeId }: Props) {
   }, [tastingPanel, recipeId, getTastingPanel]);
   const tasters = tastingPanel?.tasters ?? [];
 
-  // ── Local state — only the editable analysis-notes textarea ──────────
-  const [cs, setCs] = useState<ColdSideData>(() => getColdSide(recipeId));
+  // ── Local state — editable cold-side notes (analysis + structured tasting) ──
+  // Migration guard: existing recipes stored their tasting notes under the
+  // legacy single 'cs-tasting-notes' field. Map it into `overallImpression`
+  // so that data surfaces (and isn't lost) in the new structured layout.
+  const hydrateCold = useCallback((recId: string): ColdSideData => {
+    const data = getColdSide(recId);
+    return { ...data, overallImpression: data.overallImpression ?? data['cs-tasting-notes'] ?? '' };
+  }, [getColdSide]);
+  const [cs, setCs] = useState<ColdSideData>(() => hydrateCold(recipeId));
   // Re-hydrate when switching recipes.
   useEffect(() => {
-    setCs(getColdSide(recipeId));
-  }, [recipeId, getColdSide]);
+    setCs(hydrateCold(recipeId));
+  }, [recipeId, hydrateCold]);
 
   // Debounced flush to ColdSide blob — same 400ms cadence as PackagingTab
   // (which also writes 'cs-analysis-notes' but isn't usually open at the
   // same time). If both tabs were open we'd race; in practice only one is.
   const flushTimer = useRef<number | null>(null);
-  const updateNotes = useCallback((text: string) => {
-    setCs(prev => ({ ...prev, 'cs-analysis-notes': text }));
+  // Pending patches accumulate across fields so editing several notes within
+  // one debounce window flushes them together (a single-field write that read
+  // getColdSide() would otherwise drop the other fields' uncommitted edits).
+  const pendingRef = useRef<Partial<ColdSideData>>({});
+  const updateColdField = useCallback((key: ColdNoteField, text: string) => {
+    setCs(prev => ({ ...prev, [key]: text }));
+    pendingRef.current = { ...pendingRef.current, [key]: text };
     if (flushTimer.current != null) window.clearTimeout(flushTimer.current);
     flushTimer.current = window.setTimeout(() => {
       flushTimer.current = null;
-      setColdSide(recipeId, { ...getColdSide(recipeId), 'cs-analysis-notes': text });
+      setColdSide(recipeId, { ...getColdSide(recipeId), ...pendingRef.current });
+      pendingRef.current = {};
     }, 400);
   }, [recipeId, setColdSide, getColdSide]);
+  const updateNotes = useCallback((text: string) => updateColdField('cs-analysis-notes', text), [updateColdField]);
   useEffect(() => () => {
     if (flushTimer.current != null) {
       window.clearTimeout(flushTimer.current);
@@ -483,14 +511,41 @@ export default function AnalysisTab({ recipeId }: Props) {
             ))}
           </SectionPanel>
 
-          {/* ── Tasting Notes (only if present) ── */}
-          {view.tastingNotes && (
-            <SectionPanel title="Tasting Notes">
-              <div style={{ padding: '10px 14px', fontSize: 11, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                {view.tastingNotes}
+          {/* ── Tasting Notes (structured, editable) ── */}
+          <SectionPanel title="Tasting Notes">
+            <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {TASTING_FIELDS.map(f => (
+                <div key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={noteLabelStyle}>{f.label}</span>
+                  <textarea
+                    value={cs[f.key] ?? ''}
+                    onChange={e => updateColdField(f.key, e.target.value)}
+                    placeholder={f.placeholder}
+                    style={tastingTextareaStyle}
+                  />
+                </div>
+              ))}
+
+              {/* Brew Again? segmented control (writes recipe.brewAgain) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={noteLabelStyle}>Brew Again?</span>
+                <div className="segmented-control">
+                  {(['yes', 'maybe', 'no'] as const).map(v => {
+                    const isActive = recipe.brewAgain === v;
+                    const cls = `seg-btn${isActive ? ' active' : ''}${v === 'yes' && isActive ? ' amber' : ''}`;
+                    return (
+                      <button
+                        key={v}
+                        className={cls}
+                        style={v === 'no' && isActive ? { color: 'var(--red)' } : undefined}
+                        onClick={() => updateRecipe(recipeId, { brewAgain: isActive ? null : v })}
+                      >{v === 'yes' ? 'Yes' : v === 'maybe' ? 'Maybe' : 'No'}</button>
+                    );
+                  })}
+                </div>
               </div>
-            </SectionPanel>
-          )}
+            </div>
+          </SectionPanel>
 
           {/* ── Changes for Next Time (only if present) ── */}
           {view.changeNotes && (
@@ -857,4 +912,16 @@ const costValueCellBold: React.CSSProperties = {
   padding: '8px 12px', fontSize: 13, fontWeight: 700,
   textAlign: 'right', fontFamily: 'var(--mono)',
   borderBottom: '1px solid var(--border2)',
+};
+
+// Structured tasting-note field label + textarea.
+const noteLabelStyle: React.CSSProperties = {
+  fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: 0.8,
+  textTransform: 'uppercase', color: 'var(--text-muted)',
+};
+const tastingTextareaStyle: React.CSSProperties = {
+  background: 'var(--panel2)', border: '1px solid var(--border2)', color: 'var(--text)',
+  fontFamily: 'var(--sans)', fontSize: 13, padding: 8,
+  borderRadius: 'var(--radius-md)', minHeight: 60, width: '100%',
+  resize: 'vertical', boxSizing: 'border-box', outline: 'none',
 };
