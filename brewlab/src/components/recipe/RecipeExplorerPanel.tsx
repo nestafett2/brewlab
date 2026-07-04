@@ -387,7 +387,7 @@ export default function RecipeExplorerPanel({
           {sortedRecipes.length === 0 ? (
             <Empty />
           ) : (
-            <table style={tableStyle}>
+            <table className="explorer-table" style={tableStyle}>
               <thead>
                 <tr>
                   {shownCols.map(col => (
@@ -680,18 +680,17 @@ const closeBtnStyle: React.CSSProperties = {
   padding: '2px 8px', fontSize: 11,
 };
 
+// Width / border-collapse / row-height / cell padding & font-size now
+// live in the `.explorer-table` CSS class. Only the properties the class
+// doesn't cover remain inline here.
 const tableStyle: React.CSSProperties = {
-  width: '100%',
-  borderCollapse: 'collapse',
   fontFamily: 'var(--mono)',
-  fontSize: 11,
 };
 
 const thStyle: React.CSSProperties = {
   position: 'sticky', top: 0, zIndex: 1,
   background: 'var(--panel2)',
   borderBottom: '1px solid var(--border)',
-  padding: '8px 10px',
   textAlign: 'left',
   color: 'var(--text-muted)',
   fontWeight: 600,
@@ -701,7 +700,6 @@ const thStyle: React.CSSProperties = {
 };
 
 const tdStyle: React.CSSProperties = {
-  padding: '6px 10px',
   color: 'var(--text)',
   whiteSpace: 'nowrap',
 };
