@@ -26,16 +26,47 @@ import RecipePreview from './RecipePreview';
 
 // ─── Columns ─────────────────────────────────────────────────────────
 
-type ColKey = 'taxBatch' | 'beerName' | 'style' | 'brewDate' | 'version';
+type ColKey =
+  | 'taxBatch' | 'beerName' | 'style' | 'brewDate' | 'version'
+  | 'abv' | 'ibu' | 'ebc' | 'batchL' | 'rating' | 'brewer' | 'classification'
+  | 'brewNumber' | 'folder' | 'ogPlato' | 'fgPlato' | 'cost' | 'brewAgain'
+  | 'locked' | 'oemFor' | 'notes' | 'extraAdditions';
+
+// Every ColKey, in a fixed order. The first five are the default columns
+// (also DEFAULT_COLS); everything after is optional and hidden by default.
+// This is the order the column-visibility menu iterates.
+const ALL_COLS: ColKey[] = [
+  'taxBatch', 'beerName', 'style', 'brewDate', 'version',
+  'abv', 'ibu', 'ebc', 'batchL', 'rating', 'brewer', 'classification',
+  'brewNumber', 'folder', 'ogPlato', 'fgPlato', 'cost', 'brewAgain',
+  'locked', 'oemFor', 'notes', 'extraAdditions',
+];
 
 const DEFAULT_COLS: ColKey[] = ['taxBatch', 'beerName', 'style', 'brewDate', 'version'];
 
 const COL_LABELS: Record<ColKey, string> = {
-  taxBatch: 'Tax Batch #',
-  beerName: 'Beer Name',
-  style:    'Style',
-  brewDate: 'Date',
-  version:  'Version',
+  taxBatch:       'Tax Batch #',
+  beerName:       'Beer Name',
+  style:          'Style',
+  brewDate:       'Date',
+  version:        'Version',
+  abv:            'ABV',
+  ibu:            'IBU',
+  ebc:            'EBC',
+  batchL:         'Batch (L)',
+  rating:         'Rating',
+  brewer:         'Brewer',
+  classification: 'Classification',
+  brewNumber:     'Brew #',
+  folder:         'Folder',
+  ogPlato:        'OG (°P)',
+  fgPlato:        'FG (°P)',
+  cost:           'Cost',
+  brewAgain:      'Brew Again',
+  locked:         'Locked',
+  oemFor:         'OEM / Collab For',
+  notes:          'Notes',
+  extraAdditions: 'Extra Additions',
 };
 
 const COLS_LS_KEY = 'bl_explorer_cols';
@@ -73,7 +104,7 @@ function loadVisibleCols(): Set<ColKey> {
       if (
         Array.isArray(parsed)
         && parsed.length > 0
-        && parsed.every((c: unknown) => DEFAULT_COLS.includes(c as ColKey))
+        && parsed.every((c: unknown) => ALL_COLS.includes(c as ColKey))
       ) {
         return new Set(parsed as ColKey[]);
       }
@@ -120,6 +151,19 @@ function compareRecipes(a: Recipe, b: Recipe, col: ColKey, dir: 1 | -1): number 
       const av = (a.version || '').toLowerCase();
       const bv = (b.version || '').toLowerCase();
       return dir * av.localeCompare(bv);
+    }
+    default: {
+      // Optional columns — numeric compare for numbers, otherwise a
+      // numeric-aware string compare with empties sorting last.
+      const av = a[col];
+      const bv = b[col];
+      if (typeof av === 'number' && typeof bv === 'number') return dir * (av - bv);
+      const as = av === undefined || av === null ? '' : String(av);
+      const bs = bv === undefined || bv === null ? '' : String(bv);
+      if (!as && !bs) return 0;
+      if (!as) return 1;
+      if (!bs) return -1;
+      return dir * as.localeCompare(bs, undefined, { numeric: true });
     }
   }
 }
@@ -258,11 +302,13 @@ export default function RecipeExplorerPanel({
     setDraggingCol(null);
   };
 
-  // Columns actually rendered: ordered by colOrder, filtered to visible.
-  const shownCols = useMemo(
-    () => colOrder.filter(c => visibleCols.has(c)),
-    [colOrder, visibleCols],
-  );
+  // Columns actually rendered: the drag-ordered default columns first
+  // (colOrder), then any optional columns in their fixed ALL_COLS order,
+  // filtered to what's currently visible.
+  const shownCols = useMemo(() => {
+    const ordered = [...colOrder, ...ALL_COLS.filter(c => !colOrder.includes(c))];
+    return ordered.filter(c => visibleCols.has(c));
+  }, [colOrder, visibleCols]);
 
   // Toggle a column's visibility. Never allow hiding the last visible
   // column (the checkbox is also disabled in that case).
@@ -398,29 +444,23 @@ export default function RecipeExplorerPanel({
       </div>
       {colCtxMenu && (
         <div
-          className="ctx-menu open"
-          style={{ left: colCtxMenu.x, top: colCtxMenu.y }}
+          style={{ ...colMenuStyle, left: colCtxMenu.x, top: colCtxMenu.y }}
           onMouseDown={e => e.stopPropagation()}
         >
-          {DEFAULT_COLS.map(col => {
+          {ALL_COLS.map(col => {
             const checked = visibleCols.has(col);
-            // Can't hide the last remaining column.
+            // Can't hide the last remaining visible column.
             const disabled = checked && visibleCols.size <= 1;
             return (
-              <div
-                key={col}
-                className="ctx-item"
-                onClick={() => { if (!disabled) toggleColVisible(col); }}
-                style={disabled ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
-              >
-                <input
-                  type="checkbox"
+              <div key={col}>
+                <ColMenuRow
+                  label={COL_LABELS[col]}
                   checked={checked}
                   disabled={disabled}
-                  readOnly
-                  style={{ marginRight: 8 }}
+                  onToggle={() => toggleColVisible(col)}
                 />
-                {COL_LABELS[col]}
+                {/* Divider separating the default columns from optional ones. */}
+                {col === 'version' && <div style={colMenuDividerStyle} />}
               </div>
             );
           })}
@@ -446,6 +486,15 @@ function cellContent(col: ColKey, recipe: Recipe): React.ReactNode {
     case 'style':    return recipe.style || '—';
     case 'brewDate': return recipe.brewDate || '—';
     case 'version':  return `v${recipe.version || '1.0'}`;
+    default: {
+      // Optional columns render generically: empty / zero / null → em dash,
+      // booleans → Yes / dash, everything else stringified.
+      const v = recipe[col];
+      const dash = <span style={{ color: 'var(--text-muted)' }}>—</span>;
+      if (typeof v === 'boolean') return v ? 'Yes' : dash;
+      if (v === undefined || v === null || v === '' || v === 0) return dash;
+      return String(v);
+    }
   }
 }
 
@@ -504,6 +553,47 @@ function ExplorerRow({
         <td key={col} style={tdStyle}>{cellContent(col, recipe)}</td>
       ))}
     </tr>
+  );
+}
+
+// ─── Column visibility menu row ──────────────────────────────────────
+
+function ColMenuRow({
+  label, checked, disabled, onToggle,
+}: {
+  label: string;
+  checked: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+  return (
+    <div
+      onClick={() => { if (!disabled) onToggle(); }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        padding: '6px 14px',
+        display: 'flex', alignItems: 'center', gap: 10,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        fontSize: 13, fontFamily: 'var(--sans)', color: 'var(--text)',
+        opacity: disabled ? 0.4 : 1,
+        background: hover && !disabled ? 'var(--panel)' : 'transparent',
+      }}
+    >
+      <span
+        style={{
+          width: 16, height: 16, flexShrink: 0, borderRadius: 4,
+          border: `1.5px solid ${checked ? 'var(--amber)' : 'var(--border2)'}`,
+          background: checked ? 'var(--amber)' : 'transparent',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#fff', fontSize: 11, lineHeight: 1,
+        }}
+      >
+        {checked ? '✓' : ''}
+      </span>
+      {label}
+    </div>
   );
 }
 
@@ -623,4 +713,22 @@ const sortArrowStyle: React.CSSProperties = {
 const emptyStyle: React.CSSProperties = {
   padding: 30, color: 'var(--text-muted)',
   fontFamily: 'var(--mono)', fontSize: 10, textAlign: 'center',
+};
+
+const colMenuStyle: React.CSSProperties = {
+  position: 'fixed',
+  background: 'var(--panel2)',
+  border: '1px solid var(--border)',
+  borderRadius: 10,
+  boxShadow: '0 8px 32px rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.18)',
+  padding: '6px 0',
+  minWidth: 200,
+  zIndex: 1000,
+  overflow: 'hidden',
+};
+
+const colMenuDividerStyle: React.CSSProperties = {
+  height: 1,
+  background: 'var(--border)',
+  margin: '6px 0',
 };
