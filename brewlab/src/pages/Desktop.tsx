@@ -1235,7 +1235,7 @@ export default function Desktop() {
       {isRecipeOpen && selectedRecipeForMeta && (
         <div
           className="recipe-meta-bar"
-          style={undefined}
+          style={recipeSubTab === 'ingredients' ? { paddingLeft: 236 } : undefined}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0, minWidth: 120 }}>
             <input
