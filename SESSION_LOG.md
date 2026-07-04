@@ -1,3 +1,55 @@
+## 05 July 2026 — Explorer redesign, design system overhaul, tasting panel, SCHEMA audit
+
+Large polish + feature session across recipe UI, theming, the Analysis tab, and docs.
+
+### Action columns
+- ActionStack split: SETUP + ADD groups moved to a new left panel (`RecipeActionLeft`); EDIT + TOOLS stay on the right (`ActionStack`). Reasoning: separates "configure/add" from "edit/act" so the two sides read as distinct intents.
+- Recipe sidebar open/close toggle and the OEM/Collab brewer-name fix carried over as done from the previous session.
+
+### Recipe Explorer full redesign
+- Replaced the multi-mode explorer with a single **sortable, drag-reorderable table** (columns: Tax Batch #, Beer Name, Style, Date, Version). Click a header to sort (click again flips); drag headers to reorder (persisted to `bl_explorer_cols`).
+- **Right-click column-visibility menu** listing all optional columns (ABV, IBU, EBC, Batch, Rating, Brewer, Classification, Brew #, Folder, OG/FG, Cost, Brew Again, Locked, OEM/Collab For, Notes, Extra Additions) — persisted to `bl_explorer_visible_cols`; can't hide the last visible column. Menu restyled Apple-style and made scrollable when taller than the viewport.
+- Toolbar gained a search box (beerName/name), a Style filter dropdown, and an Origin filter dropdown (Own/Collab/OEM). The old standalone "By Origin" mode was replaced by the origin filter.
+
+### Design system overhaul
+- **Font swap:** Inter (sans) + Geist Mono (mono) via Google Fonts, with prior fallbacks retained (`--sans`, `--mono`).
+- **Theme tokens added:** type scale (`--fs-*`), weights (`--fw-*`), line heights (`--lh-*`), radius scale (`--radius-*`), `--surface-raised`, `--weekend-tint`. Border radius standardised to `var(--radius-md)` across inputs/selects.
+- **Interaction polish:** button active/press scale, input focus amber glow, rounded/shadowed context menus, refined toast (blur + semi-transparent), stronger row-hover striping, sidebar-hover left accent, thinner 6px scrollbar, tighter tracking, bolder group headers.
+- **Semantic colours:** darker green/red/amber in light mode for contrast; borders strengthened slightly in both modes.
+- Removed row dividers app-wide for a flatter list look (kept intentional separators + card borders).
+
+### Ingredient section headers
+- Section header rows replaced with per-row **Lucide icons** (Wheat/Leaf/FlaskConical/Plus) tinted by the section colour; right-click column menu moved onto the section wrapper. Reasoning: reclaims vertical space and reads cleaner than text labels. (Adding `lucide-react` was required — it wasn't previously a dependency.)
+
+### Tabs
+- Libraries, Notes, and Settings now open as **closeable tabs** (extended `TabVisibility`), following the Planner/Inventory pattern.
+
+### Planner
+- Today vertical line, week numbers/separators, alternating-week tint, "hide empty vessels" toggle, per-brew colours restored (dropped the vessel-phase colour experiment), and a **Print Planner** (A4-landscape HTML grid).
+
+### NTA Submitter
+- Recipe Checker / Submitted Register **two-mode segmented toggle**; register mode is a full-page table with print controls hoisted into the header. Match banner made more prominent; print controls consolidated into the register (Print Form no longer gated behind Check).
+
+### Analysis tab — sensory
+- **Tasting Panel:** wizard modal (name → Hop & Fruit → Malt & Fermentation), 0–5 half-point scoring, averaged SVG radar charts, taster cards with delete. New `TastingPanel`/`TasterScore` types, `tastingPanelByRecipe` store map (reactive-cache pattern like mash), and a `tasting_panel` JSONB table (migration `2026-07-05_add_tasting_panel_table.sql`, **applied to Supabase**).
+- **Structured tasting notes:** Appearance / Aroma / Flavor / Mouthfeel / Overall Impression replace the single tasting-notes textarea; `overallImpression` migrates from the legacy `cs-tasting-notes` value so existing data isn't lost.
+- **Brew Again** segmented control (writes `recipe.brewAgain`; Yes→amber, No→red, Maybe→normal) and a **star rating** (1–5) relocated into the panel.
+- **Print Tasting Sheet:** new `tastingSheetPrint.ts` — blank A4 hand-fill scorecard (circle-a-score descriptor rows + ruled note boxes).
+
+### Docs & audit
+- **SCHEMA.md** fully reconciled against the live Supabase schema (read via MCP): ~15 missing `recipes`/`recipe_ingredients` columns added, `brew_num → tax_batch` rename, `ferm_log.deleted_at`, `recipe_profiles`/`mash` tables documented, and ~15 missing localStorage keys added (with corrected sync targets; `bl_orders`/`bl_ledger` now sync to settings).
+- **Stub/placeholder audit** run across `src/` — real unfinished features identified (Scale Recipe, Send to Sales Team, FolderPreview buttons, Library BeerXML import/export, tax.ts TODOs, remaining `window.confirm` sites).
+- Deferred-note updated: sync layer / soft deletes fold into the eventual PocketBase migration.
+- `window.confirm` removed from the Libraries bulk-delete (undo toast already covers it).
+
+### Key decisions
+- Explorer column order + visibility are per-device localStorage prefs (not synced) — display concerns, not brewery-wide data.
+- Structured tasting notes were **added** rather than replacing `cs-tasting-notes` outright: that field is still edited by PackagingTab/TastingNotesModal and printed/shown in HistoryTab, so a clean cutover is a follow-up (unify next session).
+- Per-brew planner colours restored over the vessel-phase experiment — brewers identify brews by their own colour, not by vessel.
+- Migration placed at `brewlab/migrations/` to match the existing convention (initial `supabase/migrations/` location corrected same session).
+
+---
+
 ## 03 July 2026 (late afternoon) — Analysis Sheet, Print Full Packet, OEM/Collab field
 
 ### Analysis Sheet print artifact

@@ -14,7 +14,7 @@ CRITICAL — DO NOT ASK BEN WHICH FILE RENDERS SOMETHING. HE DOES NOT KNOW. IT I
 
 # BrewLab — START HERE
 
-**Last session: 03 July 2026 (afternoon — print sheets, OEM/Collab field)**
+**Last session: 05 July 2026**
 **Read this first. Everything else is reference.**
 
 ---
@@ -72,51 +72,69 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 
 ## What Got Done Last Session
 
-**Analysis Sheet print artifact** — new `src/components/recipe/analysisSheetPrint.ts`. A4 portrait, clean black-on-white. Sections: header, stats row, cost breakdown, yeast & fermentation (real vs plan), packaging (kegs/cans/waste, pitch pH, final pH), process notes, tasting notes, changes for next time, analysis notes. Notes sections always render as blank ruled boxes when empty. Replaces the old dark-theme DOM print on the Analysis tab. Tasting/changes/analysis notes fixed to always render unconditionally.
-
-**Print Full Packet** — "Print Full Packet" added to the Print ▾ dropdown. Calls Prep Sheet + Brew Day Sheet + Ferm & Packaging Sheet in sequence.
-
-**OEM/Collab/Own Brand field** — `recipeOrigin` (own/collab/oem) and `oemFor` (partner name) added to `Recipe` type, `RecipeTab` (toggle buttons + conditional partner name input), `FolderTree` (badge on sidebar row for collab/OEM recipes), and Supabase sync mapping. Migration `2026-07-03-recipe-origin.sql` created. **Migration applied to Supabase.**
+- ActionStack split: SETUP+ADD moved to left panel (RecipeActionLeft), EDIT+TOOLS stay right (ActionStack)
+- Recipe sidebar toggle (open/close) — noted as done from previous session
+- OEM/Collab brewer name fix — noted as done from previous session
+- Recipe Explorer full redesign: sortable/draggable table view with Tax Batch #, Beer Name, Style, Date, Version columns; right-click column visibility menu with all optional columns (ABV, IBU, EBC, etc.); search bar; style filter dropdown; origin filter dropdown (Own/Collab/OEM)
+- Global font swap: Inter (sans) + Geist Mono (mono) via Google Fonts
+- Major theme/design polish: button active states, input focus amber glow, modal backdrop blur, toast refinement, sidebar hover accent, surface elevation, scrollbar thinning, border radius consistency, semantic color improvements (light mode green/red/amber)
+- Lucide icons on ingredient section headers (inline per row)
+- Libraries, Notes, Settings now open as closeable tabs
+- Planner improvements: today line, week numbers, week separators, alternating week tint, hide empty vessels toggle, per-brew colors restored, print planner
+- NTA Submitter: Recipe Checker / Submitted Register two-mode toggle
+- window.confirm removed from Libraries bulk delete
+- Tasting Panel added to Analysis tab: wizard modal (name → Hop & Fruit → Malt & Fermentation), 0–5 half-point scoring, averaged SVG radar charts, taster cards with delete
+- Structured tasting note fields: Appearance, Aroma, Flavor, Mouthfeel, Overall Impression (replaces single textarea on Analysis tab)
+- Brew Again segmented control on Analysis tab
+- Star rating (1-5) on Analysis tab
+- Print Tasting Sheet added to Analysis tab
+- SCHEMA.md fully audited against live Supabase — 15 missing columns added, 15 missing localStorage keys added, multiple corrections
+- Stub/placeholder audit completed — real unfinished features identified
+- Sync layer / soft deletes deferred note updated: fold into PocketBase migration
+- Migration: `2026-07-05_add_tasting_panel_table.sql` (applied to Supabase)
 
 ---
 
 ## What's Still Broken / Pending
 
 ### Print gaps
-- Ferm & Packaging Sheet layout polish — needs visual review and tweaks.
-- "Print Full Brew Packet" — after individual sheets stabilise.
-- Monthly Report A3 vs A4 — revisit once production data exists.
+- Ferm & Packaging Sheet layout polish
+- Tasting notes on print sheets still use old single `cs-tasting-notes` field — needs updating to use new structured fields (Appearance/Aroma/Flavor/Mouthfeel/Overall)
+- PackagingTab TastingNotesModal and HistoryTab still use old single field — follow-up to unify
 
 ### Smoke tests pending
-- Brewer field cross-device sync.
-- Extra additions field cross-device sync.
-- BeerXML round-trip (export → re-import → verify equivalent).
-- Backup round-trip (export → import → reconnect → verify).
-- Monthly Report print — NO PACKAGE DATE label, Happoshu highlight.
+- Brewer field cross-device sync
+- Extra additions field cross-device sync
+- BeerXML round-trip
+- Backup round-trip
+- Monthly Report print (NO PACKAGE DATE label, Happoshu highlight)
 
-### Feature gaps
-- Recipe browser: OEM/Collab/Own Brand field (noted, deferred).
-- Focus mode: full-screen toggle hiding sidebar and action stack (noted, deferred).
+### Unfinished features (from stub audit)
+- Scale Recipe modal — toast stub only, not ported
+- Send to Sales Team button (Checklist tab) — disabled stub
+- FolderPreview New Subfolder / New Recipe Here buttons — TODO
+- Library BeerXML Import/Export — menu navigates to Libraries but doesn't trigger file work
+- Tax cone-height / yeast-amount fidelity — two TODOs in tax.ts
+- window.confirm still in: TaxTab (3), EditOrderModal, Desktop.tsx (2), UseHarvestedYeastModal, store sync conflict
 
 ### Deferred
-- BJCP 2025 style guideline import.
-- Google Sheets monthly backup script (shell script + cron, post-launch).
-- Teiban / Gentei / One-off classification.
-- Typography pass (after all tabs visible together).
-- Sync layer rebuild with `deleted_at` soft deletes — fold into the PocketBase migration rewrite, which already requires rewriting `sbDispatch`/`sbHydrate`. Only urgent if multiple users per brewery are added before then.
-
-### Future products
-- AI-powered recipe analysis tool (claude.ai not API).
-- Sales team upcoming-brews app.
-- Can count reporting tool.
-- Voice-driven Brew Day logging via Claude Project.
+- Focus mode (full-screen toggle)
+- BJCP 2025 style import
+- Google Sheets monthly backup script (post-launch)
+- Teiban / Gentei / One-off classification
+- Typography overlay dev tool + full visual pass
+- Voice-driven brew day logging
+- Sync layer / soft deletes — fold into PocketBase migration
+- PocketBase migration (post-launch, major effort)
 
 ---
 
 ## Next Session Focus
 
-1. Ferm & Packaging Sheet layout polish.
-2. Analysis Sheet layout tweaks (NTA Submitter print layout tweak also pending).
+1. Scale Recipe modal — port from HTML spec
+2. Unify tasting notes: update PackagingTab, HistoryTab, print sheets to use new structured fields
+3. Fix migration file location: move `supabase/migrations/2026-07-05_add_tasting_panel_table.sql` to `brewlab/migrations/`
+4. window.confirm cleanup pass
 
 ---
 
