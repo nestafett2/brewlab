@@ -109,6 +109,7 @@ Three interfaces — desktop, tablet (iPad), mobile (iPhone) — that all sync v
 
 These are Ben's hard rules. Don't violate them.
 
+- **CRITICAL — finding source files:** Claude cannot read .tsx/.ts files via OneDrive. When something needs changing in the UI, Claude's job is to find the right file — never ask Ben which file something is in. Workflow: (1) grep the repo for a distinctive string from the UI (e.g. a field name, label text, or function name). (2) Tell Ben the exact filename to upload. (3) Ben uploads. (4) Claude reads and writes the CC prompt. Example: `grep -rl "beerName" src/ --include="*.tsx"`. Find the file first, then ask for it by name.
 - **No assumptions.** If something isn't obvious from these handoff docs, ask one specific question. Don't fabricate context.
 - **Be honest.** Never claim you've checked, read, or compared something you haven't. If you're guessing, say "I'm guessing." If you don't know, say "I don't know."
 - **Read the HTML app source** before building any feature. The HTML is the spec.
