@@ -57,6 +57,7 @@ export default function AnalysisTab({ recipeId }: Props) {
   const getColdSide  = useStore(s => s.getColdSide);
   const setColdSide  = useStore(s => s.setColdSide);
   const pushToast    = useStore(s => s.pushToast);
+  const updateRecipe = useStore(s => s.updateRecipe);
 
   // Subscribe so external edits to the cached tax/cold blobs trigger re-render.
   const taxRecordCache = useStore(s => s.taxRecordsByRecipe[recipeId]);
@@ -279,6 +280,10 @@ export default function AnalysisTab({ recipeId }: Props) {
         <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-dim)' }}>
           Printable brew summary
         </span>
+        <StarRating
+          rating={recipe.rating || 0}
+          onSet={n => updateRecipe(recipeId, { rating: n })}
+        />
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button className="btn" onClick={handlePrint}>🖨 Print / PDF</button>
         </div>
@@ -314,7 +319,7 @@ export default function AnalysisTab({ recipeId }: Props) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, marginBottom: 12 }}>
             <Card label="Brew Date" value={view.brewDate} />
             <Card label="Package Date" value={view.pkgDate} />
-            <Card label="Brewer" value="Ben" />
+            <Card label="Brewer" value={recipe.brewer || settings.breweryName || '—'} />
             <Card label="Classification" value={view.classification} />
           </div>
 
@@ -511,6 +516,39 @@ export default function AnalysisTab({ recipeId }: Props) {
 // ═══════════════════════════════════════════════════════════════════
 // Layout primitives — kept inline; only used by this tab.
 // ═══════════════════════════════════════════════════════════════════
+
+// 5-star rating widget. Hover previews the fill up to the cursor; click
+// sets the rating, or clears it when clicking the current value. Rating
+// 0 = unset ("Not rated").
+function StarRating({ rating, onSet }: { rating: number; onSet: (n: number) => void }) {
+  const [hover, setHover] = useState(0);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ display: 'flex' }} onMouseLeave={() => setHover(0)}>
+        {[1, 2, 3, 4, 5].map(n => {
+          const active = hover ? hover >= n : rating >= n;
+          return (
+            <span
+              key={n}
+              onClick={() => onSet(rating === n ? 0 : n)}
+              onMouseEnter={() => setHover(n)}
+              style={{
+                cursor: 'pointer', fontSize: 22, padding: '0 2px',
+                color: active ? 'var(--amber)' : 'var(--border3)',
+              }}
+            >{active ? '★' : '☆'}</span>
+          );
+        })}
+      </div>
+      <span style={{
+        fontSize: 9,
+        color: rating === 0 ? 'var(--text-muted)' : 'var(--amber)',
+      }}>
+        {rating === 0 ? 'Not rated' : `${rating} / 5`}
+      </span>
+    </div>
+  );
+}
 
 function MetaCell({ label, value, amber }: { label: string; value: string; amber?: boolean }) {
   return (
