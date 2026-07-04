@@ -40,6 +40,23 @@ File menu → Save as Template.
 
 > Once your brew date is set, use Tools → Add to Planner in the right sidebar to schedule the brew on the Production Planner.
 
+### Saving a Recipe as a Template
+
+Templates let you reuse a recipe's structure as the starting point for new brews.
+
+**1. Open the recipe you want to save as a template**
+Select it in the recipe browser so it's the active recipe.
+
+**2. Click File in the menu bar**
+
+**3. Click "Save as Template"**
+
+**4. The recipe is now saved as a template**
+It's available whenever you create a new recipe.
+
+**5. To use the template**
+Click + New in the recipe browser sidebar → select the **From Template** tab → choose your template.
+
 ---
 
 ## Workflow 2: Planning and Placing an Order
