@@ -12,7 +12,7 @@
 
 import { useEffect } from 'react';
 import { useStore } from '../../store';
-import type { Classification, IngredientType } from '../../types';
+import type { IngredientType } from '../../types';
 
 interface Props {
   /** Recipe id — drives the Setup-section dropdown subscriptions
@@ -51,14 +51,16 @@ export default function RecipeActionLeft({
       <div style={setupBlockStyle}>
         <div style={setupFieldStyle}>
           <div style={setupLabelStyle}>Classification</div>
-          <select
-            value={recipe?.classification || 'Beer'}
-            onChange={e => setRecipeClassification(recipeId, e.target.value as Classification)}
-            style={selectStyle}
-          >
-            <option value="Beer">Beer</option>
-            <option value="Happoshu">Happoshu</option>
-          </select>
+          <div className="segmented-control">
+            <button
+              className={`seg-btn${(recipe?.classification || 'Beer') === 'Beer' ? ' active' : ''}`}
+              onClick={() => setRecipeClassification(recipeId, 'Beer')}
+            >Beer</button>
+            <button
+              className={`seg-btn${recipe?.classification === 'Happoshu' ? ' active' : ''}`}
+              onClick={() => setRecipeClassification(recipeId, 'Happoshu')}
+            >Happoshu</button>
+          </div>
         </div>
         <div style={setupFieldStyle}>
           <div style={setupLabelStyle}>Equipment</div>

@@ -1256,18 +1256,20 @@ export default function Desktop() {
                   </div>
                 </div>
                 <div className="rb-toolbar" style={{ padding: '6px 8px' }}>
-                  <button
-                    className={`rb-view-btn ${sidebarTab === 'overview' ? 'active' : ''}`}
-                    onClick={() => { setSidebarTab('overview'); setPreview(null); }}
-                  >
-                    Overview
-                  </button>
-                  <button
-                    className={`rb-view-btn ${sidebarTab === 'explorer' ? 'active' : ''}`}
-                    onClick={() => setSidebarTab('explorer')}
-                  >
-                    Recipe Explorer
-                  </button>
+                  <div className="segmented-control">
+                    <button
+                      className={`seg-btn${sidebarTab === 'overview' ? ' active' : ''}`}
+                      onClick={() => { setSidebarTab('overview'); setPreview(null); }}
+                    >
+                      Overview
+                    </button>
+                    <button
+                      className={`seg-btn${sidebarTab === 'explorer' ? ' active' : ''}`}
+                      onClick={() => setSidebarTab('explorer')}
+                    >
+                      Recipe Explorer
+                    </button>
+                  </div>
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto' }}>
                   <FolderTree
@@ -1387,23 +1389,19 @@ export default function Desktop() {
                                 placeholder="仕込記号"
                                 style={{ fontSize: 11, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed var(--border3)', outline: 'none', padding: 0, fontFamily: 'var(--sans)', minWidth: 60 }}
                               />
-                              {(['own', 'collab', 'oem'] as RecipeOrigin[]).map(opt => (
-                                <button
-                                  key={opt}
-                                  className="btn sm"
-                                  style={{
-                                    padding: '1px 7px', fontSize: 10,
-                                    ...(selectedRecipeForMeta.recipeOrigin === opt
-                                      ? { color: 'var(--amber)', borderColor: 'var(--amber)' }
-                                      : {}),
-                                  }}
-                                  onClick={() => updateRecipe(selectedRecipeForMeta.id, {
-                                    recipeOrigin: selectedRecipeForMeta.recipeOrigin === opt ? null : opt,
-                                  })}
-                                >
-                                  {opt === 'own' ? 'Own' : opt === 'collab' ? 'Collab' : 'OEM'}
-                                </button>
-                              ))}
+                              <div className="segmented-control">
+                                {(['own', 'collab', 'oem'] as RecipeOrigin[]).map(opt => (
+                                  <button
+                                    key={opt}
+                                    className={`seg-btn${selectedRecipeForMeta.recipeOrigin === opt ? ' active amber' : ''}`}
+                                    onClick={() => updateRecipe(selectedRecipeForMeta.id, {
+                                      recipeOrigin: selectedRecipeForMeta.recipeOrigin === opt ? null : opt,
+                                    })}
+                                  >
+                                    {opt === 'own' ? 'Own' : opt === 'collab' ? 'Collab' : 'OEM'}
+                                  </button>
+                                ))}
+                              </div>
                               {(selectedRecipeForMeta.recipeOrigin === 'collab' || selectedRecipeForMeta.recipeOrigin === 'oem') && (
                                 <input
                                   type="text"
