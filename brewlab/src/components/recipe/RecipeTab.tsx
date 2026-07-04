@@ -294,22 +294,6 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
 
   return (
     <div style={pageStyle}>
-      {/* LEFT COLUMN — ActionStack runs full RecipeTab height. */}
-      <ActionStack
-        selectedId={selectedId}
-        onSubstitute={handleSubstitute}
-        onDuplicate={handleDuplicate}
-        onDelete={handleDelete}
-        // Scale placeholder — File menu's "Scale Recipe..." entry was
-        // unwired (closeMenus only). Relocated here under TOOLS; modal
-        // not yet ported. Stub alert so the click is acknowledged
-        // rather than silently dead.
-        onScale={() => pushToast({ message: 'Scale Recipe not yet ported.', variant: 'info' })}
-        onGrainPct={() => { if (grains.length === 0) { pushToast({ message: 'No grains in recipe.', variant: 'info' }); return; } setGrainPctModal(true); }}
-        onHopIbu={() => { const bh = hops.filter(h => (h.use || '').toLowerCase() !== 'dry hop'); if (bh.length === 0) { pushToast({ message: 'No bittering hops in recipe.', variant: 'info' }); return; } setHopIbuModal(true); }}
-        onAddToPlanner={handleAddToPlanner}
-      />
-
       <RecipeActionLeft
         recipeId={recipeId}
         onAddIngredient={t => { setSubstituteMode(false); setAddType(t); }}
@@ -457,6 +441,22 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
           />
         </div>
       </div>
+
+      {/* RIGHT COLUMN — ActionStack runs full RecipeTab height. */}
+      <ActionStack
+        selectedId={selectedId}
+        onSubstitute={handleSubstitute}
+        onDuplicate={handleDuplicate}
+        onDelete={handleDelete}
+        // Scale placeholder — File menu's "Scale Recipe..." entry was
+        // unwired (closeMenus only). Relocated here under TOOLS; modal
+        // not yet ported. Stub alert so the click is acknowledged
+        // rather than silently dead.
+        onScale={() => pushToast({ message: 'Scale Recipe not yet ported.', variant: 'info' })}
+        onGrainPct={() => { if (grains.length === 0) { pushToast({ message: 'No grains in recipe.', variant: 'info' }); return; } setGrainPctModal(true); }}
+        onHopIbu={() => { const bh = hops.filter(h => (h.use || '').toLowerCase() !== 'dry hop'); if (bh.length === 0) { pushToast({ message: 'No bittering hops in recipe.', variant: 'info' }); return; } setHopIbuModal(true); }}
+        onAddToPlanner={handleAddToPlanner}
+      />
 
       {addType && (
         <AddIngredientModal
