@@ -590,7 +590,7 @@ button, .btn, .sidebar-btn, .tab, .sub-tab, .menu-item, .menu-dd-item, .ctx-item
 }
 
 .recipe-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .recipe-item.selected, .recipe-item.active {
@@ -690,6 +690,11 @@ button, .btn, .sidebar-btn, .tab, .sub-tab, .menu-item, .menu-dd-item, .ctx-item
   color: var(--text);
 }
 
+.btn:active {
+  transform: scale(0.97);
+  transition: transform 60ms ease;
+}
+
 .btn.primary {
   background: var(--blue);
   border-color: var(--blue);
@@ -781,7 +786,7 @@ tbody tr {
 }
 
 tbody tr:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 tbody tr.selected {
@@ -874,11 +879,14 @@ tbody td {
   font-size: 12px;
   font-weight: 400;
   transition: all 0.1s;
+  border-left: 2px solid transparent;
 }
 
 .sidebar-btn:hover {
   background: var(--panel2);
   color: var(--text);
+  border-left: 2px solid var(--amber-dim);
+  padding-left: 8px;
 }
 
 .sidebar-btn .icon {
@@ -1035,12 +1043,12 @@ tbody td {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.4);
   z-index: 100;
   display: flex;
   align-items: center;
   justify-content: center;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s;
@@ -1057,14 +1065,14 @@ tbody td {
   width: 440px;
   max-width: 95vw;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8);
-  transform: translateY(8px);
+  transform: translateY(6px) scale(0.98);
   transition: transform 0.15s;
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
 .modal-overlay.open .modal {
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
 }
 
 .modal-header {
@@ -1265,7 +1273,8 @@ tbody td {
 
 .form-group input:focus,
 .form-group select:focus {
-  border-color: var(--blue);
+  border-color: var(--amber-dim);
+  box-shadow: 0 0 0 3px var(--amber-glow);
 }
 
 /* --- Context Menu --- */
@@ -1273,10 +1282,13 @@ tbody td {
   position: fixed;
   background: var(--panel2);
   border: 1px solid var(--border2);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3);
   z-index: 200;
   min-width: 130px;
   display: none;
+  border-radius: 10px;
+  overflow: hidden;
+  padding: 4px 0;
 }
 
 .ctx-menu.open {
@@ -1361,7 +1373,7 @@ tbody td {
   margin-bottom: 24px;
   background: var(--panel);
   border: 1px solid var(--border2);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 18px 20px;
   width: 100%;
   max-width: 720px;
@@ -1415,6 +1427,7 @@ tbody td {
 .settings-field input:focus,
 .settings-field select:focus {
   border-color: var(--amber);
+  box-shadow: 0 0 0 3px var(--amber-glow);
 }
 
 /* ============================================
@@ -1838,7 +1851,7 @@ input[type=number] {
   font-size: 13px !important; font-family: var(--mono) !important;
 }
 .bd-readings-table td.row-label { font-size: 13px !important; }
-.bd-field .bd-input:focus { border-color: var(--blue); }
+.bd-field .bd-input:focus { border-color: var(--amber-dim); box-shadow: 0 0 0 2px var(--amber-glow); }
 .bd-field .bd-calc { font-size: 14px; font-weight: 600; color: var(--text); }
 
 .stage-complete-strip {
@@ -2331,15 +2344,20 @@ body.light .fp-row:hover {
   gap: 10px;
   min-width: 280px;
   max-width: 480px;
-  background: var(--panel);
+  background: rgba(44, 44, 46, 0.92);
   border: 1px solid var(--border2);
-  border-radius: 10px;
-  padding: 8px 10px 8px 14px;
+  border-radius: 12px;
+  padding: 10px 12px 10px 16px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3);
+  backdrop-filter: blur(12px);
   animation: toast-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+body.light .toast {
+  background: rgba(255, 255, 255, 0.92);
 }
 
 @keyframes toast-in {
