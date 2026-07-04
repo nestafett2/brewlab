@@ -23,7 +23,7 @@
  */
 
 import { useState, type ReactElement } from 'react';
-import { Wheat, Leaf, FlaskConical, Plus } from 'lucide-react';
+import { Wheat, Leaf, FlaskConical, Plus, type LucideIcon } from 'lucide-react';
 import { useStore } from '../../store';
 import { fmtAmt } from '../../lib/utils';
 import { fmtNum } from '../../lib/format';
@@ -31,11 +31,11 @@ import type { Ingredient, IngredientType } from '../../types';
 
 type RecipeSectionType = 'grain' | 'hop' | 'yeast' | 'misc';
 
-const SECTION_ICONS: Record<RecipeSectionType, React.ReactNode> = {
-  grain: <Wheat size={14} strokeWidth={1.5} />,
-  hop:   <Leaf size={14} strokeWidth={1.5} />,
-  yeast: <FlaskConical size={14} strokeWidth={1.5} />,
-  misc:  <Plus size={14} strokeWidth={1.5} />,
+const SECTION_ICONS: Record<RecipeSectionType, LucideIcon> = {
+  grain: Wheat,
+  hop:   Leaf,
+  yeast: FlaskConical,
+  misc:  Plus,
 };
 
 interface ColDef {
@@ -152,15 +152,10 @@ export default function IngredientCard({
   };
 
   return (
-    <div style={{ ...sectionStyle, ...(extraTopGap ? { marginTop: 12 } : {}) }}>
-      <div style={headerStyle} onContextMenu={onHeaderContext} title="Right-click for column options">
-        <span style={{ ...dotStyle, background: dotColor }} />
-        <span style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
-          {SECTION_ICONS[sectionType]}
-        </span>
-        <span style={countStyle}>{items.length}</span>
-      </div>
-
+    <div
+      style={{ ...sectionStyle, ...(extraTopGap ? { marginTop: 12 } : {}) }}
+      onContextMenu={onHeaderContext}
+    >
       {items.length === 0 ? (
         <div style={emptyStyle}>No {label.toLowerCase()} added</div>
       ) : (
@@ -169,6 +164,7 @@ export default function IngredientCard({
             key={ing.id}
             ing={ing}
             type={sectionType}
+            dotColor={dotColor}
             visibleCols={visibleCols}
             pct={grainPcts.get(ing.id)}
             ibu={perHopIbu.get(ing.id)}
@@ -202,12 +198,13 @@ export default function IngredientCard({
 // ── Row ───────────────────────────────────────────────────────────────
 
 function IngredientRow({
-  ing, type, visibleCols, pct, ibu, isSelected,
+  ing, type, dotColor, visibleCols, pct, ibu, isSelected,
   onSelect, onDoubleClick, onContextMenu, onOpenSplit,
   maltLib, hopLib, yeastLib, miscLib,
 }: {
   ing: Ingredient;
   type: RecipeSectionType;
+  dotColor: string;
   visibleCols: ColDef[];
   pct?: number;
   ibu?: number;
@@ -299,12 +296,14 @@ function IngredientRow({
       : <span style={cellCostStyle}>—</span>,
   };
 
+  const Icon = SECTION_ICONS[type];
+
   return (
     <div
       style={{ ...rowStyle, ...(isSelected ? rowSelectedStyle : {}) }}
       onClick={() => onSelect(ing.id)}
       onDoubleClick={e => { e.stopPropagation(); onDoubleClick(ing.id); }}
-      onContextMenu={e => onContextMenu(e, ing.id)}
+      onContextMenu={e => { e.stopPropagation(); onContextMenu(e, ing.id); }}
       onMouseEnter={e => {
         if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.04)';
       }}
@@ -312,6 +311,9 @@ function IngredientRow({
         if (!isSelected) (e.currentTarget as HTMLDivElement).style.background = '';
       }}
     >
+      <div style={{ width: 16, flexShrink: 0, display: 'flex', alignItems: 'center', color: dotColor, opacity: 0.7 }}>
+        <Icon size={11} strokeWidth={1.5} />
+      </div>
       {visibleCols.map(c => (
         <div key={c.key} style={{ ...(cellWrapperStyles[c.key] ?? {}), minWidth: 0 }}>
           {cellMap[c.key] ?? <span style={cellMutedStyle}>—</span>}
@@ -388,28 +390,6 @@ const sectionStyle: React.CSSProperties = {
   flexDirection: 'column',
 };
 
-const headerStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '6px 4px 2px',
-  cursor: 'context-menu',
-};
-
-const dotStyle: React.CSSProperties = {
-  width: 8,
-  height: 8,
-  borderRadius: '50%',
-  flexShrink: 0,
-};
-
-const countStyle: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--text-muted)',
-  fontFamily: 'var(--mono)',
-};
-
 const emptyStyle: React.CSSProperties = {
   padding: '10px 4px',
   textAlign: 'center',
@@ -422,8 +402,8 @@ const rowStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 12,
-  minHeight: 28,
-  padding: '3px 8px',
+  minHeight: 24,
+  padding: '2px 6px',
   cursor: 'pointer',
   borderLeft: '2px solid transparent',
 };
