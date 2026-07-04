@@ -1227,192 +1227,6 @@ export default function Desktop() {
         <UndoButton />
       </nav>
 
-      {/* ═══ Recipe Meta Bar — shown only when a recipe tab is active ═══
-           Layout: title left, metadata pills + beer glass right (marginLeft
-           auto). On the Ingredients sub-tab the bar is left-padded by the
-           sidebar width so the title aligns with the content column below;
-           other sub-tabs use the default 20 px from the CSS class. */}
-      {isRecipeOpen && selectedRecipeForMeta && (
-        <div
-          className="recipe-meta-bar"
-          style={undefined}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0, minWidth: 120 }}>
-            <input
-              type="text"
-              value={selectedRecipeForMeta.beerName || ''}
-              onChange={e => updateRecipe(selectedRecipeForMeta.id, { beerName: e.target.value })}
-              placeholder="Beer / label name"
-              style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em', background: 'transparent', border: 'none', outline: 'none', padding: 0, fontFamily: 'var(--sans)', width: '100%' }}
-            />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', flexShrink: 0 }}>Recipe</span>
-              <input
-                type="text"
-                value={selectedRecipeForMeta.name || ''}
-                onChange={e => updateRecipe(selectedRecipeForMeta.id, { name: e.target.value })}
-                placeholder="仕込記号"
-                style={{ fontSize: 11, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed rgba(255,255,255,0.15)', outline: 'none', padding: 0, fontFamily: 'var(--sans)', minWidth: 60 }}
-              />
-              {(['own', 'collab', 'oem'] as RecipeOrigin[]).map(opt => (
-                <button
-                  key={opt}
-                  className="btn sm"
-                  style={{
-                    padding: '1px 7px', fontSize: 10,
-                    ...(selectedRecipeForMeta.recipeOrigin === opt
-                      ? { color: 'var(--amber)', borderColor: 'var(--amber)' }
-                      : {}),
-                  }}
-                  onClick={() => updateRecipe(selectedRecipeForMeta.id, {
-                    recipeOrigin: selectedRecipeForMeta.recipeOrigin === opt ? null : opt,
-                  })}
-                >
-                  {opt === 'own' ? 'Own' : opt === 'collab' ? 'Collab' : 'OEM'}
-                </button>
-              ))}
-              {(selectedRecipeForMeta.recipeOrigin === 'collab' || selectedRecipeForMeta.recipeOrigin === 'oem') && (
-                <input
-                  type="text"
-                  value={selectedRecipeForMeta.oemFor ?? ''}
-                  onChange={e => updateRecipe(selectedRecipeForMeta.id, { oemFor: e.target.value })}
-                  placeholder={selectedRecipeForMeta.recipeOrigin === 'oem' ? 'OEM for...' : 'Collab with...'}
-                  style={{ fontSize: 10, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed rgba(255,255,255,0.15)', outline: 'none', padding: 0, fontFamily: 'var(--sans)', minWidth: 80 }}
-                />
-              )}
-              <input
-                type="text"
-                value={selectedRecipeForMeta.brewer ?? ''}
-                onChange={e => updateRecipe(selectedRecipeForMeta.id, { brewer: e.target.value })}
-                placeholder="Brewer"
-                style={{ fontSize: 10, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed rgba(255,255,255,0.15)', outline: 'none', padding: '0 0 0 8px', fontFamily: 'var(--sans)', minWidth: 80 }}
-              />
-            </div>
-          </div>
-          {/* Metadata pills + beer glass — pushed right via marginLeft auto */}
-          <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', alignItems: 'center' }}>
-            {/* Tax Batch # — brewery-wide unique constraint enforced on
-                the Supabase side (see recipeToRow tax_batch comment). */}
-            <div className="meta-pill" style={{ minWidth: 64, flexShrink: 0 }}>
-              <div className="meta-pill-label">Tax Batch #</div>
-              <input
-                className="meta-pill-input"
-                type="text"
-                value={selectedRecipeForMeta.taxBatch || ''}
-                onChange={e => updateRecipe(selectedRecipeForMeta.id, { taxBatch: e.target.value })}
-                style={{ width: 48, color: 'var(--amber)' }}
-                placeholder="—"
-                title="Brewery-wide manual NTA tax serial (e.g. 384). Brewery-wide unique."
-              />
-            </div>
-            <div className="meta-pill" style={{ minWidth: 80 }}>
-              <div className="meta-pill-label">Brew Date</div>
-              <input
-                className="meta-pill-input"
-                type="date"
-                value={selectedRecipeForMeta.brewDate || ''}
-                onChange={e => updateRecipe(selectedRecipeForMeta.id, { brewDate: e.target.value })}
-                style={{ fontSize: 12, width: 110 }}
-              />
-            </div>
-            <div className="meta-pill" style={{ cursor: 'pointer' }}>
-              <div className="meta-pill-label">Version</div>
-              <div className="meta-pill-val" style={{ fontSize: 12 }}>{selectedRecipeForMeta.version || '1.0'}</div>
-            </div>
-            {/* Brew # — read-only per-lineage counter. Set automatically
-                by createNextRecipeFromCurrent or the from-scratch creation
-                paths. Em-dash only when brewNumber is null (legacy rows). */}
-            <div className="meta-pill" style={{ minWidth: 56 }} title="Per-lineage brew counter. Set automatically when a new brew is created.">
-              <div className="meta-pill-label">Brew #</div>
-              <div className="meta-pill-val" style={{ fontSize: 12 }}>
-                {selectedRecipeForMeta.brewNumber != null ? `#${selectedRecipeForMeta.brewNumber}` : '—'}
-              </div>
-            </div>
-            {/* Beer-glass icon — rightmost element of the metadata cluster.
-                Aligns with the right edge of Checklist tab below (both end at
-                the same paddingRight on Ingredients sub-tab). */}
-            <BeerGlassIcon
-              size={50}
-              fill={ebcToHex(selectedRecipeForMeta.ebc)}
-              title={`Color: ${selectedRecipeForMeta.ebc > 0 ? fmtNum(selectedRecipeForMeta.ebc, { suffix: ' EBC' }) : '—'}`}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* ═══ Sub-tabs — shown only when a recipe tab is active ═══
-           Order: meta bar (above) → sub-tabs (here) → equipment-derived
-           pill strip (below, Ingredients only) → main content. Recipe
-           identity sits at the top of the recipe page so the sub-tab
-           nav reads as a section divider rather than chrome above the
-           recipe being edited. */}
-      {isRecipeOpen && (
-        <div
-          className="tabbar"
-          style={undefined}
-        >
-          {([
-            ['ingredients', 'Ingredients'],
-            ['brewday',     'Brew Day'],
-            ['ferm',        'Fermentation'],
-            ['cold',        'Packaging'],
-            ['tax',         'Tax'],
-            ['taxsummary',  'Tax Summary'],
-            ['analysis',    'Analysis'],
-            ['water',       'Water'],
-            ['history',     'Brew History'],
-            ['checklist',   'Checklist'],
-          ] as [RecipeSubTab, string][]).map(([key, label]) => (
-            <div
-              key={key}
-              className={`sub-tab${recipeSubTab === key ? ' active' : ''}`}
-              onClick={() => setRecipeSubTab(key)}
-              style={{ flex: 1, justifyContent: 'center' }}
-            >
-              {label}
-            </div>
-          ))}
-
-          {/* Print dropdown — single entry point for the Prep Sheet and
-              Brew Day Sheet prints. Sits flush right, after the last tab;
-              not a tab itself (buttons "sit" on the tab row here, they
-              don't participate in the flex:1 tab-width split). */}
-          <div
-            ref={printMenuRef}
-            style={{ position: 'relative', marginLeft: 8, flexShrink: 0 }}
-            onMouseDown={e => e.stopPropagation()}
-          >
-            <button
-              className="btn sm"
-              onClick={() => setPrintMenuOpen(o => !o)}
-              title="Print a brewer's worksheet for this recipe"
-            >
-              Print ▾
-            </button>
-            {printMenuOpen && (
-              <div className="menu-dropdown open" style={{ left: 'auto', right: 0, minWidth: 160 }}>
-                <div
-                  className="menu-dd-item"
-                  onClick={() => { handlePrintPrepSheet(); setPrintMenuOpen(false); }}
-                >Prep Sheet</div>
-                <div
-                  className="menu-dd-item"
-                  onClick={() => { handlePrintBrewDaySheet(); setPrintMenuOpen(false); }}
-                >Brew Day Sheet</div>
-                <div
-                  className="menu-dd-item"
-                  onClick={() => { handlePrintFermPackagingSheet(); setPrintMenuOpen(false); }}
-                >Ferm &amp; Packaging Sheet</div>
-                <div
-                  className="menu-dd-item"
-                  onClick={() => { handlePrintFullPacket(); setPrintMenuOpen(false); }}
-                >Print Full Packet</div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Equipment-derived pills (Batch into FV/WP, Expected Loss, Boil,
           BH Eff, WP Temp) moved into RecipeTab's left column, sandwiched
           between the ingredient cards and the bottom 3-panel grid. They
@@ -1530,58 +1344,234 @@ export default function Desktop() {
                   </div>
                 )}
 
-                {/* page-recipe / Ingredients sub-tab: same sidebar on the
-                    left, RecipeTab on the right. RecipeTab handles its
-                    own action stack + bottom-row panels internally. */}
-                {isRecipeOpen && activeRecipeId && recipeSubTab === 'ingredients' && (
+                {/* Recipe sub-tabs: recipe-browser sidebar (Ingredients
+                    only) + a column containing the recipe meta bar, the
+                    sub-tab nav, and the active sub-tab's content. Meta bar
+                    and sub-tab nav therefore sit to the right of the
+                    sidebar on Ingredients, and start at the content
+                    column's left edge (full width) on every other
+                    sub-tab, since there's no sidebar sibling there. */}
+                {isRecipeOpen && activeRecipeId && (
                   <div className="page page-row">
-                    {renderRecipeBrowserSidebar()}
-                    <RecipeTab recipeId={activeRecipeId} />
+                    {recipeSubTab === 'ingredients' && renderRecipeBrowserSidebar()}
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                      {/* ═══ Recipe Meta Bar ═══
+                           Layout: title left, metadata pills + beer glass
+                           right (marginLeft auto). */}
+                      {selectedRecipeForMeta && (
+                        <div className="recipe-meta-bar">
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, flexShrink: 0, minWidth: 120 }}>
+                            <input
+                              type="text"
+                              value={selectedRecipeForMeta.beerName || ''}
+                              onChange={e => updateRecipe(selectedRecipeForMeta.id, { beerName: e.target.value })}
+                              placeholder="Beer / label name"
+                              style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em', background: 'transparent', border: 'none', outline: 'none', padding: 0, fontFamily: 'var(--sans)', width: '100%' }}
+                            />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', flexShrink: 0 }}>Recipe</span>
+                              <input
+                                type="text"
+                                value={selectedRecipeForMeta.name || ''}
+                                onChange={e => updateRecipe(selectedRecipeForMeta.id, { name: e.target.value })}
+                                placeholder="仕込記号"
+                                style={{ fontSize: 11, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed rgba(255,255,255,0.15)', outline: 'none', padding: 0, fontFamily: 'var(--sans)', minWidth: 60 }}
+                              />
+                              {(['own', 'collab', 'oem'] as RecipeOrigin[]).map(opt => (
+                                <button
+                                  key={opt}
+                                  className="btn sm"
+                                  style={{
+                                    padding: '1px 7px', fontSize: 10,
+                                    ...(selectedRecipeForMeta.recipeOrigin === opt
+                                      ? { color: 'var(--amber)', borderColor: 'var(--amber)' }
+                                      : {}),
+                                  }}
+                                  onClick={() => updateRecipe(selectedRecipeForMeta.id, {
+                                    recipeOrigin: selectedRecipeForMeta.recipeOrigin === opt ? null : opt,
+                                  })}
+                                >
+                                  {opt === 'own' ? 'Own' : opt === 'collab' ? 'Collab' : 'OEM'}
+                                </button>
+                              ))}
+                              {(selectedRecipeForMeta.recipeOrigin === 'collab' || selectedRecipeForMeta.recipeOrigin === 'oem') && (
+                                <input
+                                  type="text"
+                                  value={selectedRecipeForMeta.oemFor ?? ''}
+                                  onChange={e => updateRecipe(selectedRecipeForMeta.id, { oemFor: e.target.value })}
+                                  placeholder={selectedRecipeForMeta.recipeOrigin === 'oem' ? 'OEM for...' : 'Collab with...'}
+                                  style={{ fontSize: 10, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed rgba(255,255,255,0.15)', outline: 'none', padding: 0, fontFamily: 'var(--sans)', minWidth: 80 }}
+                                />
+                              )}
+                              <input
+                                type="text"
+                                value={selectedRecipeForMeta.brewer ?? ''}
+                                onChange={e => updateRecipe(selectedRecipeForMeta.id, { brewer: e.target.value })}
+                                placeholder="Brewer"
+                                style={{ fontSize: 10, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed rgba(255,255,255,0.15)', outline: 'none', padding: '0 0 0 8px', fontFamily: 'var(--sans)', minWidth: 80 }}
+                              />
+                            </div>
+                          </div>
+                          {/* Metadata pills + beer glass — pushed right via marginLeft auto */}
+                          <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', alignItems: 'center' }}>
+                            {/* Tax Batch # — brewery-wide unique constraint enforced on
+                                the Supabase side (see recipeToRow tax_batch comment). */}
+                            <div className="meta-pill" style={{ minWidth: 64, flexShrink: 0 }}>
+                              <div className="meta-pill-label">Tax Batch #</div>
+                              <input
+                                className="meta-pill-input"
+                                type="text"
+                                value={selectedRecipeForMeta.taxBatch || ''}
+                                onChange={e => updateRecipe(selectedRecipeForMeta.id, { taxBatch: e.target.value })}
+                                style={{ width: 48, color: 'var(--amber)' }}
+                                placeholder="—"
+                                title="Brewery-wide manual NTA tax serial (e.g. 384). Brewery-wide unique."
+                              />
+                            </div>
+                            <div className="meta-pill" style={{ minWidth: 80 }}>
+                              <div className="meta-pill-label">Brew Date</div>
+                              <input
+                                className="meta-pill-input"
+                                type="date"
+                                value={selectedRecipeForMeta.brewDate || ''}
+                                onChange={e => updateRecipe(selectedRecipeForMeta.id, { brewDate: e.target.value })}
+                                style={{ fontSize: 12, width: 110 }}
+                              />
+                            </div>
+                            <div className="meta-pill" style={{ cursor: 'pointer' }}>
+                              <div className="meta-pill-label">Version</div>
+                              <div className="meta-pill-val" style={{ fontSize: 12 }}>{selectedRecipeForMeta.version || '1.0'}</div>
+                            </div>
+                            {/* Brew # — read-only per-lineage counter. Set automatically
+                                by createNextRecipeFromCurrent or the from-scratch creation
+                                paths. Em-dash only when brewNumber is null (legacy rows). */}
+                            <div className="meta-pill" style={{ minWidth: 56 }} title="Per-lineage brew counter. Set automatically when a new brew is created.">
+                              <div className="meta-pill-label">Brew #</div>
+                              <div className="meta-pill-val" style={{ fontSize: 12 }}>
+                                {selectedRecipeForMeta.brewNumber != null ? `#${selectedRecipeForMeta.brewNumber}` : '—'}
+                              </div>
+                            </div>
+                            {/* Beer-glass icon — rightmost element of the metadata cluster.
+                                Aligns with the right edge of Checklist tab below (both end at
+                                the same paddingRight on Ingredients sub-tab). */}
+                            <BeerGlassIcon
+                              size={50}
+                              fill={ebcToHex(selectedRecipeForMeta.ebc)}
+                              title={`Color: ${selectedRecipeForMeta.ebc > 0 ? fmtNum(selectedRecipeForMeta.ebc, { suffix: ' EBC' }) : '—'}`}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ═══ Sub-tabs ═══ */}
+                      <div className="tabbar">
+                        {([
+                          ['ingredients', 'Ingredients'],
+                          ['brewday',     'Brew Day'],
+                          ['ferm',        'Fermentation'],
+                          ['cold',        'Packaging'],
+                          ['tax',         'Tax'],
+                          ['taxsummary',  'Tax Summary'],
+                          ['analysis',    'Analysis'],
+                          ['water',       'Water'],
+                          ['history',     'Brew History'],
+                          ['checklist',   'Checklist'],
+                        ] as [RecipeSubTab, string][]).map(([key, label]) => (
+                          <div
+                            key={key}
+                            className={`sub-tab${recipeSubTab === key ? ' active' : ''}`}
+                            onClick={() => setRecipeSubTab(key)}
+                            style={{ flex: 1, justifyContent: 'center' }}
+                          >
+                            {label}
+                          </div>
+                        ))}
+
+                        {/* Print dropdown — single entry point for the Prep Sheet and
+                            Brew Day Sheet prints. Sits flush right, after the last tab;
+                            not a tab itself (buttons "sit" on the tab row here, they
+                            don't participate in the flex:1 tab-width split). */}
+                        <div
+                          ref={printMenuRef}
+                          style={{ position: 'relative', marginLeft: 8, flexShrink: 0 }}
+                          onMouseDown={e => e.stopPropagation()}
+                        >
+                          <button
+                            className="btn sm"
+                            onClick={() => setPrintMenuOpen(o => !o)}
+                            title="Print a brewer's worksheet for this recipe"
+                          >
+                            Print ▾
+                          </button>
+                          {printMenuOpen && (
+                            <div className="menu-dropdown open" style={{ left: 'auto', right: 0, minWidth: 160 }}>
+                              <div
+                                className="menu-dd-item"
+                                onClick={() => { handlePrintPrepSheet(); setPrintMenuOpen(false); }}
+                              >Prep Sheet</div>
+                              <div
+                                className="menu-dd-item"
+                                onClick={() => { handlePrintBrewDaySheet(); setPrintMenuOpen(false); }}
+                              >Brew Day Sheet</div>
+                              <div
+                                className="menu-dd-item"
+                                onClick={() => { handlePrintFermPackagingSheet(); setPrintMenuOpen(false); }}
+                              >Ferm &amp; Packaging Sheet</div>
+                              <div
+                                className="menu-dd-item"
+                                onClick={() => { handlePrintFullPacket(); setPrintMenuOpen(false); }}
+                              >Print Full Packet</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Active sub-tab content */}
+                      {recipeSubTab === 'ingredients' && (
+                        <RecipeTab recipeId={activeRecipeId} />
+                      )}
+                      {recipeSubTab === 'brewday' && (
+                        <BrewDayTab recipeId={activeRecipeId} />
+                      )}
+                      {recipeSubTab === 'ferm' && (
+                        <FermTab key={activeRecipeId} recipeId={activeRecipeId} />
+                      )}
+                      {recipeSubTab === 'cold' && (
+                        <PackagingTab key={activeRecipeId} recipeId={activeRecipeId} />
+                      )}
+                      {recipeSubTab === 'water' && (
+                        <WaterTab key={activeRecipeId} recipeId={activeRecipeId} />
+                      )}
+                      {recipeSubTab === 'history' && (
+                        <HistoryTab
+                          key={activeRecipeId}
+                          recipeId={activeRecipeId}
+                          onOpenRecipe={openRecipe}
+                        />
+                      )}
+                      {recipeSubTab === 'checklist' && (
+                        <ChecklistTab
+                          key={activeRecipeId}
+                          recipeId={activeRecipeId}
+                          goToSubTab={setRecipeSubTab}
+                          goToTopLevel={setActiveTab}
+                        />
+                      )}
+                      {recipeSubTab === 'tax' && (
+                        <TaxTab key={activeRecipeId} recipeId={activeRecipeId} />
+                      )}
+                      {recipeSubTab === 'taxsummary' && (
+                        <TaxSummaryTab key={activeRecipeId} recipeId={activeRecipeId} />
+                      )}
+                      {recipeSubTab === 'analysis' && (
+                        <AnalysisTab key={activeRecipeId} recipeId={activeRecipeId} />
+                      )}
+                    </div>
                   </div>
                 )}
               </>
             );
           })()}
-
-          {/* Ingredients sub-tab is rendered inside the wrapper above
-              (alongside the recipe-browser sidebar). The remaining sub-
-              tabs render full-width with no sidebar. */}
-          {isRecipeOpen && activeRecipeId && recipeSubTab === 'brewday' && (
-            <BrewDayTab recipeId={activeRecipeId} />
-          )}
-          {isRecipeOpen && activeRecipeId && recipeSubTab === 'ferm' && (
-            <FermTab key={activeRecipeId} recipeId={activeRecipeId} />
-          )}
-          {isRecipeOpen && activeRecipeId && recipeSubTab === 'cold' && (
-            <PackagingTab key={activeRecipeId} recipeId={activeRecipeId} />
-          )}
-          {isRecipeOpen && activeRecipeId && recipeSubTab === 'water' && (
-            <WaterTab key={activeRecipeId} recipeId={activeRecipeId} />
-          )}
-          {isRecipeOpen && activeRecipeId && recipeSubTab === 'history' && (
-            <HistoryTab
-              key={activeRecipeId}
-              recipeId={activeRecipeId}
-              onOpenRecipe={openRecipe}
-            />
-          )}
-          {isRecipeOpen && activeRecipeId && recipeSubTab === 'checklist' && (
-            <ChecklistTab
-              key={activeRecipeId}
-              recipeId={activeRecipeId}
-              goToSubTab={setRecipeSubTab}
-              goToTopLevel={setActiveTab}
-            />
-          )}
-          {isRecipeOpen && activeRecipeId && recipeSubTab === 'tax' && (
-            <TaxTab key={activeRecipeId} recipeId={activeRecipeId} />
-          )}
-          {isRecipeOpen && activeRecipeId && recipeSubTab === 'taxsummary' && (
-            <TaxSummaryTab key={activeRecipeId} recipeId={activeRecipeId} />
-          )}
-          {isRecipeOpen && activeRecipeId && recipeSubTab === 'analysis' && (
-            <AnalysisTab key={activeRecipeId} recipeId={activeRecipeId} />
-          )}
 
           {/* Other pages */}
           {activeTab === 'libraries' && <LibrariesPage />}
