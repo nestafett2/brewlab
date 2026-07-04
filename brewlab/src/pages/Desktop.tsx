@@ -1280,6 +1280,13 @@ export default function Desktop() {
                   style={{ fontSize: 10, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed rgba(255,255,255,0.15)', outline: 'none', padding: 0, fontFamily: 'var(--sans)', minWidth: 80 }}
                 />
               )}
+              <input
+                type="text"
+                value={selectedRecipeForMeta.brewer ?? ''}
+                onChange={e => updateRecipe(selectedRecipeForMeta.id, { brewer: e.target.value })}
+                placeholder="Brewer"
+                style={{ fontSize: 10, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed rgba(255,255,255,0.15)', outline: 'none', padding: '0 0 0 8px', fontFamily: 'var(--sans)', minWidth: 80 }}
+              />
             </div>
           </div>
           {/* Metadata pills + beer glass — pushed right via marginLeft auto */}

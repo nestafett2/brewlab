@@ -344,21 +344,6 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
           </div>
         </div>
 
-        {/* Brewer — per-recipe owner. Prep Sheet and Brew Day Sheet
-            headers print this when set, falling back to the brewery name.
-            Single line, sits in the header zone right under the metric
-            strip so it reads as recipe meta, not as a process input. */}
-        <div style={brewerRowStyle}>
-          <label style={brewerLabelStyle}>Brewer</label>
-          <input
-            type="text"
-            value={recipe.brewer ?? ''}
-            onChange={e => updateRecipe(recipeId, { brewer: e.target.value })}
-            placeholder={settings.breweryName ? `(default: ${settings.breweryName})` : '—'}
-            style={brewerInputStyle}
-          />
-        </div>
-
         <div className="content" style={contentStyle}>
           <div className="table-wrap" style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-start' }}>
             {/* Cards container: left-aligned at 16 px (matches metric
@@ -740,32 +725,6 @@ const metricUnitStyle: React.CSSProperties = {
   fontWeight: 400,
   color: 'var(--text-muted)',
   marginLeft: 0,
-};
-
-// Brewer header row — slim meta-strip under the top metric strip.
-const brewerRowStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 8,
-  padding: '6px 16px',
-  borderBottom: '1px solid var(--border)',
-  flexShrink: 0,
-};
-
-const brewerLabelStyle: React.CSSProperties = {
-  fontFamily: 'var(--mono)', fontSize: 9, letterSpacing: 1.2,
-  color: 'var(--text-muted)', textTransform: 'uppercase' as const,
-  minWidth: 56,
-};
-
-const brewerInputStyle: React.CSSProperties = {
-  flex: 1,
-  background: 'transparent',
-  border: 'none',
-  borderBottom: '1px solid var(--border2)',
-  color: 'var(--text)',
-  fontFamily: 'var(--mono)',
-  fontSize: 12,
-  padding: '2px 4px',
-  outline: 'none',
 };
 
 // Extra Additions section — sits below the ingredient cards, before the
