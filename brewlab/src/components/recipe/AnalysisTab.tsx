@@ -23,6 +23,7 @@ import {
   platoToSg, calcActualEfficiency,
 } from '../../lib/calculations';
 import { printAnalysisSheet } from './analysisSheetPrint';
+import { printTastingSheet } from './tastingSheetPrint';
 import TastingModal from './TastingModal';
 import type {
   Ingredient, BrewDayData, FermLogEntry, FermMeta, ColdSideData,
@@ -324,6 +325,10 @@ export default function AnalysisTab({ recipeId }: Props) {
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button className="btn" onClick={handlePrint}>🖨 Print / PDF</button>
+          <button
+            className="btn"
+            onClick={() => printTastingSheet(recipe.beerName || recipe.name, recipe.brewDate, settings.breweryName)}
+          >🖨 Tasting Sheet</button>
         </div>
       </div>
 
