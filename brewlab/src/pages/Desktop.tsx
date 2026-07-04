@@ -1474,7 +1474,7 @@ export default function Desktop() {
                       )}
 
                       {/* ═══ Sub-tabs ═══ */}
-                      <div className="tabbar">
+                      <div className="tabbar" style={{ justifyContent: 'center' }}>
                         {([
                           ['ingredients', 'Ingredients'],
                           ['brewday',     'Brew Day'],

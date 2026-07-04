@@ -269,6 +269,7 @@ button, .btn, .sidebar-btn, .tab, .sub-tab, .menu-item, .menu-dd-item, .ctx-item
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
+  justify-content: center;
   padding: 0 12px;
   gap: 4px;
   flex-shrink: 0;
@@ -588,12 +589,12 @@ button, .btn, .sidebar-btn, .tab, .sub-tab, .menu-item, .menu-dd-item, .ctx-item
 .recipe-item {
   display: flex;
   align-items: center;
-  padding: 10px 10px 10px 22px;
+  padding: 6px 10px 6px 22px;
   cursor: pointer;
   border-bottom: 1px solid var(--border);
   transition: all 0.08s;
   border-left: 2px solid transparent;
-  min-height: 44px;
+  min-height: 36px;
 }
 
 .recipe-item:hover {
@@ -625,7 +626,7 @@ button, .btn, .sidebar-btn, .tab, .sub-tab, .menu-item, .menu-dd-item, .ctx-item
 }
 
 .recipe-item-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text);
   white-space: nowrap;
@@ -634,7 +635,7 @@ button, .btn, .sidebar-btn, .tab, .sub-tab, .menu-item, .menu-dd-item, .ctx-item
 }
 
 .recipe-item-meta {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -643,7 +644,7 @@ button, .btn, .sidebar-btn, .tab, .sub-tab, .menu-item, .menu-dd-item, .ctx-item
 
 .recipe-item-version {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-muted);
   letter-spacing: 0.5px;
   white-space: nowrap;
@@ -816,6 +817,27 @@ tbody td {
 .td-pct { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
 .td-cost { font-family: var(--mono); font-size: 12px; color: var(--text-dim); text-align: right; }
 .td-cost.hi { color: var(--text); }
+
+/* Recipe Explorer table — tighter rows than the ingredient tables. */
+.explorer-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.explorer-table tbody tr {
+  height: 36px;
+  border-bottom: 1px solid var(--border);
+}
+.explorer-table tbody tr:hover {
+  background: rgba(255,255,255,0.06);
+}
+.explorer-table td {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.explorer-table thead th {
+  padding: 6px 10px;
+  font-size: 11px;
+}
 
 /* Style guide bars */
 .style-guide {
