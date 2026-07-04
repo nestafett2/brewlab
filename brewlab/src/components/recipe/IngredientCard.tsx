@@ -386,7 +386,7 @@ const headerStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 8,
-  padding: '4px 4px 6px',
+  padding: '8px 4px 4px',
   cursor: 'context-menu',
 };
 
@@ -424,11 +424,11 @@ const rowStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 12,
-  minHeight: 22,
-  padding: '1px 8px',
+  minHeight: 28,
+  padding: '3px 8px',
   cursor: 'pointer',
   borderLeft: '2px solid transparent',
-  borderBottom: '1px solid rgba(255,255,255,0.03)',
+  borderBottom: '1px solid var(--border)',
 };
 
 const rowSelectedStyle: React.CSSProperties = {

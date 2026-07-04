@@ -358,7 +358,7 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
                 strip and section headers); right-pad ~10 % so the data
                 block ends one tab-column short of the beer glass / right
                 edge of the row. */}
-            <div style={{ padding: '12px 10% 12px 16px', display: 'flex', flexDirection: 'column', gap: 24, width: '100%' }}>
+            <div style={{ padding: '8px 10% 8px 16px', display: 'flex', flexDirection: 'column', gap: 4, width: '100%' }}>
               <IngredientCard recipeId={recipeId} type="grain" label="GRAINS & FERMENTABLES" dotColor="#c8a060" items={grains} grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} />
               <IngredientCard recipeId={recipeId} type="hop"   label="HOPS"                  dotColor="#5ab568" items={hops}   grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} onOpenSplit={id => setDhSplitIngId(id)} />
               <IngredientCard recipeId={recipeId} type="yeast" label="YEAST"                 dotColor="#c060c0" items={yeast}  grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} />
@@ -368,10 +368,10 @@ export default function RecipeTab({ recipeId }: { recipeId: string }) {
                   bl_recipe_cols_misc column-visibility prefs. Only the
                   first visible section gets extraTopGap. */}
               {miscWaterChem.length > 0 && (
-                <IngredientCard recipeId={recipeId} type="misc" label="WATER CHEMISTRY" dotColor="#808080" items={miscWaterChem} grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} extraTopGap />
+                <IngredientCard recipeId={recipeId} type="misc" label="WATER CHEMISTRY" dotColor="#808080" items={miscWaterChem} grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} extraTopGap={false} />
               )}
               {miscOther.length > 0 && (
-                <IngredientCard recipeId={recipeId} type="misc" label="MISC" dotColor="#808080" items={miscOther} grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} extraTopGap={miscWaterChem.length === 0} />
+                <IngredientCard recipeId={recipeId} type="misc" label="MISC" dotColor="#808080" items={miscOther} grainPcts={stats.grainPcts} perHopIbu={stats.perHop} selectedId={selectedId} onSelect={handleSelect} onDoubleClick={handleDoubleClick} onContextMenu={handleContextMenu} extraTopGap={false} />
               )}
               {/* Extra additions — free text. Surfaces under its own section
                   on the Prep Sheet when non-empty (header is suppressed if
