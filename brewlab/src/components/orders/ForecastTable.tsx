@@ -34,8 +34,6 @@ const SECTION_LABEL: Record<LibSection, string> = {
   malts: 'MALTS', hops: 'HOPS', yeast: 'YEAST', misc: 'ADJUNCTS',
 };
 
-const BREW_TINTS = ['rgba(255,255,255,0.03)', 'rgba(255,255,255,0.07)'];
-
 export default function ForecastTable({ section, dayLimit }: Props) {
   const plannerBrews   = useStore(s => s.plannerBrews);
   const orders         = useStore(s => s.orders);
@@ -191,12 +189,8 @@ function SectionBlock({
       <tr style={{ background: 'var(--panel2)' }}>
         <th style={{ ...thStyle, ...stickyLeftStyle, minWidth: 160, zIndex: 15 }}>INGREDIENT</th>
         <th style={{ ...thStyle, minWidth: 80, textAlign: 'right' }}>ON HAND</th>
-        {(() => {
-          let brewColIdx = 0;
-          return timeline.map((col, i) => {
+        {timeline.map((col, i) => {
             if (col.kind === 'brew') {
-              const tint = BREW_TINTS[brewColIdx % BREW_TINTS.length];
-              brewColIdx++;
               return (
                 <th
                   key={`c-${i}`}
@@ -205,10 +199,10 @@ function SectionBlock({
                   title="Right-click to log usage"
                   style={{
                     ...thStyle, cursor: 'context-menu',
-                    borderTop: `2px solid ${col.brew.color}`,
+                    borderTop: `3px solid ${col.brew.color}`,
                     borderRight: '1px solid var(--border2)',
-                    background: `linear-gradient(${tint}, ${tint}), ${col.brew.color}22`,
-                    color: 'var(--text)', padding: '3px 6px',
+                    background: `${col.brew.color}18`,
+                    color: 'var(--text)', fontWeight: 700, fontSize: 10, padding: '3px 6px',
                     width: 120, minWidth: 120, maxWidth: 120,
                     whiteSpace: 'normal' as const, wordBreak: 'normal' as const,
                     overflowWrap: 'break-word' as const, textAlign: 'center',
@@ -244,15 +238,14 @@ function SectionBlock({
                 </span>
               </th>
             );
-          });
-        })()}
+          })}
         <th style={{ ...thStyle, minWidth: 80, textAlign: 'right' }}>NEEDED</th>
         <th style={{ ...thStyle, minWidth: 70 }}>STATUS</th>
       </tr>
 
       {/* Data rows */}
       {rows.map((row, i) => {
-        const rowBg = i % 2 === 0 ? 'var(--bg)' : 'var(--panel)';
+        const rowBg = i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.025)';
         const status = computeRowStatus(row);
         const statusLabel =
           status === 'DONE'  ? '✓ DONE' :
@@ -268,11 +261,11 @@ function SectionBlock({
             <td style={{ ...nameTdStyle, ...stickyLeftStyle, background: rowBg }}>
               {row.entry.name || '—'}
             </td>
-            <td style={{ ...tdStyle, textAlign: 'right', fontSize: 11 }}>{fmtKg(row.stock)}</td>
+            <td style={{ ...tdStyle, textAlign: 'right', fontSize: 11, color: row.stock === 0 ? 'var(--text-muted)' : 'var(--text)' }}>{fmtKg(row.stock)}</td>
             {row.colAmts.flatMap((c, j) => {
               const bal = row.balances[j];
               const balColor = bal < 0
-                ? '#c03030'
+                ? 'var(--red)'
                 : row.stock > 0 && bal < row.stock * 0.15
                   ? '#f09420' : 'var(--text)';
               return [
@@ -282,10 +275,10 @@ function SectionBlock({
                     : c.recorded
                       ? <span title="Already recorded" style={{ color: '#3a8a3a', fontSize: 9 }}>✓</span>
                       : c.amt > 0
-                        ? <span style={{ color: '#c05050' }}>{fmtKg(c.amt)}</span>
+                        ? <span style={{ color: 'var(--red)', fontWeight: 500 }}>{fmtKg(c.amt)}</span>
                         : null}
                 </td>,
-                <td key={`b-${j}`} style={{ ...tdStyle, textAlign: 'center', color: balColor, borderRight: '1px solid var(--border2)', width: 60, minWidth: 60, maxWidth: 60 }}>
+                <td key={`b-${j}`} style={{ ...tdStyle, textAlign: 'center', color: balColor, fontWeight: bal < 0 ? 600 : undefined, borderRight: '1px solid var(--border2)', width: 60, minWidth: 60, maxWidth: 60 }}>
                   {fmtKg(bal)}
                 </td>,
               ];
@@ -353,11 +346,11 @@ const stickyLeftStyle: React.CSSProperties = {
 };
 
 const nameTdStyle: React.CSSProperties = {
-  fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text)',
-  padding: '4px 8px', borderBottom: '1px solid var(--border)',
+  fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text)',
+  padding: '4px 8px',
 };
 
 const tdStyle: React.CSSProperties = {
   fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text)',
-  padding: '4px 6px', borderBottom: '1px solid var(--border)',
+  padding: '4px 6px',
 };
