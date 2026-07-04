@@ -1376,7 +1376,7 @@ export default function Desktop() {
                               value={selectedRecipeForMeta.beerName || ''}
                               onChange={e => updateRecipe(selectedRecipeForMeta.id, { beerName: e.target.value })}
                               placeholder="Beer / label name"
-                              style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em', background: 'transparent', border: 'none', outline: 'none', padding: 0, fontFamily: 'var(--sans)', width: '100%' }}
+                              style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.02em', background: 'transparent', border: 'none', borderBottom: '1px dashed var(--border3)', outline: 'none', padding: 0, fontFamily: 'var(--sans)', width: '100%' }}
                             />
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                               <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' as const, color: 'var(--text-muted)', flexShrink: 0 }}>Recipe</span>
@@ -1385,7 +1385,7 @@ export default function Desktop() {
                                 value={selectedRecipeForMeta.name || ''}
                                 onChange={e => updateRecipe(selectedRecipeForMeta.id, { name: e.target.value })}
                                 placeholder="仕込記号"
-                                style={{ fontSize: 11, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed rgba(255,255,255,0.15)', outline: 'none', padding: 0, fontFamily: 'var(--sans)', minWidth: 60 }}
+                                style={{ fontSize: 11, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed var(--border3)', outline: 'none', padding: 0, fontFamily: 'var(--sans)', minWidth: 60 }}
                               />
                               {(['own', 'collab', 'oem'] as RecipeOrigin[]).map(opt => (
                                 <button
@@ -1410,7 +1410,7 @@ export default function Desktop() {
                                   value={selectedRecipeForMeta.oemFor ?? ''}
                                   onChange={e => updateRecipe(selectedRecipeForMeta.id, { oemFor: e.target.value })}
                                   placeholder={selectedRecipeForMeta.recipeOrigin === 'oem' ? 'OEM for...' : 'Collab with...'}
-                                  style={{ fontSize: 10, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed rgba(255,255,255,0.15)', outline: 'none', padding: 0, fontFamily: 'var(--sans)', minWidth: 80 }}
+                                  style={{ fontSize: 10, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed var(--border3)', outline: 'none', padding: 0, fontFamily: 'var(--sans)', minWidth: 80 }}
                                 />
                               )}
                               <input
@@ -1418,7 +1418,7 @@ export default function Desktop() {
                                 value={selectedRecipeForMeta.brewer ?? ''}
                                 onChange={e => updateRecipe(selectedRecipeForMeta.id, { brewer: e.target.value })}
                                 placeholder="Brewer"
-                                style={{ fontSize: 10, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed rgba(255,255,255,0.15)', outline: 'none', padding: '0 0 0 8px', fontFamily: 'var(--sans)', minWidth: 80 }}
+                                style={{ fontSize: 10, color: 'var(--text-muted)', background: 'transparent', border: 'none', borderBottom: '1px dashed var(--border3)', outline: 'none', padding: '0 0 0 8px', fontFamily: 'var(--sans)', minWidth: 80 }}
                               />
                             </div>
                           </div>
@@ -1433,7 +1433,7 @@ export default function Desktop() {
                                 type="text"
                                 value={selectedRecipeForMeta.taxBatch || ''}
                                 onChange={e => updateRecipe(selectedRecipeForMeta.id, { taxBatch: e.target.value })}
-                                style={{ width: 48, color: 'var(--amber)' }}
+                                style={{ width: 48, color: 'var(--amber)', borderBottom: '1px dashed var(--border3)' }}
                                 placeholder="—"
                                 title="Brewery-wide manual NTA tax serial (e.g. 384). Brewery-wide unique."
                               />
