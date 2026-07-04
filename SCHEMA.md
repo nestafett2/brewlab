@@ -6,7 +6,7 @@ All data structures, Supabase table definitions, localStorage keys, and critical
 
 ## SUPABASE TABLES
 
-> **All tables have `created_at` and `updated_at` columns managed automatically by the database.** Application code should not write to them — Supabase populates `created_at` on insert and updates `updated_at` via trigger on every change.
+> **Most tables carry automatic timestamp columns — `created_at` and/or `updated_at` — managed by the database.** Application code should not write to them. Which columns exist varies by table: `recipes` / `recipe_profiles` / `mash` have both; `recipe_ingredients` / `ferm_log` / `harvested_yeast` have `created_at` only; the JSONB-blob tables (`brew_day` / `ferm_meta` / `cold_side` / `water_chem`) and `tax_records` have `updated_at` only; `tax_master` uses `recorded_at`; `settings` has neither.
 
 ### `recipes`
 Primary recipe table. One row per batch. Desktop writes, tablet/mobile read only.
@@ -23,12 +23,12 @@ Primary recipe table. One row per batch. Desktop writes, tablet/mobile read only
 | `batch_size_l` | numeric | Batch size in litres |
 | `classification` | text | **CHECK constraint** — must be exactly `'Beer'` or `'Happoshu'` |
 | `brew_date` | date | Planned/actual brew date |
-| `brew_num` | text | Batch number e.g. "384" |
+| `tax_batch` | text | **UNIQUE** — brewery-wide manual NTA tax serial (仕込記号-style batch number) e.g. "384". Renamed from `brew_num`. |
 | `version` | text | Recipe version string |
 | `version_note` | text | Free-form notes on this version |
-| `locked` | bool | Locked recipes cannot be edited |
-| `rating` | int | 1–5 stars |
-| `brew_again` | text | One of `'yes'`, `'no'`, `'maybe'`, or null. Distinct from `cold_side.brewAgain`; the recipes column only accepts these three string values. |
+| `locked` | bool | Locked recipes cannot be edited. Default `false`. |
+| `rating` | int | 0–5 stars (0 = unset). Default `0`. **CHECK** `>= 0 AND <= 5`. |
+| `brew_again` | text | One of `'yes'`, `'no'`, `'maybe'`, or null (**CHECK constraint**). Distinct from `cold_side.brewAgain`; the recipes column only accepts these three string values. |
 | `cost` | numeric | Total recipe cost |
 | `abv` | numeric | Calculated ABV % |
 | `ibu` | numeric | Calculated IBU |
@@ -37,6 +37,21 @@ Primary recipe table. One row per batch. Desktop writes, tablet/mobile read only
 | `fg_plato` | numeric | Target FG in °Plato |
 | `bd_fv` | text | Assigned fermenter ID e.g. "fv2" |
 | `notes` | text | Recipe notes |
+| `archived_at` | timestamptz | Archive timestamp (nullable). Vestigial — `ferm_meta.packaged` drives archiving. |
+| `brew_number` | int | Per-lineage brew counter (nullable). Distinct from `tax_batch`; no unique constraint. |
+| `extra_additions` | text | Free-text extra additions. Default `''`. |
+| `brewer` | text | Per-recipe brewer name. Default `''`. |
+| `bh_eff` | numeric | Brewhouse efficiency % (nullable) |
+| `boil_time` | int | Boil time in minutes (nullable) |
+| `whirlpool_temp` | int | Whirlpool temperature °C (nullable) |
+| `recipe_pitch_temp` | numeric | Target pitch temperature °C (nullable) |
+| `recipe_ferm_temp` | numeric | Target fermentation temperature °C (nullable) |
+| `recipe_o2_lpm` | numeric | Oxygenation rate L/min (nullable) |
+| `recipe_o2_time` | numeric | Oxygenation duration (nullable) |
+| `target_finish_ph` | numeric | Target finishing pH (nullable) |
+| `planned_carb` | numeric | Planned carbonation (nullable) |
+| `recipe_origin` | text | Origin classification — `'own'`, `'collab'`, or `'oem'`, or null (**CHECK constraint**) |
+| `oem_for` | text | Partner brewery/brand name for Collab and OEM recipes (nullable) |
 
 **Critical rules:**
 - `classification` has a database CHECK constraint. Inserting anything other than `'Beer'` or `'Happoshu'` will fail.
@@ -52,17 +67,20 @@ One row per ingredient per recipe. Desktop writes, tablet/mobile read only.
 |---|---|---|
 | `id` | text PK | Format: `recipeId_index` e.g. `r1_0`, `r1_1` |
 | `recipe_id` | text FK | → recipes.id |
-| `type` | text | `'grain'`, `'hop'`, `'yeast'`, `'misc'`, `'water'`. No DB CHECK constraint — values are enforced by app code. `'water'` rows are water adjustments (the HTML's Water Adjustments tab stores them here); they are deliberately excluded from NTA tax misc totals — see CLAUDE.md "Water Chemistry — Tax Exclusion Rules". |
+| `type` | text | **CHECK constraint** — `'grain'`, `'hop'`, `'yeast'`, `'misc'`, `'water'`. `'water'` rows are water adjustments (the HTML's Water Adjustments tab stores them here); they are deliberately excluded from NTA tax misc totals — see CLAUDE.md "Water Chemistry — Tax Exclusion Rules". |
 | `name` | text | Ingredient name |
 | `amount` | numeric | Amount |
-| `unit` | text | `'kg'`, `'g'`, `'ml'`, `'l'` |
-| `use` | text | `'mash'`, `'boil'`, `'whirlpool'`, `'dry hop'`, `'first wort'`, `'flameout'` |
+| `unit` | text | **CHECK constraint** — `'kg'`, `'g'`, `'L'`, `'ml'`, `'pkg'` |
+| `use` | text | `'mash'`, `'boil'`, `'whirlpool'`, `'dry hop'`, `'first wort'`, `'flameout'` (no DB CHECK) |
 | `time` | int | Minutes (boil/whirlpool time) |
-| `extra` | text | AA% for hops, attenuation% for yeast, EBC for grains |
+| `extra` | numeric | AA% for hops, attenuation% for yeast, EBC for grains |
 | `ibu` | numeric | Calculated IBU contribution — stored back after calc |
 | `pct` | numeric | Grain bill percentage (grain rows) — calculated, stored back |
 | `cost` | numeric | Cost for this row (library price × amount) |
-| `sort_order` | int | Display order |
+| `sort_order` | int | Display order. Default `0`. |
+| `yeast_source` | text | Yeast source — new pack vs harvested (nullable) |
+| `yeast_gen` | int | Yeast generation number (nullable) |
+| `malted` | bool | Grain malted flag. Default `true`. Distinguishes malt vs unmalted adjuncts for NTA classification. |
 
 **Critical rules:**
 - `id` MUST be `recipeId + '_' + index` (e.g. `r1_0`, `r1_1`). Using sequential integers causes PK collisions in Supabase when multiple recipes share ids like `1`, `2`, `3`.
@@ -79,11 +97,12 @@ One row per fermentation reading. All three devices INSERT rows.
 |---|---|---|
 | `id` | text PK | Always `crypto.randomUUID()` — NEVER `Date.now()` |
 | `recipe_id` | text FK | → recipes.id |
-| `entry_date` | text | ISO date string |
+| `entry_date` | date | Reading date (app stores an ISO date string) |
 | `plato` | numeric | Gravity in °Plato |
 | `ph` | numeric | pH reading |
 | `temp` | numeric | Temperature °C |
 | `notes` | text | Entry notes |
+| `deleted_at` | timestamptz | Soft-delete tombstone (nullable). Set instead of hard-deleting; sync removes locally when newer than last sync. |
 
 **Critical rules:**
 - `id` must always be `crypto.randomUUID()`. `Date.now()` causes collisions when multiple entries are created quickly.
@@ -158,6 +177,36 @@ Data blob mirrors HTML `wcSave` output verbatim:
 - `minerals` — `{ gypsum, cacl2, epsom, mgcl2, nacl, nahco3 }` each `{ mash, sparge }` grams
 
 **Note:** the HTML reference originally stored `bl_water_chem_<id>` in localStorage only — it was missing from the HTML's sbSet routing table. The React rebuild routes it through `sbDispatch` to this table, matching the brew_day / ferm_meta / cold_side pattern.
+
+---
+
+### `recipe_profiles` (JSONB blob)
+One row per recipe. Desktop writes via upsert; all devices hydrate.
+
+| Column | Type | Notes |
+|---|---|---|
+| `recipe_id` | text **PK** | → recipes.id |
+| `data` | jsonb | Per-recipe profile selections |
+| `created_at` | timestamptz | Insert timestamp |
+| `updated_at` | timestamptz | Last write timestamp |
+
+**Critical:** `recipe_id` is the PK. Delete queries must use `?recipe_id=not.is.null`.
+
+Data blob contains the recipe's chosen Equipment / Water / Pitch / Mash profile ids (`{ equip, water, pitch, mash }`). Added during the React rebuild to sync profile picks across devices (see CLAUDE.md "Pending Database Migrations").
+
+---
+
+### `mash` (JSONB blob)
+One row per recipe. Per-recipe mash program blob — distinct from the `bl_mash_profiles` library (which lives in `settings`).
+
+| Column | Type | Notes |
+|---|---|---|
+| `recipe_id` | text **PK** | → recipes.id |
+| `data` | jsonb | Mash step program for this recipe |
+| `created_at` | timestamptz | Insert timestamp |
+| `updated_at` | timestamptz | Last write timestamp |
+
+**Critical:** `recipe_id` is the PK. Delete queries must use `?recipe_id=not.is.null`. Routing keys off `bl_mash_<recipeId>` and deliberately excludes the `bl_mash_profiles` library key.
 
 ---
 
@@ -237,7 +286,7 @@ Committed NTA declarations. Same column list as `tax_records`. Desktop only. Tre
 | Column | Type | Notes |
 |---|---|---|
 | `recipe_id` | text **PK** | → recipes.id |
-| All other columns | — | Identical to `tax_records` (shared `sbBuildTaxRow` builder) |
+| All other columns | — | Identical to `tax_records` (shared `sbBuildTaxRow` builder), **except** the timestamp column: `tax_master` uses `recorded_at` (not `updated_at`). |
 
 **Critical:** PK is `recipe_id`. Once a row is in `tax_master` it represents a filed declaration — do not overwrite from live data.
 
@@ -255,6 +304,7 @@ One row per harvest or usage event.
 | `amount_l` | numeric | Litres (`got` for harvests, `used` for usages) |
 | `recipe_id` | text FK | → recipes.id (nullable) |
 | `beer_name` | text | Display name. For harvests = source brew's beer name; for usages = destination brew's beer name |
+| `brew_num` | text | Legacy brew-number field (nullable) — superseded by `tax_batch` for the NTA serial. |
 | `tax_batch` | text | NTA tax serial (仕込記号). For harvests = source brew's serial; for usages = destination brew's serial. Added by migration `2026-05-07_add_tax_batch_to_harvested_yeast.sql` to split out the brew-number from `beer_name`, which previously held the serial. |
 | `generation` | int | Yeast generation # |
 | `container` | text | Container/storage info |
@@ -282,11 +332,18 @@ Must match across all three files or sync breaks.
 | `bl_ferm_log_<id>` | Array | `ferm_log` table | Ferm readings for one recipe |
 | `bl_ferm_meta_<id>` | Object | `ferm_meta` blob | Includes packaged flag |
 | `bl_cold_<id>` | Object | `cold_side` blob | Packaging data |
+| `bl_water_chem_<id>` | Object | `water_chem` blob | Water chemistry for one recipe (desktop write) |
+| `bl_recipe_profiles_<id>` | Object | `recipe_profiles` blob | Per-recipe Equipment/Water/Pitch/Mash profile picks |
+| `bl_mash_<id>` | Object | `mash` blob | Per-recipe mash program |
+| `bl_tax_<id>` | Object | `tax_records` table | Per-recipe working NTA tax record (desktop only) |
+| `bl_tax_master` | Array | `tax_master` table | Committed NTA declarations (desktop only) |
+| `bl_harvested_yeast` | Object | `harvested_yeast` table | Object keyed by strain (see harvested_yeast section) |
 | `bl_brew_settings` | Object | `settings` | Credentials — never overwrite on hydrate |
 | `bl_lib_malts` | Array | `settings` | Malt library |
 | `bl_lib_hops` | Array | `settings` | Hop library |
 | `bl_lib_yeast` | Array | `settings` | Yeast library |
 | `bl_lib_misc` | Array | `settings` | Misc library |
+| `bl_lib_next_id` | Number | `settings` | Sequential id counter for library entries |
 | `bl_tank_calib` | Object | `settings` | FV calibration |
 | `bl_folder_list` | Array | `settings` | Folder tree |
 | `bl_planner_brews` | Array | `settings` | Planner entries |
@@ -299,8 +356,16 @@ Must match across all three files or sync breaks.
 | `bl_custom_styles` | Array | `settings` | Custom BJCP styles |
 | `bl_suppliers` | Array | `settings` | Supplier list |
 | `bl_tab_visibility` | Object | `settings` | Which tabs are shown |
-| `bl_orders` | Array | Local only | Ingredient orders |
-| `bl_ledger` | Object | Local only | Inventory ledger |
+| `bl_orders` | Array | `settings` | Ingredient orders |
+| `bl_ledger` | Object | `settings` | Inventory ledger |
+| `bl_recurring_orders` | Array | `settings` | Recurring order templates |
+| `bl_style_overlays` | Object | `settings` | Per-style overlay adjustments |
+| `bl_templates` | Array | `settings` | Saved recipe templates |
+| `bl_yearly` | Object | `settings` | Yearly production planner data |
+| `bl_nta_register` | Array | `settings` | NTA submitted-recipes register |
+| `bl_nta_basis_default` | String | `settings` | NTA production-basis text (default) |
+| `bl_nta_basis_current` | String | `settings` | NTA production-basis text (current) |
+| `bl_tariff_<year>` | Object | `settings` | Tariff-reduction data — one settings row per fiscal year |
 | `bl_checklist_<id>` | Object | Local only | Checklist state per recipe |
 | `bl_inv_actuals` | Object | Local only | Reconciliation actuals |
 | `bl_mob_pin` | String | Local only | Mobile PIN |
