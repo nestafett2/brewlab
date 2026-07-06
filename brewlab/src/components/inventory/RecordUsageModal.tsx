@@ -162,14 +162,10 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
   // at a time, same pattern as the main modal's resolvingUid.
   const [popupResolvingUid, setPopupResolvingUid] = useState<string | null>(null);
   const [popupResolveSearch, setPopupResolveSearch] = useState('');
-  // Editable amounts inside the popup, keyed by row uid. Seeded from
-  // `amounts` when the popup opens; edits sync back to `amounts` so
-  // doRecord() uses the adjusted value.
-  const [popupAmounts, setPopupAmounts] = useState<Record<string, string>>({});
-  // Editable "correct on-hand stock to X" inputs inside the popup,
-  // keyed by row uid. Seeded from the computed onHand when the popup
-  // opens. Writing a correction ledger entry brings stock into line.
-  const [setOnHandInputs, setSetOnHandInputs] = useState<Record<string, string>>({});
+  // Which main-modal row has its inline stock-adjust panel open, and
+  // the pending "new on-hand (kg)" input for it. Only one open at once.
+  const [adjustingUid, setAdjustingUid] = useState<string | null>(null);
+  const [adjustInput, setAdjustInput] = useState('');
   // Deferred-record flag: resolving the last nolib row can't call
   // doRecord() synchronously because `rows` hasn't recomputed the new
   // ledgerKey yet. Set this instead and let the effect below fire once
@@ -183,6 +179,19 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
     try { return JSON.parse(localStorage.getItem('bl_inv_stock') || '{}'); } catch { return {}; }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ledgerData]);
+
+  // On-hand stock (kg) for a ledger key: opening balance + all IN - all
+  // OUT. nolib_ keys have no tracked stock, so they read 0.
+  const getOnHand = (ledgerKey: string): number => {
+    if (ledgerKey.startsWith('nolib_')) return 0;
+    const entries = ledgerData[ledgerKey] ?? [];
+    const opening = parseFloat(invStock[ledgerKey]) || 0;
+    return entries.reduce((bal, e) => {
+      if (e.got) bal += parseFloat(String(e.got)) || 0;
+      if (e.used) bal -= parseFloat(String(e.used)) || 0;
+      return bal;
+    }, opening);
+  };
 
   // Re-seed local state when the row set changes. On a genuine brew
   // change, fully reset to defaults. On a same-brew recompute (e.g.
@@ -278,16 +287,6 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
       if (qtyKg > onHand) lowStockRows.push({ row: r, onHand, recording: qtyKg });
     }
     if (nolibRows.length > 0 || lowStockRows.length > 0) {
-      // Seed editable popup amounts for the low-stock rows from the
-      // current amounts state (fall back to the recipe amount).
-      const pa: Record<string, string> = {};
-      const soh: Record<string, string> = {};
-      for (const { row, onHand } of lowStockRows) {
-        pa[row.uid] = amounts[row.uid] ?? fmtIngAmt(row.ingAmt, row.ingUnit);
-        soh[row.uid] = onHand.toFixed(2);
-      }
-      setPopupAmounts(pa);
-      setSetOnHandInputs(soh);
       setPopupResolvingUid(null);
       setPopupResolveSearch('');
       setBlockingPopup({ nolibRows, lowStockRows });
@@ -382,59 +381,31 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
     }
   };
 
-  // Re-run the low-stock check for one row using the edited popup
-  // amount. If it now fits within on-hand stock, drop it from the
-  // low-stock list; otherwise refresh its displayed figures.
-  // `ledger` defaults to the closure ledgerData, but callers that have
-  // just written an entry (updateStock) pass the fresh ledger so the
-  // re-check sees it — the closure ledgerData is stale until re-render.
-  const recalcLowStock = (r: RowData, ledger: LedgerData = ledgerData) => {
-    const rawAmt = parseFloat(popupAmounts[r.uid] || '') || 0;
-    const qtyKg = toKgForLedger(rawAmt, r.ingUnit);
-    const entries = ledger[r.ledgerKey] ?? [];
-    const opening = parseFloat(invStock[r.ledgerKey]) || 0;
-    const onHand = entries.reduce((bal, e) => {
-      if (e.got) bal += parseFloat(String(e.got)) || 0;
-      if (e.used) bal -= parseFloat(String(e.used)) || 0;
-      return bal;
-    }, opening);
-    setBlockingPopup(prev => {
-      if (!prev) return null;
-      const nextLow = qtyKg <= onHand
-        ? prev.lowStockRows.filter(ls => ls.row.uid !== r.uid)
-        : prev.lowStockRows.map(ls => ls.row.uid === r.uid ? { row: r, onHand, recording: qtyKg } : ls);
-      return { ...prev, lowStockRows: nextLow };
-    });
-  };
-
-  // "Set on-hand" correction: write a got/used ledger entry that brings
-  // computed stock to the entered value, then re-check the row.
-  const updateStock = (r: RowData) => {
-    const newOnHand = parseFloat(setOnHandInputs[r.uid] ?? '');
+  // Inline stock correction from a main-modal row: write a got/used
+  // ledger entry that brings computed on-hand to the entered kg value.
+  // Because ledgerData lives in the store and invStock/rows key off it,
+  // every row sharing this ledgerKey re-renders with fresh numbers.
+  const applyAdjust = (r: RowData) => {
+    const newOnHand = parseFloat(adjustInput);
     if (!isFinite(newOnHand) || newOnHand < 0) return;
-    const dateStr = dateToStr(todayDate());
-    const entries = ledgerData[r.ledgerKey] ?? [];
-    const opening = parseFloat(invStock[r.ledgerKey]) || 0;
-    const currentOnHand = entries.reduce((bal, e) => {
-      if (e.got) bal += parseFloat(String(e.got)) || 0;
-      if (e.used) bal -= parseFloat(String(e.used)) || 0;
-      return bal;
-    }, opening);
+    const currentOnHand = getOnHand(r.ledgerKey);
     const correction = newOnHand - currentOnHand;
     if (correction === 0) {
-      pushToast({ message: 'Stock is already at that level', variant: 'info' });
+      pushToast({ message: 'Already at that level', variant: 'info' });
+      setAdjustingUid(null);
       return;
     }
+    const dateStr = dateToStr(todayDate());
     const entry: LedgerEntry = correction > 0
       ? { date: dateStr, got: correction, beer: 'Brew day correction', correctionNote: 'Brew day correction' }
       : { date: dateStr, used: Math.abs(correction), beer: 'Brew day correction', correctionNote: 'Brew day correction' };
-    const next: LedgerData = { ...ledgerData, [r.ledgerKey]: [...entries, entry] };
+    const next: LedgerData = { ...ledgerData, [r.ledgerKey]: [...(ledgerData[r.ledgerKey] ?? []), entry] };
     setLedgerData(next);
     pushToast({
-      message: `Stock corrected: ${currentOnHand.toFixed(2)} kg → ${newOnHand.toFixed(2)} kg`,
+      message: `Stock corrected: ${currentOnHand.toFixed(2)} → ${newOnHand.toFixed(2)} kg`,
       variant: 'success',
     });
-    recalcLowStock(r, next);
+    setAdjustingUid(null);
   };
 
   // Fire the deferred record once the resolved ingredient's row has
@@ -507,8 +478,13 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
                   </div>,
                 );
               }
+              const isLib = !r.ledgerKey.startsWith('nolib_');
+              const onHand = isLib ? getOnHand(r.ledgerKey) : 0;
+              const recKg = toKgForLedger(parseFloat(amounts[r.uid] || '') || 0, r.ingUnit);
+              const stockColor = onHand <= 0 ? '#d64545' : onHand >= recKg ? '#3a8a3a' : '#f09420';
               elements.push(
-                <label key={r.uid} style={{
+                <div key={r.uid}>
+                <label style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '7px 12px', borderBottom: '1px solid var(--border)',
                   opacity: r.alreadyLogged ? 0.45 : 1,
@@ -580,12 +556,41 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
                       {r.ingUnit}
                     </span>
                   </div>
+                  {isLib && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                      <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: stockColor, whiteSpace: 'nowrap' }}>
+                        Stock: {fmtStockKg(onHand, r.ingUnit)}
+                      </span>
+                      <button
+                        className="btn sm"
+                        onClick={e => { e.preventDefault(); setAdjustingUid(r.uid); setAdjustInput(getOnHand(r.ledgerKey).toFixed(2)); }}
+                      >Adjust</button>
+                    </div>
+                  )}
                   {r.alreadyLogged && (
                     <span style={{ fontFamily: 'var(--mono)', fontSize: 8, color: '#3a8a3a', flexShrink: 0 }}>
                       ✓ logged
                     </span>
                   )}
-                </label>,
+                </label>
+                {adjustingUid === r.uid && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '8px 12px', borderBottom: '1px solid var(--border)',
+                    background: 'var(--panel2)',
+                  }}>
+                    <input
+                      type="number" min={0} step={0.1} autoFocus
+                      value={adjustInput}
+                      onChange={e => setAdjustInput(e.target.value)}
+                      style={amtInputStyle}
+                    />
+                    <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>kg on hand</span>
+                    <button className="btn sm" onClick={() => applyAdjust(r)}>Update</button>
+                    <button className="btn sm" onClick={() => setAdjustingUid(null)}>Cancel</button>
+                  </div>
+                )}
+                </div>,
               );
             }
             return elements;
@@ -676,51 +681,17 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
               <div style={{ marginTop: 14 }}>
                 <div style={blockHeadingStyle}>These ingredients exceed current stock:</div>
                 <div style={blockListStyle}>
-                  {lowStockRows.map(({ row, onHand }) => {
-                    const recent = (ledgerData[row.ledgerKey] ?? []).slice(-4).reverse();
-                    return (
-                      <div key={row.uid} style={blockItemStyle}>
-                        <div style={{ marginBottom: 4 }}>{row.ingName}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <input
-                            type="number" min={0} step={0.1}
-                            value={popupAmounts[row.uid] ?? ''}
-                            onChange={e => {
-                              const v = e.target.value;
-                              setPopupAmounts(prev => ({ ...prev, [row.uid]: v }));
-                              setAmounts(prev => ({ ...prev, [row.uid]: v }));
-                            }}
-                            style={amtInputStyle}
-                          />
-                          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>{row.ingUnit}</span>
-                          <button className="btn sm" onClick={() => recalcLowStock(row)}>Recalculate</button>
-                        </div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: 8, marginTop: 3 }}>
-                          On hand: {onHand.toFixed(2)} kg
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                          <span style={{ fontFamily: 'var(--mono)', fontSize: 8, letterSpacing: 1, color: 'var(--text-muted)' }}>CORRECT STOCK:</span>
-                          <input
-                            type="number" min={0} step={0.1}
-                            value={setOnHandInputs[row.uid] ?? ''}
-                            onChange={e => setSetOnHandInputs(prev => ({ ...prev, [row.uid]: e.target.value }))}
-                            style={amtInputStyle}
-                          />
-                          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>{row.ingUnit}</span>
-                          <button className="btn sm" onClick={() => updateStock(row)}>Update Stock</button>
-                        </div>
-                        {recent.length > 0 && (
-                          <div style={{ marginTop: 4 }}>
-                            {recent.map((e, i) => (
-                              <div key={i} style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                                {e.date} | {e.got ? 'IN' : 'OUT'} | {(e.got ?? e.used ?? 0)} kg | {e.beer || '—'}
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                  {lowStockRows.map(({ row, onHand, recording }) => (
+                    <div key={row.uid} style={blockItemStyle}>
+                      <div>{row.ingName}</div>
+                      <div style={{ color: 'var(--text-muted)', fontSize: 8, marginTop: 2 }}>
+                        Recording: {fmtStockKg(recording, row.ingUnit)} — On hand: {fmtStockKg(onHand, row.ingUnit)}
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
+                </div>
+                <div style={blockNoteStyle}>
+                  Go back and use each ingredient's "Adjust" button to correct stock, or record as-is.
                 </div>
               </div>
             )}
@@ -754,6 +725,14 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
+
+// Format a kg stock figure in the ingredient's display unit (grams for
+// 'g', otherwise kg), 1 dp with a trailing ".0" stripped.
+function fmtStockKg(kg: number, unit: string): string {
+  const val = unit === 'g' ? kg * 1000 : kg;
+  const s = val.toFixed(1).replace(/\.0$/, '');
+  return `${s}${unit === 'g' ? 'g' : 'kg'}`;
+}
 
 function isBrewFullyRecorded(
   brew: PlannerBrew,
