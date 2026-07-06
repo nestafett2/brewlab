@@ -166,6 +166,10 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
   // `amounts` when the popup opens; edits sync back to `amounts` so
   // doRecord() uses the adjusted value.
   const [popupAmounts, setPopupAmounts] = useState<Record<string, string>>({});
+  // Editable "correct on-hand stock to X" inputs inside the popup,
+  // keyed by row uid. Seeded from the computed onHand when the popup
+  // opens. Writing a correction ledger entry brings stock into line.
+  const [setOnHandInputs, setSetOnHandInputs] = useState<Record<string, string>>({});
   // Deferred-record flag: resolving the last nolib row can't call
   // doRecord() synchronously because `rows` hasn't recomputed the new
   // ledgerKey yet. Set this instead and let the effect below fire once
@@ -277,10 +281,13 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
       // Seed editable popup amounts for the low-stock rows from the
       // current amounts state (fall back to the recipe amount).
       const pa: Record<string, string> = {};
-      for (const { row } of lowStockRows) {
+      const soh: Record<string, string> = {};
+      for (const { row, onHand } of lowStockRows) {
         pa[row.uid] = amounts[row.uid] ?? fmtIngAmt(row.ingAmt, row.ingUnit);
+        soh[row.uid] = onHand.toFixed(2);
       }
       setPopupAmounts(pa);
+      setSetOnHandInputs(soh);
       setPopupResolvingUid(null);
       setPopupResolveSearch('');
       setBlockingPopup({ nolibRows, lowStockRows });
@@ -378,10 +385,13 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
   // Re-run the low-stock check for one row using the edited popup
   // amount. If it now fits within on-hand stock, drop it from the
   // low-stock list; otherwise refresh its displayed figures.
-  const recalcLowStock = (r: RowData) => {
+  // `ledger` defaults to the closure ledgerData, but callers that have
+  // just written an entry (updateStock) pass the fresh ledger so the
+  // re-check sees it — the closure ledgerData is stale until re-render.
+  const recalcLowStock = (r: RowData, ledger: LedgerData = ledgerData) => {
     const rawAmt = parseFloat(popupAmounts[r.uid] || '') || 0;
     const qtyKg = toKgForLedger(rawAmt, r.ingUnit);
-    const entries = ledgerData[r.ledgerKey] ?? [];
+    const entries = ledger[r.ledgerKey] ?? [];
     const opening = parseFloat(invStock[r.ledgerKey]) || 0;
     const onHand = entries.reduce((bal, e) => {
       if (e.got) bal += parseFloat(String(e.got)) || 0;
@@ -395,6 +405,36 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
         : prev.lowStockRows.map(ls => ls.row.uid === r.uid ? { row: r, onHand, recording: qtyKg } : ls);
       return { ...prev, lowStockRows: nextLow };
     });
+  };
+
+  // "Set on-hand" correction: write a got/used ledger entry that brings
+  // computed stock to the entered value, then re-check the row.
+  const updateStock = (r: RowData) => {
+    const newOnHand = parseFloat(setOnHandInputs[r.uid] ?? '');
+    if (!isFinite(newOnHand) || newOnHand < 0) return;
+    const dateStr = dateToStr(todayDate());
+    const entries = ledgerData[r.ledgerKey] ?? [];
+    const opening = parseFloat(invStock[r.ledgerKey]) || 0;
+    const currentOnHand = entries.reduce((bal, e) => {
+      if (e.got) bal += parseFloat(String(e.got)) || 0;
+      if (e.used) bal -= parseFloat(String(e.used)) || 0;
+      return bal;
+    }, opening);
+    const correction = newOnHand - currentOnHand;
+    if (correction === 0) {
+      pushToast({ message: 'Stock is already at that level', variant: 'info' });
+      return;
+    }
+    const entry: LedgerEntry = correction > 0
+      ? { date: dateStr, got: correction, beer: 'Brew day correction', correctionNote: 'Brew day correction' }
+      : { date: dateStr, used: Math.abs(correction), beer: 'Brew day correction', correctionNote: 'Brew day correction' };
+    const next: LedgerData = { ...ledgerData, [r.ledgerKey]: [...entries, entry] };
+    setLedgerData(next);
+    pushToast({
+      message: `Stock corrected: ${currentOnHand.toFixed(2)} kg → ${newOnHand.toFixed(2)} kg`,
+      variant: 'success',
+    });
+    recalcLowStock(r, next);
   };
 
   // Fire the deferred record once the resolved ingredient's row has
@@ -657,6 +697,17 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
                         </div>
                         <div style={{ color: 'var(--text-muted)', fontSize: 8, marginTop: 3 }}>
                           On hand: {onHand.toFixed(2)} kg
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                          <span style={{ fontFamily: 'var(--mono)', fontSize: 8, letterSpacing: 1, color: 'var(--text-muted)' }}>CORRECT STOCK:</span>
+                          <input
+                            type="number" min={0} step={0.1}
+                            value={setOnHandInputs[row.uid] ?? ''}
+                            onChange={e => setSetOnHandInputs(prev => ({ ...prev, [row.uid]: e.target.value }))}
+                            style={amtInputStyle}
+                          />
+                          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>{row.ingUnit}</span>
+                          <button className="btn sm" onClick={() => updateStock(row)}>Update Stock</button>
                         </div>
                         {recent.length > 0 && (
                           <div style={{ marginTop: 4 }}>
