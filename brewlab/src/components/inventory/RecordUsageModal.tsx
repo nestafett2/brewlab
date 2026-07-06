@@ -154,6 +154,18 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
   const [date, setDate] = useState<string>(brew?.start || dateToStr(todayDate()));
   const [resolvingUid, setResolvingUid] = useState<string | null>(null);
   const [resolveSearch, setResolveSearch] = useState('');
+  const [blockingPopup, setBlockingPopup] = useState<{
+    nolibRows: RowData[];
+    lowStockRows: { row: RowData; onHand: number; recording: number }[];
+  } | null>(null);
+
+  // Opening balances by ledgerKey, from localStorage. Re-read whenever
+  // ledgerData changes so on-hand math below stays consistent with the
+  // rest of the inventory ledger.
+  const invStock = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem('bl_inv_stock') || '{}'); } catch { return {}; }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ledgerData]);
 
   // Re-seed local state when the row set changes. On a genuine brew
   // change, fully reset to defaults. On a same-brew recompute (e.g.
@@ -227,9 +239,35 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
     pushToast({ message: `Added "${row.ingName}" to ${row.section} library.`, variant: 'success' });
   };
 
-  const hasNoLibMatch = rows.some(r => r.ledgerKey.startsWith('nolib_'));
-
+  // Gate RECORD USAGE: block on ingredients that aren't in the library
+  // (nolib_) or that would drive on-hand stock negative. Either surfaces
+  // the blocking popup; a clean pass records straight through.
   const confirm = () => {
+    if (!brew) return;
+    const nolibRows = rows.filter(r => checked[r.uid] && !r.alreadyLogged && r.ledgerKey.startsWith('nolib_'));
+    const lowStockRows: { row: RowData; onHand: number; recording: number }[] = [];
+    for (const r of rows) {
+      if (!checked[r.uid] || r.alreadyLogged || r.ledgerKey.startsWith('nolib_')) continue;
+      const rawAmt = parseFloat(amounts[r.uid] || '') || 0;
+      if (rawAmt <= 0) continue;
+      const qtyKg = toKgForLedger(rawAmt, r.ingUnit);
+      const entries = ledgerData[r.ledgerKey] ?? [];
+      const opening = parseFloat(invStock[r.ledgerKey]) || 0;
+      const onHand = entries.reduce((bal, e) => {
+        if (e.got) bal += parseFloat(String(e.got)) || 0;
+        if (e.used) bal -= parseFloat(String(e.used)) || 0;
+        return bal;
+      }, opening);
+      if (qtyKg > onHand) lowStockRows.push({ row: r, onHand, recording: qtyKg });
+    }
+    if (nolibRows.length > 0 || lowStockRows.length > 0) {
+      setBlockingPopup({ nolibRows, lowStockRows });
+      return;
+    }
+    doRecord();
+  };
+
+  const doRecord = () => {
     if (!brew) return;
     const dateStr = date || dateToStr(todayDate());
     const next: LedgerData = { ...ledgerData };
@@ -324,6 +362,7 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
   }
 
   return (
+    <>
     <div style={overlayStyle} onMouseDown={onClose}>
       <div style={modalStyle} onMouseDown={e => e.stopPropagation()}>
         <div style={titleStyle}>RECORD INGREDIENT USAGE</div>
@@ -335,12 +374,6 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
         </div>
 
         <div style={subHeaderStyle}>SELECT INGREDIENTS TO RECORD:</div>
-
-        {hasNoLibMatch && (
-          <div style={warnStyle}>
-            ⚠ Some ingredients aren't in your library — they'll be recorded under their recipe name.
-          </div>
-        )}
 
         <div style={listWrapStyle}>
           {rows.length === 0 ? (
@@ -456,6 +489,73 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
         </div>
       </div>
     </div>
+
+    {blockingPopup !== null && (() => {
+      const { nolibRows, lowStockRows } = blockingPopup;
+      const hasNolib = nolibRows.length > 0;
+      const hasLowStock = lowStockRows.length > 0;
+      return (
+        <div style={blockOverlayStyle} onMouseDown={() => setBlockingPopup(null)}>
+          <div style={blockModalStyle} onMouseDown={e => e.stopPropagation()}>
+            <div style={blockTitleStyle}>CANNOT RECORD — ACTION REQUIRED</div>
+
+            {hasNolib && (
+              <div style={{ marginTop: 14 }}>
+                <div style={blockHeadingStyle}>These ingredients aren't in your library:</div>
+                <div style={blockListStyle}>
+                  {nolibRows.map(r => (
+                    <div key={r.uid} style={blockItemStyle}>
+                      {r.ingName} <span style={{ color: 'var(--text-muted)' }}>[{r.section}]</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={blockNoteStyle}>
+                  Link or add each ingredient to your library using the "⚠ not in library — click to fix" link on each row.
+                </div>
+              </div>
+            )}
+
+            {hasLowStock && (
+              <div style={{ marginTop: 14 }}>
+                <div style={blockHeadingStyle}>These ingredients exceed current stock:</div>
+                <div style={blockListStyle}>
+                  {lowStockRows.map(({ row, onHand, recording }) => (
+                    <div key={row.uid} style={blockItemStyle}>
+                      {row.ingName}
+                      <div style={{ color: 'var(--text-muted)', fontSize: 8, marginTop: 2 }}>
+                        Recording: {recording.toFixed(2)} kg — On hand: {onHand.toFixed(2)} kg
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
+              {hasNolib ? (
+                <button className="btn primary" style={{ flex: 1 }} onClick={() => setBlockingPopup(null)}>
+                  GO BACK AND FIX
+                </button>
+              ) : (
+                <>
+                  <button className="btn" style={{ flex: 1 }} onClick={() => setBlockingPopup(null)}>
+                    GO BACK AND ADJUST
+                  </button>
+                  <button
+                    className="btn"
+                    style={{ flex: 1, color: 'var(--red, #d64545)', borderColor: 'var(--red, #d64545)' }}
+                    onClick={() => { doRecord(); setBlockingPopup(null); }}
+                  >
+                    RECORD ANYWAY
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    })()}
+    </>
   );
 }
 
@@ -530,12 +630,6 @@ const subHeaderStyle: React.CSSProperties = {
   color: 'var(--text-muted)', margin: '10px 0 6px',
 };
 
-const warnStyle: React.CSSProperties = {
-  padding: '8px 12px', fontFamily: 'var(--mono)', fontSize: 9,
-  background: 'rgba(240,148,32,0.12)', border: '1px solid rgba(240,148,32,0.3)',
-  color: '#f09420', marginBottom: 10,
-};
-
 const listWrapStyle: React.CSSProperties = {
   flex: 1, maxHeight: 320, overflowY: 'auto',
   border: '1px solid var(--border)', background: 'var(--bg)',
@@ -557,4 +651,42 @@ const amtInputStyle: React.CSSProperties = {
   width: 62, background: 'var(--panel2)', border: '1px solid var(--border2)',
   color: 'var(--amber)', fontFamily: 'var(--mono)', fontSize: 10,
   padding: '2px 5px', outline: 'none', textAlign: 'right',
+};
+
+// ─── Blocking popup styles ───────────────────────────────────────────
+
+const blockOverlayStyle: React.CSSProperties = {
+  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 210,
+};
+
+const blockModalStyle: React.CSSProperties = {
+  background: 'var(--panel)', border: '2px solid var(--red, #d64545)',
+  padding: '18px 20px', width: 440, maxWidth: '95vw',
+  maxHeight: '90vh', overflowY: 'auto',
+};
+
+const blockTitleStyle: React.CSSProperties = {
+  fontFamily: 'var(--display)', fontSize: 15, letterSpacing: 2,
+  color: 'var(--red, #d64545)', paddingBottom: 8,
+  borderBottom: '1px solid var(--red, #d64545)',
+};
+
+const blockHeadingStyle: React.CSSProperties = {
+  fontFamily: 'var(--mono)', fontSize: 10, letterSpacing: 1,
+  color: 'var(--text)', marginBottom: 6, fontWeight: 700,
+};
+
+const blockListStyle: React.CSSProperties = {
+  border: '1px solid var(--border)', background: 'var(--bg)',
+};
+
+const blockItemStyle: React.CSSProperties = {
+  padding: '6px 10px', fontFamily: 'var(--mono)', fontSize: 10,
+  color: 'var(--text)', borderBottom: '1px solid var(--border)',
+};
+
+const blockNoteStyle: React.CSSProperties = {
+  fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)',
+  marginTop: 6, lineHeight: 1.5,
 };
