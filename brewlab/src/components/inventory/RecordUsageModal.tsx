@@ -32,7 +32,7 @@ import {
   gsheetsSheetIdForSection, gsheetsTabNameFor,
 } from '../../lib/gsheets';
 
-const EXCLUDE_MISC = /phosphoric|sulfuric|lactic|hydrochloric|caustic|water|h2o|calcium.chloride|calcium.sulfate|gypsum|magnesium.sulfate|sodium.chloride|epsom|baking.soda|chalk|calcium.carbonate|\bsalt\b/i;
+const EXCLUDE_MISC = /phosphoric|sulfuric|lactic|hydrochloric|caustic|water|h2o|calcium.chloride|calcium.sulfate|gypsum|magnesium.sulfate|sodium.chloride|epsom|baking.soda|chalk|calcium.carbonate|\bsalts?\b/i;
 const SECTIONS = ['malts', 'hops', 'yeast', 'misc'] as const;
 type Section = typeof SECTIONS[number];
 const ING_TYPES: Record<Section, 'grain' | 'hop' | 'yeast' | 'misc'> = {
@@ -166,6 +166,11 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
   // `amounts` when the popup opens; edits sync back to `amounts` so
   // doRecord() uses the adjusted value.
   const [popupAmounts, setPopupAmounts] = useState<Record<string, string>>({});
+  // Deferred-record flag: resolving the last nolib row can't call
+  // doRecord() synchronously because `rows` hasn't recomputed the new
+  // ledgerKey yet. Set this instead and let the effect below fire once
+  // no row carries a nolib_ key.
+  const [pendingRecord, setPendingRecord] = useState(false);
 
   // Opening balances by ledgerKey, from localStorage. Re-read whenever
   // ledgerData changes so on-hand math below stays consistent with the
@@ -360,8 +365,11 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
     if (!prev) return;
     const nextNolib = prev.nolibRows.filter(nr => nr.uid !== r.uid);
     if (nextNolib.length === 0 && prev.lowStockRows.length === 0) {
+      // Defer: `rows` still holds the old nolib_ ledgerKey for the
+      // just-resolved ingredient. The effect fires doRecord() once the
+      // recompute lands (no row carries a nolib_ key).
       setBlockingPopup(null);
-      doRecord();
+      setPendingRecord(true);
     } else {
       setBlockingPopup({ ...prev, nolibRows: nextNolib });
     }
@@ -388,6 +396,16 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
       return { ...prev, lowStockRows: nextLow };
     });
   };
+
+  // Fire the deferred record once the resolved ingredient's row has
+  // recomputed its real ledgerKey (no row left on a nolib_ key).
+  useEffect(() => {
+    if (!pendingRecord) return;
+    if (rows.some(r => r.ledgerKey.startsWith('nolib_'))) return;
+    setPendingRecord(false);
+    doRecord();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRecord, rows]);
 
   if (!brew) {
     return (
