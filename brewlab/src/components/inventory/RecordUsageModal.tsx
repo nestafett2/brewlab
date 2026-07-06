@@ -246,12 +246,19 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
   // Link a recipe ingredient to a library entry by saving libId onto the ingredient.
   // Also update the row's ledgerKey by rebuilding rows (rows is derived from store so
   // updating the ingredient triggers a re-render automatically).
-  const resolveLink = (row: RowData, libEntry: LibEntry) => {
+  const resolveLink = (row: RowData, libEntry: LibEntry, targetSection?: Section) => {
     // Find the matching recipe ingredient by name + section type
     const ingType = ING_TYPES[row.section];
     const recipeIng = ings.find(i => i.type === ingType && i.name === row.ingName);
     if (recipeIng && recipeId) {
-      updateIngredient(recipeId, String(recipeIng.id), { libId: String(libEntry.id) });
+      // When the user resolves into a different section than the row's
+      // own, move the ingredient's `type` too — otherwise `rows` keeps
+      // filtering it under the old section and the nolib state sticks.
+      const updates: Record<string, string> = { libId: String(libEntry.id) };
+      if (targetSection && targetSection !== row.section) {
+        updates.type = ING_TYPES[targetSection];
+      }
+      updateIngredient(recipeId, String(recipeIng.id), updates);
     }
     setResolvingUid(null);
     setResolveSearch('');
@@ -266,7 +273,7 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
     else if (sec === 'hops') setHopLib([...hopLib, newEntry as HopLib]);
     else if (sec === 'yeast') setYeastLib([...yeastLib, newEntry as YeastLib]);
     else setMiscLib([...miscLib, newEntry as MiscLib]);
-    resolveLink(row, newEntry as LibEntry);
+    resolveLink(row, newEntry as LibEntry, targetSection);
     pushToast({ message: `Added "${row.ingName}" to ${sec} library.`, variant: 'success' });
   };
 
@@ -551,7 +558,7 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
                                 {filtered.map(le => (
                                   <div
                                     key={String(le.id)}
-                                    onClick={e => { e.preventDefault(); resolveLink(r, le); }}
+                                    onClick={e => { e.preventDefault(); resolveLink(r, le, sec); }}
                                     style={{ padding: '3px 6px', fontFamily: 'var(--mono)', fontSize: 9, cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
                                     onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--panel)'}
                                     onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = ''}
@@ -662,7 +669,11 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
                         >Find Match</button>
                         <button
                           className="btn sm"
-                          onClick={() => { addToLibrary(r, popupResolveSection ?? r.section); afterPopupResolve(r); }}
+                          onClick={() => {
+                            const sec = popupResolvingUid === r.uid ? (popupResolveSection ?? r.section) : r.section;
+                            addToLibrary(r, sec);
+                            afterPopupResolve(r);
+                          }}
                         >Add to Library</button>
                       </div>
                       {popupResolvingUid === r.uid && (() => {
@@ -685,7 +696,7 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
                               {filtered.map(le => (
                                 <div
                                   key={String(le.id)}
-                                  onClick={() => { resolveLink(r, le); afterPopupResolve(r); }}
+                                  onClick={() => { resolveLink(r, le, sec); afterPopupResolve(r); }}
                                   style={{ padding: '3px 6px', fontFamily: 'var(--mono)', fontSize: 9, cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
                                   onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--panel)'}
                                   onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = ''}
