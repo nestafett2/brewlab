@@ -154,6 +154,9 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
   const [date, setDate] = useState<string>(brew?.start || dateToStr(todayDate()));
   const [resolvingUid, setResolvingUid] = useState<string | null>(null);
   const [resolveSearch, setResolveSearch] = useState('');
+  // Which section library the main resolver is searching / adding to.
+  // Seeded to the row's own section when the resolver opens.
+  const [resolveSection, setResolveSection] = useState<Section | null>(null);
   const [blockingPopup, setBlockingPopup] = useState<{
     nolibRows: RowData[];
     lowStockRows: { row: RowData; onHand: number; recording: number }[];
@@ -162,6 +165,7 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
   // at a time, same pattern as the main modal's resolvingUid.
   const [popupResolvingUid, setPopupResolvingUid] = useState<string | null>(null);
   const [popupResolveSearch, setPopupResolveSearch] = useState('');
+  const [popupResolveSection, setPopupResolveSection] = useState<Section | null>(null);
   // Which main-modal row has its inline stock-adjust panel open, and
   // the pending "new on-hand (kg)" input for it. Only one open at once.
   const [adjustingUid, setAdjustingUid] = useState<string | null>(null);
@@ -254,16 +258,38 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
     pushToast({ message: `Linked "${row.ingName}" → "${libEntry.name}"`, variant: 'success' });
   };
 
-  const addToLibrary = (row: RowData) => {
+  const addToLibrary = (row: RowData, targetSection?: Section) => {
+    const sec = targetSection ?? row.section;
     const newId = String(Date.now());
     const newEntry = { id: newId, name: row.ingName, supplier: '', notes: '' };
-    if (row.section === 'malts') setMaltLib([...maltLib, newEntry as MaltLib]);
-    else if (row.section === 'hops') setHopLib([...hopLib, newEntry as HopLib]);
-    else if (row.section === 'yeast') setYeastLib([...yeastLib, newEntry as YeastLib]);
+    if (sec === 'malts') setMaltLib([...maltLib, newEntry as MaltLib]);
+    else if (sec === 'hops') setHopLib([...hopLib, newEntry as HopLib]);
+    else if (sec === 'yeast') setYeastLib([...yeastLib, newEntry as YeastLib]);
     else setMiscLib([...miscLib, newEntry as MiscLib]);
     resolveLink(row, newEntry as LibEntry);
-    pushToast({ message: `Added "${row.ingName}" to ${row.section} library.`, variant: 'success' });
+    pushToast({ message: `Added "${row.ingName}" to ${sec} library.`, variant: 'success' });
   };
+
+  // Section-tab row shared by both resolvers: MALTS | HOPS | YEAST |
+  // MISC, active tab highlighted amber. Picking a tab switches the
+  // searched library and clears the search string.
+  const sectionTabs = (active: Section, onPick: (s: Section) => void) => (
+    <div style={{ display: 'flex', gap: 3, marginBottom: 4 }}>
+      {SECTIONS.map(s => (
+        <button
+          key={s}
+          onClick={e => { e.preventDefault(); onPick(s); }}
+          style={{
+            flex: 1, cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: 8,
+            letterSpacing: 1, padding: '3px 2px', textTransform: 'uppercase',
+            background: 'var(--bg)',
+            border: `1px solid ${active === s ? 'var(--amber)' : 'var(--border2)'}`,
+            color: active === s ? 'var(--amber)' : 'var(--text-muted)',
+          }}
+        >{s}</button>
+      ))}
+    </div>
+  );
 
   // Gate RECORD USAGE: block on ingredients that aren't in the library
   // (nolib_) or that would drive on-hand stock negative. Either surfaces
@@ -502,18 +528,20 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
                       <div>
                         <div
                           style={{ fontFamily: 'var(--mono)', fontSize: 8, color: '#f09420', cursor: 'pointer', textDecoration: 'underline' }}
-                          onClick={e => { e.preventDefault(); setResolvingUid(resolvingUid === r.uid ? null : r.uid); setResolveSearch(''); }}
+                          onClick={e => { e.preventDefault(); const open = resolvingUid === r.uid ? null : r.uid; setResolvingUid(open); setResolveSearch(''); setResolveSection(r.section); }}
                         >⚠ not in library — click to fix</div>
                         {resolvingUid === r.uid && (() => {
-                          const lib = libBySection[r.section];
+                          const sec = resolveSection ?? r.section;
+                          const lib = libBySection[sec];
                           const filtered = resolveSearch.trim()
                             ? lib.filter(e => e.name.toLowerCase().includes(resolveSearch.toLowerCase()))
                             : lib.slice(0, 8);
                           return (
                             <div style={{ marginTop: 4, background: 'var(--panel2)', border: '1px solid var(--border2)', padding: 6 }}>
+                              {sectionTabs(sec, s => { setResolveSection(s); setResolveSearch(''); })}
                               <input
                                 autoFocus
-                                placeholder={`Search ${r.section}…`}
+                                placeholder={`Search ${sec}…`}
                                 value={resolveSearch}
                                 onChange={e => setResolveSearch(e.target.value)}
                                 onClick={e => e.preventDefault()}
@@ -536,8 +564,8 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
                               <button
                                 className="btn sm"
                                 style={{ marginTop: 6, width: '100%' }}
-                                onClick={e => { e.preventDefault(); addToLibrary(r); }}
-                              >+ Add "{r.ingName}" to library</button>
+                                onClick={e => { e.preventDefault(); addToLibrary(r, resolveSection ?? r.section); }}
+                              >+ Add "{r.ingName}" to {resolveSection ?? r.section} library</button>
                             </div>
                           );
                         })()}
@@ -630,23 +658,25 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
                         </div>
                         <button
                           className="btn sm"
-                          onClick={() => { setPopupResolvingUid(popupResolvingUid === r.uid ? null : r.uid); setPopupResolveSearch(''); }}
+                          onClick={() => { setPopupResolvingUid(popupResolvingUid === r.uid ? null : r.uid); setPopupResolveSearch(''); setPopupResolveSection(r.section); }}
                         >Find Match</button>
                         <button
                           className="btn sm"
-                          onClick={() => { addToLibrary(r); afterPopupResolve(r); }}
+                          onClick={() => { addToLibrary(r, popupResolveSection ?? r.section); afterPopupResolve(r); }}
                         >Add to Library</button>
                       </div>
                       {popupResolvingUid === r.uid && (() => {
-                        const lib = libBySection[r.section];
+                        const sec = popupResolveSection ?? r.section;
+                        const lib = libBySection[sec];
                         const filtered = popupResolveSearch.trim()
                           ? lib.filter(e => e.name.toLowerCase().includes(popupResolveSearch.toLowerCase()))
                           : lib.slice(0, 8);
                         return (
                           <div style={{ marginTop: 6, background: 'var(--panel2)', border: '1px solid var(--border2)', padding: 6 }}>
+                            {sectionTabs(sec, s => { setPopupResolveSection(s); setPopupResolveSearch(''); })}
                             <input
                               autoFocus
-                              placeholder={`Search ${r.section}…`}
+                              placeholder={`Search ${sec}…`}
                               value={popupResolveSearch}
                               onChange={e => setPopupResolveSearch(e.target.value)}
                               style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border2)', color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: 9, padding: '3px 6px', outline: 'none', marginBottom: 4 }}
