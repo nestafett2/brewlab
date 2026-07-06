@@ -32,7 +32,7 @@ import {
   gsheetsSheetIdForSection, gsheetsTabNameFor,
 } from '../../lib/gsheets';
 
-const EXCLUDE_MISC = /phosphoric|sulfuric|lactic|hydrochloric|caustic|water|h2o/i;
+const EXCLUDE_MISC = /phosphoric|sulfuric|lactic|hydrochloric|caustic|water|h2o|calcium.chloride|calcium.sulfate|gypsum|magnesium.sulfate|sodium.chloride|epsom|baking.soda|chalk|calcium.carbonate|\bsalt\b/i;
 const SECTIONS = ['malts', 'hops', 'yeast', 'misc'] as const;
 type Section = typeof SECTIONS[number];
 const ING_TYPES: Record<Section, 'grain' | 'hop' | 'yeast' | 'misc'> = {
@@ -158,6 +158,14 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
     nolibRows: RowData[];
     lowStockRows: { row: RowData; onHand: number; recording: number }[];
   } | null>(null);
+  // In-popup resolver (Find Match / Add to Library) — only one row open
+  // at a time, same pattern as the main modal's resolvingUid.
+  const [popupResolvingUid, setPopupResolvingUid] = useState<string | null>(null);
+  const [popupResolveSearch, setPopupResolveSearch] = useState('');
+  // Editable amounts inside the popup, keyed by row uid. Seeded from
+  // `amounts` when the popup opens; edits sync back to `amounts` so
+  // doRecord() uses the adjusted value.
+  const [popupAmounts, setPopupAmounts] = useState<Record<string, string>>({});
 
   // Opening balances by ledgerKey, from localStorage. Re-read whenever
   // ledgerData changes so on-hand math below stays consistent with the
@@ -261,6 +269,15 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
       if (qtyKg > onHand) lowStockRows.push({ row: r, onHand, recording: qtyKg });
     }
     if (nolibRows.length > 0 || lowStockRows.length > 0) {
+      // Seed editable popup amounts for the low-stock rows from the
+      // current amounts state (fall back to the recipe amount).
+      const pa: Record<string, string> = {};
+      for (const { row } of lowStockRows) {
+        pa[row.uid] = amounts[row.uid] ?? fmtIngAmt(row.ingAmt, row.ingUnit);
+      }
+      setPopupAmounts(pa);
+      setPopupResolvingUid(null);
+      setPopupResolveSearch('');
       setBlockingPopup({ nolibRows, lowStockRows });
       return;
     }
@@ -331,6 +348,45 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
         variant: 'info',
       });
     }
+  };
+
+  // Called after a nolib row is linked/added from inside the popup.
+  // Drops the row from nolibRows; if that empties the nolib list and
+  // there are no low-stock issues left, close the popup and record.
+  const afterPopupResolve = (r: RowData) => {
+    setPopupResolvingUid(null);
+    setPopupResolveSearch('');
+    const prev = blockingPopup;
+    if (!prev) return;
+    const nextNolib = prev.nolibRows.filter(nr => nr.uid !== r.uid);
+    if (nextNolib.length === 0 && prev.lowStockRows.length === 0) {
+      setBlockingPopup(null);
+      doRecord();
+    } else {
+      setBlockingPopup({ ...prev, nolibRows: nextNolib });
+    }
+  };
+
+  // Re-run the low-stock check for one row using the edited popup
+  // amount. If it now fits within on-hand stock, drop it from the
+  // low-stock list; otherwise refresh its displayed figures.
+  const recalcLowStock = (r: RowData) => {
+    const rawAmt = parseFloat(popupAmounts[r.uid] || '') || 0;
+    const qtyKg = toKgForLedger(rawAmt, r.ingUnit);
+    const entries = ledgerData[r.ledgerKey] ?? [];
+    const opening = parseFloat(invStock[r.ledgerKey]) || 0;
+    const onHand = entries.reduce((bal, e) => {
+      if (e.got) bal += parseFloat(String(e.got)) || 0;
+      if (e.used) bal -= parseFloat(String(e.used)) || 0;
+      return bal;
+    }, opening);
+    setBlockingPopup(prev => {
+      if (!prev) return null;
+      const nextLow = qtyKg <= onHand
+        ? prev.lowStockRows.filter(ls => ls.row.uid !== r.uid)
+        : prev.lowStockRows.map(ls => ls.row.uid === r.uid ? { row: r, onHand, recording: qtyKg } : ls);
+      return { ...prev, lowStockRows: nextLow };
+    });
   };
 
   if (!brew) {
@@ -505,12 +561,55 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
                 <div style={blockListStyle}>
                   {nolibRows.map(r => (
                     <div key={r.uid} style={blockItemStyle}>
-                      {r.ingName} <span style={{ color: 'var(--text-muted)' }}>[{r.section}]</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {r.ingName} <span style={{ color: 'var(--text-muted)' }}>[{r.section}]</span>
+                        </div>
+                        <button
+                          className="btn sm"
+                          onClick={() => { setPopupResolvingUid(popupResolvingUid === r.uid ? null : r.uid); setPopupResolveSearch(''); }}
+                        >Find Match</button>
+                        <button
+                          className="btn sm"
+                          onClick={() => { addToLibrary(r); afterPopupResolve(r); }}
+                        >Add to Library</button>
+                      </div>
+                      {popupResolvingUid === r.uid && (() => {
+                        const lib = libBySection[r.section];
+                        const filtered = popupResolveSearch.trim()
+                          ? lib.filter(e => e.name.toLowerCase().includes(popupResolveSearch.toLowerCase()))
+                          : lib.slice(0, 8);
+                        return (
+                          <div style={{ marginTop: 6, background: 'var(--panel2)', border: '1px solid var(--border2)', padding: 6 }}>
+                            <input
+                              autoFocus
+                              placeholder={`Search ${r.section}…`}
+                              value={popupResolveSearch}
+                              onChange={e => setPopupResolveSearch(e.target.value)}
+                              style={{ width: '100%', boxSizing: 'border-box', background: 'var(--bg)', border: '1px solid var(--border2)', color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: 9, padding: '3px 6px', outline: 'none', marginBottom: 4 }}
+                            />
+                            <div style={{ maxHeight: 120, overflowY: 'auto' }}>
+                              {filtered.map(le => (
+                                <div
+                                  key={String(le.id)}
+                                  onClick={() => { resolveLink(r, le); afterPopupResolve(r); }}
+                                  style={{ padding: '3px 6px', fontFamily: 'var(--mono)', fontSize: 9, cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
+                                  onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = 'var(--panel)'}
+                                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = ''}
+                                >{le.name}</div>
+                              ))}
+                              {filtered.length === 0 && (
+                                <div style={{ padding: '3px 6px', fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>No matches</div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
                 <div style={blockNoteStyle}>
-                  Link or add each ingredient to your library using the "⚠ not in library — click to fix" link on each row.
+                  Link each ingredient to a library entry ("Find Match") or add it as a new one ("Add to Library").
                 </div>
               </div>
             )}
@@ -519,14 +618,40 @@ export default function RecordUsageModal({ brewId, onClose }: Props) {
               <div style={{ marginTop: 14 }}>
                 <div style={blockHeadingStyle}>These ingredients exceed current stock:</div>
                 <div style={blockListStyle}>
-                  {lowStockRows.map(({ row, onHand, recording }) => (
-                    <div key={row.uid} style={blockItemStyle}>
-                      {row.ingName}
-                      <div style={{ color: 'var(--text-muted)', fontSize: 8, marginTop: 2 }}>
-                        Recording: {recording.toFixed(2)} kg — On hand: {onHand.toFixed(2)} kg
+                  {lowStockRows.map(({ row, onHand }) => {
+                    const recent = (ledgerData[row.ledgerKey] ?? []).slice(-4).reverse();
+                    return (
+                      <div key={row.uid} style={blockItemStyle}>
+                        <div style={{ marginBottom: 4 }}>{row.ingName}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <input
+                            type="number" min={0} step={0.1}
+                            value={popupAmounts[row.uid] ?? ''}
+                            onChange={e => {
+                              const v = e.target.value;
+                              setPopupAmounts(prev => ({ ...prev, [row.uid]: v }));
+                              setAmounts(prev => ({ ...prev, [row.uid]: v }));
+                            }}
+                            style={amtInputStyle}
+                          />
+                          <span style={{ fontFamily: 'var(--mono)', fontSize: 9, color: 'var(--text-muted)' }}>{row.ingUnit}</span>
+                          <button className="btn sm" onClick={() => recalcLowStock(row)}>Recalculate</button>
+                        </div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: 8, marginTop: 3 }}>
+                          On hand: {onHand.toFixed(2)} kg
+                        </div>
+                        {recent.length > 0 && (
+                          <div style={{ marginTop: 4 }}>
+                            {recent.map((e, i) => (
+                              <div key={i} style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                                {e.date} | {e.got ? 'IN' : 'OUT'} | {(e.got ?? e.used ?? 0)} kg | {e.beer || '—'}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
