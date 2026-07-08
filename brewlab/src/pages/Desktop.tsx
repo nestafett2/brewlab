@@ -552,6 +552,7 @@ export default function Desktop() {
   const [recipeCtxMenu, setRecipeCtxMenu] = useState<{ x: number; y: number; recipeId: string } | null>(null);
   const [folderCtxMenu, setFolderCtxMenu] = useState<{ x: number; y: number; folderId: string } | null>(null);
   const [bulkCtxMenu, setBulkCtxMenu] = useState<{ x: number; y: number; ids: string[] } | null>(null);
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false);
   // Blank-area right-click — sidebar tree + Recipe Explorer's By Folder
   // view both fire this. Single-item menu: "+ New Folder".
   const [blankCtxMenu, setBlankCtxMenu] = useState<{ x: number; y: number } | null>(null);
@@ -625,6 +626,7 @@ export default function Desktop() {
     const close = () => {
       setRecipeCtxMenu(null); setFolderCtxMenu(null);
       setBulkCtxMenu(null);   setBlankCtxMenu(null);
+      setBulkMoveOpen(false);
     };
     const onKey = (ev: KeyboardEvent) => { if (ev.key === 'Escape') close(); };
     // Defer the mousedown listener so the right-click that opened the
@@ -707,26 +709,6 @@ export default function Desktop() {
   };
 
   // ── Bulk recipe operations (PART 4) ──────────────────────────────────
-
-  const handleBulkMove = (ids: string[]) => {
-    if (folders.length === 0) {
-      pushToast({ message: 'No folders defined yet.', variant: 'info' });
-      return;
-    }
-    const list = folders.map((f, i) => `${i + 1}: ${f.name}`).join('\n');
-    const raw = window.prompt(`Move ${ids.length} recipes to folder:\n` + list);
-    if (raw === null) return;
-    const n = parseInt(raw, 10);
-    if (!n || !folders[n - 1]) return;
-    const targetId = folders[n - 1].id;
-    const idSet = new Set(ids);
-    const before = recipes;
-    setRecipes(recipes.map(r => idSet.has(r.id) ? { ...r, folder: targetId } : r));
-    pushToast({
-      message: `Moved ${ids.length} recipes`,
-      undo: () => setRecipes(before),
-    });
-  };
 
   // Bulk delete. Snapshots the full per-recipe state for every selected
   // recipe BEFORE the Supabase DELETEs fire, plus a single global snapshot
@@ -1429,6 +1411,8 @@ export default function Desktop() {
                           setFolders={setFolders}
                           openRecipe={openRecipe}
                           onBlankContext={handleBlankContext}
+                          onRecipeContext={handleRecipeContext}
+                          onBulkContext={handleBulkContext}
                           selectedFolderId={preview?.kind === 'folder' ? preview.id : null}
                         />
                       ) : (() => {
@@ -1789,11 +1773,49 @@ export default function Desktop() {
           style={{ left: bulkCtxMenu.x, top: bulkCtxMenu.y }}
           onMouseDown={e => e.stopPropagation()}
         >
-          <div className="ctx-item" onClick={() => { handleBulkMove(bulkCtxMenu.ids); setBulkCtxMenu(null); }}>
-            → Move {bulkCtxMenu.ids.length} to folder
+          <div
+            className="ctx-item"
+            onClick={() => setBulkMoveOpen(v => !v)}
+            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+          >
+            <span>→ Move {bulkCtxMenu.ids.length} to folder</span>
+            <span style={{ opacity: 0.5, fontSize: 10 }}>▶</span>
           </div>
+          {bulkMoveOpen && (
+            <div style={{ borderTop: '1px solid var(--border2)', maxHeight: 200, overflowY: 'auto' }}>
+              <div
+                className="ctx-item"
+                style={{ paddingLeft: 20, opacity: 0.7, fontSize: 11 }}
+                onClick={() => {
+                  const before = recipes;
+                  const idSet = new Set(bulkCtxMenu.ids);
+                  setRecipes(recipes.map(r => idSet.has(r.id) ? { ...r, folder: '' } : r));
+                  pushToast({ message: `Moved ${bulkCtxMenu.ids.length} to Unfiled`, undo: () => setRecipes(before) });
+                  setBulkCtxMenu(null); setBulkMoveOpen(false);
+                }}
+              >
+                Unfiled
+              </div>
+              {folders.map(f => (
+                <div
+                  key={f.id}
+                  className="ctx-item"
+                  style={{ paddingLeft: 20, fontSize: 12 }}
+                  onClick={() => {
+                    const before = recipes;
+                    const idSet = new Set(bulkCtxMenu.ids);
+                    setRecipes(recipes.map(r => idSet.has(r.id) ? { ...r, folder: f.id } : r));
+                    pushToast({ message: `Moved ${bulkCtxMenu.ids.length} to ${f.name}`, undo: () => setRecipes(before) });
+                    setBulkCtxMenu(null); setBulkMoveOpen(false);
+                  }}
+                >
+                  {f.name}
+                </div>
+              ))}
+            </div>
+          )}
           <div className="ctx-sep" />
-          <div className="ctx-item danger" onClick={() => { handleBulkDelete(bulkCtxMenu.ids); setBulkCtxMenu(null); }}>
+          <div className="ctx-item danger" onClick={() => { handleBulkDelete(bulkCtxMenu.ids); setBulkCtxMenu(null); setBulkMoveOpen(false); }}>
             ✕ Delete {bulkCtxMenu.ids.length} recipes
           </div>
         </div>

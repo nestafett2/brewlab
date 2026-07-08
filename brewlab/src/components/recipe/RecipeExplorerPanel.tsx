@@ -177,6 +177,10 @@ interface Props {
    *  menu the sidebar uses. (Retained on the interface for callers; the
    *  table view has no folder-tree blank area to hook it to.) */
   onBlankContext: (e: React.MouseEvent) => void;
+  /** Right-click on a single recipe row — Desktop shows the single-recipe menu. */
+  onRecipeContext?: (e: React.MouseEvent, recipeId: string) => void;
+  /** Right-click on a row inside a multi-selection — Desktop shows the bulk menu. */
+  onBulkContext?: (e: React.MouseEvent, ids: string[]) => void;
   /** When set, the explorer defaults to showing only recipes in this folder
    *  (and its descendants). An "All" toggle lets the user expand to all recipes. */
   selectedFolderId?: string | null;
@@ -184,6 +188,7 @@ interface Props {
 
 export default function RecipeExplorerPanel({
   recipes, folders, openRecipe, selectedFolderId,
+  onRecipeContext, onBulkContext,
 }: Props) {
   // Inline preview within the explorer's right pane. Local-only state —
   // intentionally not synced with sidebar `preview`. Resolved to a recipe
@@ -476,6 +481,18 @@ export default function RecipeExplorerPanel({
                       onSelect={(e) => handleRowClick(r.id, e, sortedRecipes)}
                       onPreview={() => handlePreview(r.id)}
                       onOpen={() => handleOpen(r.id)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        const isInSelection = explorerSelectedIds.has(r.id) && explorerSelectedIds.size > 1;
+                        if (isInSelection) {
+                          onBulkContext?.(e, [...explorerSelectedIds]);
+                        } else {
+                          // Treat as single-recipe context — select just this row first.
+                          setExplorerSelectedIds(new Set([r.id]));
+                          setAnchorId(r.id);
+                          onRecipeContext?.(e, r.id);
+                        }
+                      }}
                     />
                   );
                 })}
@@ -556,7 +573,7 @@ function cellContent(col: ColKey, recipe: Recipe): React.ReactNode {
 
 function ExplorerRow({
   recipe, cols, selected = false, explorerSelected = false, zebra = false,
-  dragIds, selectedCount, onSelect, onPreview, onOpen,
+  dragIds, selectedCount, onSelect, onPreview, onOpen, onContextMenu,
 }: {
   recipe: Recipe;
   cols: ColKey[];
@@ -568,6 +585,7 @@ function ExplorerRow({
   onSelect: (e: React.MouseEvent) => void;
   onPreview: () => void;
   onOpen: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const [hover, setHover] = useState(false);
 
@@ -604,6 +622,7 @@ function ExplorerRow({
       draggable
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      onContextMenu={onContextMenu}
       onClick={(e) => {
         // Selection applies immediately (modifier-aware). Preview stays
         // debounced and only fires on a plain click so a double-click
