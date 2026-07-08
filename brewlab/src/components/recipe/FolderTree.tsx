@@ -26,6 +26,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Recipe, Folder } from '../../types';
 import { formatRecipeStyleLine } from '../../lib/utils';
+import { useStore } from '../../store';
 
 // ── Drag/drop types (PART 2) ─────────────────────────────────────────
 type DragSource =
@@ -140,6 +141,7 @@ export default function FolderTree({
   openRecipe, onRecipeContext, onFolderContext, onBulkContext, onBlankContext,
   popoverId, selectionRef,
 }: Props) {
+  const pushToast = useStore(s => s.pushToast);
   // ── Multi-select state (PART 4) ─────────────────────────────────────
   // selectedIds is the set of recipe ids that are checked. anchorId is
   // the last clicked row, used as the start of shift-range selection.
@@ -536,7 +538,9 @@ export default function FolderTree({
       // Move N recipes into folder: update folder field + splice to end
       // (preserving the dragged group's relative order).
       const next = applyRecipeMove(rs, drag.ids, target.id, 'end');
+      const before = rs.slice();
       setRecipes(next);
+      pushToast({ message: 'Moved recipes', variant: 'success', undo: () => setRecipes(before) });
       const tgt = fs.find(f => f.id === target.id);
       if (tgt && !tgt.open) {
         setFolders(fs.map(f => f.id === target.id ? { ...f, open: true } : f));
@@ -552,14 +556,18 @@ export default function FolderTree({
         beforeId: target.id,
         mode: target.mode,
       });
+      const before = rs.slice();
       setRecipes(next);
+      pushToast({ message: 'Moved recipes', variant: 'success', undo: () => setRecipes(before) });
       return;
     }
 
     if (drag.kind === 'recipe' && target.kind === 'root') {
       // Move N to Unfiled. Splice to end of global recipes array.
       const next = applyRecipeMove(rs, drag.ids, '', 'end');
+      const before = rs.slice();
       setRecipes(next);
+      pushToast({ message: 'Moved recipes', variant: 'success', undo: () => setRecipes(before) });
       return;
     }
 
