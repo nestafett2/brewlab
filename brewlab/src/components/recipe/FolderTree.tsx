@@ -739,10 +739,7 @@ function RecipeSidebarRow({
   onClick, onOpen, onContext,
   onDragStart, onDragEnd, onDragOver, onDrop,
 }: RecipeSidebarRowProps) {
-  const hasBrewNumber = typeof recipe.brewNumber === 'number' && recipe.brewNumber > 0;
-  const nameLine = hasBrewNumber
-    ? `#${recipe.brewNumber} ${recipe.beerName || recipe.name}`
-    : (recipe.beerName || recipe.name);
+  const nameLine = recipe.beerName || recipe.name;
   const styleLine = formatRecipeStyleLine(recipe.style);
   const versionLine = `v${recipe.version || '1.0'}`;
 
