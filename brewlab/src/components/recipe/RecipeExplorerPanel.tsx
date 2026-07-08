@@ -189,6 +189,11 @@ export default function RecipeExplorerPanel({
   // intentionally not synced with sidebar `preview`. Resolved to a recipe
   // at render time so a deletion / hydration id change clears it.
   const [previewId, setPreviewId] = useState<string | null>(null);
+  // Multi-select for cross-panel drag to the folder tree. Independent of
+  // previewId (which drives the inline preview pane). anchorId is the last
+  // plain/cmd-clicked row — the origin for shift-range selection.
+  const [explorerSelectedIds, setExplorerSelectedIds] = useState<Set<string>>(new Set());
+  const [anchorId, setAnchorId] = useState<string | null>(null);
 
   // Toolbar filters.
   const [search, setSearch] = useState('');
@@ -287,6 +292,38 @@ export default function RecipeExplorerPanel({
   const handlePreview = (id: string) => setPreviewId(id);
   const handleOpen    = (id: string) => { setPreviewId(null); openRecipe(id); };
 
+  // Row selection (file-explorer convention). Preview stays debounced in the
+  // row itself; this only maintains the multi-select set + anchor that feed
+  // cross-panel drag to the folder tree.
+  const handleRowClick = (recipeId: string, e: React.MouseEvent, list: Recipe[]) => {
+    const ctrl = e.ctrlKey || e.metaKey;
+    const shift = e.shiftKey;
+    if (shift && anchorId) {
+      // Range select anchor → clicked (inclusive), merged into the selection.
+      const fromIdx = list.findIndex(r => r.id === anchorId);
+      const toIdx   = list.findIndex(r => r.id === recipeId);
+      if (fromIdx >= 0 && toIdx >= 0) {
+        const [lo, hi] = fromIdx <= toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+        const range = list.slice(lo, hi + 1).map(r => r.id);
+        setExplorerSelectedIds(prev => new Set([...prev, ...range]));
+      }
+      // Don't move the anchor on shift — file-explorer convention.
+      return;
+    }
+    if (ctrl) {
+      setExplorerSelectedIds(prev => {
+        const next = new Set(prev);
+        if (next.has(recipeId)) next.delete(recipeId); else next.add(recipeId);
+        return next;
+      });
+      setAnchorId(recipeId);
+      return;
+    }
+    // Plain click — single-select + anchor. (Preview is scheduled by the row.)
+    setExplorerSelectedIds(new Set([recipeId]));
+    setAnchorId(recipeId);
+  };
+
   // Click a header: new col → ascending (dir 1); same col → flip direction.
   const onSort = (col: ColKey) =>
     setSort(prev => prev.col === col ? { col, dir: prev.dir === 1 ? -1 : 1 } : { col, dir: 1 });
@@ -383,7 +420,16 @@ export default function RecipeExplorerPanel({
         </span>
       </div>
       <div style={splitStyle}>
-        <div style={{ ...bodyStyle, flex: 1, minWidth: 0 }}>
+        <div
+          style={{ ...bodyStyle, flex: 1, minWidth: 0 }}
+          onClick={(e) => {
+            // Click empty space (not a row) clears the multi-selection.
+            if (e.target === e.currentTarget) {
+              setExplorerSelectedIds(new Set());
+              setAnchorId(null);
+            }
+          }}
+        >
           {sortedRecipes.length === 0 ? (
             <Empty />
           ) : (
@@ -412,17 +458,27 @@ export default function RecipeExplorerPanel({
                 </tr>
               </thead>
               <tbody>
-                {sortedRecipes.map((r, i) => (
-                  <ExplorerRow
-                    key={r.id}
-                    recipe={r}
-                    cols={shownCols}
-                    selected={r.id === previewId}
-                    zebra={i % 2 === 1}
-                    onPreview={() => handlePreview(r.id)}
-                    onOpen={() => handleOpen(r.id)}
-                  />
-                ))}
+                {sortedRecipes.map((r, i) => {
+                  const isExplorerSelected = explorerSelectedIds.has(r.id);
+                  const dragIds = isExplorerSelected && explorerSelectedIds.size > 1
+                    ? [...explorerSelectedIds]
+                    : [r.id];
+                  return (
+                    <ExplorerRow
+                      key={r.id}
+                      recipe={r}
+                      cols={shownCols}
+                      selected={r.id === previewId}
+                      explorerSelected={isExplorerSelected}
+                      zebra={i % 2 === 1}
+                      dragIds={dragIds}
+                      selectedCount={explorerSelectedIds.size}
+                      onSelect={(e) => handleRowClick(r.id, e, sortedRecipes)}
+                      onPreview={() => handlePreview(r.id)}
+                      onOpen={() => handleOpen(r.id)}
+                    />
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -499,12 +555,17 @@ function cellContent(col: ColKey, recipe: Recipe): React.ReactNode {
 }
 
 function ExplorerRow({
-  recipe, cols, selected = false, zebra = false, onPreview, onOpen,
+  recipe, cols, selected = false, explorerSelected = false, zebra = false,
+  dragIds, selectedCount, onSelect, onPreview, onOpen,
 }: {
   recipe: Recipe;
   cols: ColKey[];
   selected?: boolean;
+  explorerSelected?: boolean;
   zebra?: boolean;
+  dragIds: string[];
+  selectedCount: number;
+  onSelect: (e: React.MouseEvent) => void;
   onPreview: () => void;
   onOpen: () => void;
 }) {
@@ -524,7 +585,7 @@ function ExplorerRow({
   };
   useEffect(() => cancelPending, []);
 
-  const background = selected
+  const background = (explorerSelected || selected)
     ? 'var(--panel2)'
     : hover
       ? 'var(--panel)'
@@ -534,19 +595,47 @@ function ExplorerRow({
 
   return (
     <tr
-      style={{ background, cursor: 'pointer' }}
+      style={{
+        background, cursor: 'pointer',
+        // Amber left-edge marks a multi-selection row (distinct from the
+        // preview-target tint, which shares the panel2 background).
+        boxShadow: explorerSelected ? 'inset 2px 0 0 var(--amber)' : undefined,
+      }}
+      draggable
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      onClick={() => {
+      onClick={(e) => {
+        // Selection applies immediately (modifier-aware). Preview stays
+        // debounced and only fires on a plain click so a double-click
+        // can't flash the preview before the editor opens.
+        onSelect(e);
         cancelPending();
-        clickTimer.current = setTimeout(() => {
-          clickTimer.current = null;
-          onPreview();
-        }, 250);
+        if (!(e.shiftKey || e.metaKey || e.ctrlKey)) {
+          clickTimer.current = setTimeout(() => {
+            clickTimer.current = null;
+            onPreview();
+          }, 250);
+        }
       }}
       onDoubleClick={() => {
         cancelPending();
         onOpen();
+      }}
+      onDragStart={(e) => {
+        // If this row is in the selection, drag all selected; otherwise
+        // drag just this row. FolderTree reads 'bl_recipe_ids' on drop.
+        const ids = explorerSelected && selectedCount > 1 ? dragIds : [recipe.id];
+        e.dataTransfer.setData('bl_recipe_ids', JSON.stringify(ids));
+        e.dataTransfer.effectAllowed = 'move';
+        if (ids.length > 1) {
+          // Simple text drag image for multi-drag.
+          const ghost = document.createElement('div');
+          ghost.textContent = `${ids.length} recipes`;
+          ghost.style.cssText = 'position:fixed;top:-999px;padding:4px 8px;background:#333;color:#fff;border-radius:4px;font-size:12px;';
+          document.body.appendChild(ghost);
+          e.dataTransfer.setDragImage(ghost, 0, 0);
+          setTimeout(() => ghost.remove(), 0);
+        }
       }}
     >
       {cols.map(col => (

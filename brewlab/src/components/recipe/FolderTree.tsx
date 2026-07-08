@@ -461,14 +461,19 @@ export default function FolderTree({
   // ── Drop-target dragover (folder header) ────────────────────────────
   const handleFolderDragOver = (folderId: string, e: React.DragEvent) => {
     const drag = dragRef.current;
-    if (!drag) return;
+    // Cross-panel drag from the Recipe Explorer table carries recipe ids on
+    // the dataTransfer rather than populating dragRef (that ref lives in the
+    // other component instance). Treat such a drag as a recipe move.
+    const isCrossPanel = !drag && e.dataTransfer.types.includes('bl_recipe_ids');
+    if (!drag && !isCrossPanel) return;
     // Cycle prevention — folder dragged onto itself or a descendant.
-    if (drag.kind === 'folder' && bannedDropTargetsRef.current.has(folderId)) return;
+    if (drag?.kind === 'folder' && bannedDropTargetsRef.current.has(folderId)) return;
+    const dragKind: 'recipe' | 'folder' = drag ? drag.kind : 'recipe';
     e.preventDefault();
     e.stopPropagation();   // prevent wrapper "root" handler from firing
     e.dataTransfer.dropEffect = 'move';
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const mode = hitTestFolder(rect, e.clientY, drag.kind);
+    const mode = hitTestFolder(rect, e.clientY, dragKind);
     scheduleDropTarget({ kind: 'folder', id: folderId, mode });
     // Hover-to-open: only when mode === 'into' on a closed folder.
     const folder = foldersRef.current.find(f => f.id === folderId);
@@ -491,7 +496,7 @@ export default function FolderTree({
 
   // ── Wrapper-level dragover (root drop) ──────────────────────────────
   const handleRootDragOver = (e: React.DragEvent) => {
-    if (!dragRef.current) return;
+    if (!dragRef.current && !e.dataTransfer.types.includes('bl_recipe_ids')) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     scheduleDropTarget({ kind: 'root' });
@@ -502,7 +507,18 @@ export default function FolderTree({
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const drag = dragRef.current;
+    let drag: DragSource | null = dragRef.current;
+    if (!drag) {
+      // Cross-panel drop from the Recipe Explorer table — reconstruct the
+      // recipe drag from the dataTransfer payload.
+      const raw = e.dataTransfer.getData('bl_recipe_ids');
+      if (raw) {
+        try {
+          const ids: string[] = JSON.parse(raw);
+          if (ids.length > 0) drag = { kind: 'recipe', ids };
+        } catch { /* ignore bad payload */ }
+      }
+    }
     const target = pendingDropTargetRef.current ?? dropTarget;
     endDrag();   // resets everything, including dropTarget
     if (!drag || !target) return;
