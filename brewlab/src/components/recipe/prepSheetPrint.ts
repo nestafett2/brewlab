@@ -411,36 +411,36 @@ function buildExtraAdditions(inputs: PrepSheetInputs): string {
 
 const EXTRA_STYLES = `
   @page { size: A4 portrait; margin: 10mm; }
-  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 12px; color: #111; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 12px; color: #000; }
   .ps-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 8px; border-bottom: 1px solid #333; }
-  .ps-beer-name { font-size: 18px; font-weight: 500; margin-bottom: 2px; }
-  .ps-beer-sub { font-size: 12px; color: #666; }
+  .ps-beer-name { font-size: 18px; font-weight: 600; margin-bottom: 2px; }
+  .ps-beer-sub { font-size: 12px; color: #000; }
   .ps-header-right { text-align: right; }
-  .ps-brew-label { font-size: 11px; color: #666; letter-spacing: 1px; }
-  .ps-brew-num   { font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
-  .ps-stats-row { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0 14px; border-bottom: 1px solid #ddd; font-size: 12px; }
+  .ps-brew-label { font-size: 11px; color: #000; letter-spacing: 1px; }
+  .ps-brew-num   { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ps-stats-row { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0 14px; border-bottom: 1px solid #888; font-size: 12px; }
   .ps-stats-left, .ps-stats-right { display: flex; flex-wrap: wrap; gap: 14px; }
-  .ps-stat label { color: #888; font-size: 11px; letter-spacing: 0.5px; margin-right: 4px; text-transform: uppercase; }
+  .ps-stat label { color: #000; font-size: 11px; letter-spacing: 0.5px; margin-right: 4px; text-transform: uppercase; }
   .ps-section { padding: 12px 0 4px; border-bottom: 1px solid #eee; page-break-inside: avoid; }
   .ps-section:last-of-type { border-bottom: none; }
   .ps-section-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
-  .ps-section-title { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; color: #444; }
-  .ps-section-meta  { font-size: 11px; color: #666; }
+  .ps-section-title { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; color: #000; }
+  .ps-section-meta  { font-size: 11px; color: #000; }
   .ps-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .ps-table th { border: none; border-bottom: 1px solid #999; padding: 4px 6px; text-align: left; font-weight: 500; font-size: 11px; color: #444; }
+  .ps-table th { border: none; border-bottom: 1px solid #555; padding: 4px 6px; text-align: left; font-weight: 600; font-size: 11px; color: #000; }
   .ps-table td { border: none; padding: 3px 6px; }
   .ps-table th.r, .ps-table td.r { text-align: right; font-variant-numeric: tabular-nums; }
-  .ps-table td.muted, .muted { color: #888; font-style: italic; }
+  .ps-table td.muted, .muted { color: #000; font-style: italic; }
   .ps-water-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 8px; }
-  .ps-water-cell { border-left: 2px solid #ccc; padding-left: 8px; }
-  .ps-water-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+  .ps-water-cell { border-left: 2px solid #888; padding-left: 8px; }
+  .ps-water-label { font-size: 11px; color: #000; text-transform: uppercase; letter-spacing: 1px; }
   .ps-water-value { font-size: 12px; font-variant-numeric: tabular-nums; }
   .ps-water-minerals { font-size: 12px; padding: 4px 0; }
-  .ps-water-minerals-label { color: #888; font-size: 11px; margin-right: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .ps-water-minerals-label { color: #000; font-size: 11px; margin-right: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
   .ps-water-minerals-value { font-variant-numeric: tabular-nums; }
-  .ps-water-salts { font-size: 12px; padding-top: 2px; color: #444; }
+  .ps-water-salts { font-size: 12px; padding-top: 2px; color: #000; }
   .ps-yeast-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: baseline; font-size: 12px; padding: 2px 0; }
-  .ps-yeast-short { color: #b85020; font-weight: 500; }
+  .ps-yeast-short { color: #b85020; font-weight: 600; }
   .ps-yeast-ok    { color: #5a8a4a; }
   .ps-extra-body { font-size: 12px; white-space: pre-wrap; padding: 4px 0; }
   @media print { .ps-section { page-break-inside: avoid; } }

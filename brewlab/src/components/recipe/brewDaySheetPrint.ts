@@ -182,20 +182,20 @@ function buildMash(inputs: BrewDaySheetInputs): string {
         ${steps.map((s, i) => `
           <div style="display:flex; align-items:flex-start; gap:8px;">
             <div style="font-size:12px; padding-top:18px; white-space:nowrap;">
-              <span style="color:#888; margin-right:4px;">${i + 1}</span>${escapeHtml(s.type || '—')}
+              <span style="color:#000; margin-right:4px;">${i + 1}</span>${escapeHtml(s.type || '—')}
             </div>
             <div style="display:flex; gap:12px;">
               <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
-                <div style="display:flex; gap:12px; font-size:10px; color:#888;">
+                <div style="display:flex; gap:12px; font-size:10px; color:#000;">
                   <span style="min-width:60px; text-align:center;">Target</span>
                   <span style="min-width:60px; text-align:center;">Actual</span>
                 </div>
-                <div style="font-size:10px; color:#888; align-self:flex-start;">°C</div>
+                <div style="font-size:10px; color:#000; align-self:flex-start;">°C</div>
                 <div style="display:flex; gap:12px; align-items:center;">
                   ${chip(fmt(s.temp, 1, ' °C'))}
                   ${blank(60)}
                 </div>
-                <div style="font-size:10px; color:#888; align-self:flex-start; margin-top:4px;">min</div>
+                <div style="font-size:10px; color:#000; align-self:flex-start; margin-top:4px;">min</div>
                 <div style="display:flex; gap:12px; align-items:center;">
                   ${chip(fmtInt(s.time, ' min'))}
                   ${blank(60)}
@@ -499,18 +499,18 @@ function buildNotes(): string {
 
 const EXTRA_STYLES = `
   @page { size: A4 portrait; margin: 10mm; }
-  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 12px; color: #111; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 12px; color: #000; }
 
   /* Header */
   .bds-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 8px; border-bottom: 1px solid #333; }
-  .bds-beer-name { font-size: 18px; font-weight: 500; margin-bottom: 2px; }
-  .bds-beer-sub { font-size: 12px; color: #666; }
+  .bds-beer-name { font-size: 18px; font-weight: 600; margin-bottom: 2px; }
+  .bds-beer-sub { font-size: 12px; color: #000; }
   .bds-header-right { text-align: right; }
-  .bds-brew-label { font-size: 11px; color: #666; letter-spacing: 1px; }
-  .bds-brew-num   { font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
-  .bds-stats-row { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0 6px; border-bottom: 1px solid #ddd; font-size: 12px; }
+  .bds-brew-label { font-size: 11px; color: #000; letter-spacing: 1px; }
+  .bds-brew-num   { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bds-stats-row { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0 6px; border-bottom: 1px solid #888; font-size: 12px; }
   .bds-stats-group { display: flex; flex-wrap: wrap; gap: 14px; }
-  .bds-stat label { color: #888; font-size: 11px; letter-spacing: 0.5px; margin-right: 4px; text-transform: uppercase; }
+  .bds-stat label { color: #000; font-size: 11px; letter-spacing: 0.5px; margin-right: 4px; text-transform: uppercase; }
 
   /* Sections */
   .bds-section { padding: 8px 0 4px; page-break-inside: avoid; border-bottom: 1px solid #eee; }
@@ -520,9 +520,9 @@ const EXTRA_STYLES = `
      right. Scoped to Knockout & Pitch only; Mash's section head still
      needs space-between to push its meta to the far right. */
   .bds-section-head-left { justify-content: flex-start; gap: 24px; }
-  .bds-section-title { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; color: #444; }
-  .bds-section-meta  { font-size: 11px; color: #444; }
-  .bds-subhead { font-size: 11px; font-weight: 500; color: #555; margin: 4px 0 2px; letter-spacing: 0.6px; }
+  .bds-section-title { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; color: #000; }
+  .bds-section-meta  { font-size: 11px; color: #000; }
+  .bds-subhead { font-size: 11px; font-weight: 600; color: #000; margin: 4px 0 2px; letter-spacing: 0.6px; }
 
   /* Target chip — pre-printed value the brewer reads. Soft amber/cream so
      it reads "this is a target" without overpowering the page. */
@@ -532,7 +532,7 @@ const EXTRA_STYLES = `
     border: 1px solid #E8D89E;
     border-radius: 3px;
     padding: 1px 6px;
-    font-weight: 500;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
@@ -541,7 +541,7 @@ const EXTRA_STYLES = `
   /* Inline handwriting blank — underline the brewer writes on. */
   .bds-blank {
     display: inline-block;
-    border-bottom: 1px solid #999;
+    border-bottom: 1px solid #555;
     min-width: 90px;
     height: 14px;
     vertical-align: bottom;
@@ -549,18 +549,18 @@ const EXTRA_STYLES = `
 
   /* Tables — mash steps, sparge tracker, runnings */
   .bds-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 6px; }
-  .bds-table th { border: none; border-bottom: 1px solid #999; padding: 4px 6px; text-align: left; font-weight: 500; font-size: 11px; color: #444; }
+  .bds-table th { border: none; border-bottom: 1px solid #555; padding: 4px 6px; text-align: left; font-weight: 600; font-size: 11px; color: #000; }
   .bds-table td { border: none; border-bottom: 1px solid #eee; padding: 3px; }
   .bds-table th.r, .bds-table td.r { text-align: right; font-variant-numeric: tabular-nums; }
-  .bds-table td.muted, .muted { color: #888; font-style: italic; }
+  .bds-table td.muted, .muted { color: #000; font-style: italic; }
 
   /* Mash measurement grid — handwriting cells, taller rows */
   .bds-meas-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; margin-bottom: 6px; }
-  .bds-meas-table th { border: 1px solid #ccc; background: #f7f7f7; font-size: 10px; color: #666; font-weight: 500; padding: 4px; text-align: center;
+  .bds-meas-table th { border: 1px solid #888; background: #f7f7f7; font-size: 10px; color: #000; font-weight: 600; padding: 4px; text-align: center;
     -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .bds-meas-table .bds-meas-rowlabel { width: 70px; border: 1px solid #ccc; background: #f7f7f7; font-size: 11px; color: #444; padding: 4px 6px;
+  .bds-meas-table .bds-meas-rowlabel { width: 70px; border: 1px solid #888; background: #f7f7f7; font-size: 11px; color: #000; padding: 4px 6px;
     -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .bds-meas-table .bds-meas-cell { border: 1px solid #ccc; height: 20px; }
+  .bds-meas-table .bds-meas-cell { border: 1px solid #888; height: 20px; }
   .bds-meas-table .bds-meas-cell-notes { height: 40px; }
   .bds-meas-table .bds-meas-col { width: auto; font-size: 10px; }
 
@@ -568,10 +568,10 @@ const EXTRA_STYLES = `
      knockout / efficiency sections. Each cell is a label + value pair. */
   .bds-row { display: flex; flex-wrap: wrap; gap: 18px; padding: 2px 0; }
   .bds-row-cell { display: flex; align-items: baseline; gap: 6px; font-size: 12px; white-space: nowrap; }
-  .bds-row-cell label { color: #888; font-size: 11px; letter-spacing: 0.4px; }
+  .bds-row-cell label { color: #000; font-size: 11px; letter-spacing: 0.4px; }
 
   /* Inline non-row blank (used under the mash table for Flowmeter finish) */
-  .bds-inline { padding: 4px 0; font-size: 12px; color: #444; }
+  .bds-inline { padding: 4px 0; font-size: 12px; color: #000; }
 
   /* Two-column layout — Boil & Whirlpool's additions table + condensed fields */
   .bds-two-col { display: flex; gap: 16px; }
@@ -582,12 +582,12 @@ const EXTRA_STYLES = `
   .bds-lauter-wrap { display: flex; gap: 12px; }
   .bds-lauter-left { flex: 0 0 54%; }
   .bds-lauter-right { flex: 0 0 43%; font-size: 11px; display: flex; flex-direction: column; gap: 6px; justify-content: flex-start; }
-  .bds-lauter-right label { color: #888; font-size: 10px; margin-right: 4px; }
+  .bds-lauter-right label { color: #000; font-size: 10px; margin-right: 4px; }
 
   /* Notes box — lined handwriting surface. Five faint rules so the
      brewer's writing tracks straight even without ruled paper. */
   .bds-notes-box {
-    border: 1px solid #999;
+    border: 1px solid #555;
     height: 110px;
     background-image: repeating-linear-gradient(
       to bottom,

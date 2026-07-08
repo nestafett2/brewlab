@@ -32,9 +32,9 @@ h2{font-size:11px;letter-spacing:1px;margin:16px 0 8px;color:#c07010;}
 table{width:100%;border-collapse:collapse;margin-bottom:8px;}
 th{text-align:left;border-bottom:2px solid #333;padding:4px 8px;font-size:7px;letter-spacing:0.5px;}
 th.r,td.r{text-align:right;}
-td{padding:4px 8px;border-bottom:1px solid #ddd;}
+td{padding:4px 8px;border-bottom:1px solid #888;}
 tr.total-row td{font-weight:700;border-top:2px solid #333;border-bottom:none;}
-.report-block{border:1px solid #ccc;padding:10px;margin-bottom:12px;min-width:280px;page-break-inside:avoid;display:inline-block;vertical-align:top;width:calc(50% - 24px);box-sizing:border-box;margin-right:8px;}
+.report-block{border:1px solid #888;padding:10px;margin-bottom:12px;min-width:280px;page-break-inside:avoid;display:inline-block;vertical-align:top;width:calc(50% - 24px);box-sizing:border-box;margin-right:8px;}
 .block-title{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;color:#c07010;}
 @media print{body{margin:8px;}}
 `;
@@ -94,7 +94,7 @@ export function printPlanner(args: {
 
   // Planned brews
   const plannerRows = planner.length === 0
-    ? `<tr><td colspan="4" style="text-align:center;color:#888;padding:12px;">No brews planned.</td></tr>`
+    ? `<tr><td colspan="4" style="text-align:center;color:#000;padding:12px;">No brews planned.</td></tr>`
     : planner.map(row => {
         const tpl = templates.find(t => t.id === row.templateId);
         return `<tr>
@@ -109,7 +109,7 @@ export function printPlanner(args: {
   const totalActual  = Object.values(actual).reduce((s, v) => s + v.total, 0);
   const totalPlanned = Object.values(planned).reduce((s, v) => s + v.total, 0);
   const maltRows = allMalts.length === 0
-    ? `<tr><td colspan="5" style="text-align:center;color:#888;padding:12px;">No malt usage to report.</td></tr>`
+    ? `<tr><td colspan="5" style="text-align:center;color:#000;padding:12px;">No malt usage to report.</td></tr>`
     : allMalts.map(name => {
         const a = actual[name]?.total ?? 0;
         const p = planned[name]?.total ?? 0;
@@ -140,7 +140,7 @@ export function printPlanner(args: {
       <thead><tr><th>Malt</th><th>Tariff</th><th class="r">Actual Used (kg)</th><th class="r">Planned (kg)</th><th class="r">Total Est. (kg)</th></tr></thead>
       <tbody>${maltRows}</tbody>
     </table>
-    <p style="margin-top:12px;color:#888;">TRQ = Tariff Rate Quota malt. Print this page to share with your supplier in January.</p>
+    <p style="margin-top:12px;color:#000;">TRQ = Tariff Rate Quota malt. Print this page to share with your supplier in January.</p>
   `;
 
   _printTariffWindow(`Annual Malt Planner — FY ${fiscalYearLabel(year)}`, body);

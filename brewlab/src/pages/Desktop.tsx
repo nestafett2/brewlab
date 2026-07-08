@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import JSZip from 'jszip';
 import { useStore, type RecipeDeleteSnapshot } from '../store';
 import RecipeTab from '../components/recipe/RecipeTab';
@@ -222,6 +222,26 @@ export default function Desktop() {
   useEffect(() => {
     try { localStorage.setItem('bl_sidebar_tab', sidebarTab); } catch { /* ignore */ }
   }, [sidebarTab]);
+  // ── Sidebar recipe sort (sort menu in the rb-toolbar) ────────────────
+  // View-only ordering applied to the FolderTree recipe rows. Persisted to
+  // localStorage. Doesn't rewrite the stored recipe order — drag-reorder
+  // still writes the array; an active sort just overrides the display.
+  type SidebarSort = 'alpha' | 'dateOldNew' | 'dateNewOld' | 'taxBatch';
+  const [sidebarSort, setSidebarSort] = useState<SidebarSort>(() => {
+    try { return (localStorage.getItem('bl_sidebar_sort') as SidebarSort) ?? 'alpha'; } catch { return 'alpha'; }
+  });
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  useEffect(() => {
+    try { localStorage.setItem('bl_sidebar_sort', sidebarSort); } catch { /* ignore */ }
+  }, [sidebarSort]);
+  const sortedRecipesForTree = useMemo(() => {
+    const arr = [...recipes];
+    if (sidebarSort === 'alpha') arr.sort((a, b) => (a.beerName || a.name).localeCompare(b.beerName || b.name));
+    else if (sidebarSort === 'dateOldNew') arr.sort((a, b) => (a.brewDate || '').localeCompare(b.brewDate || ''));
+    else if (sidebarSort === 'dateNewOld') arr.sort((a, b) => (b.brewDate || '').localeCompare(a.brewDate || ''));
+    else if (sidebarSort === 'taxBatch') arr.sort((a, b) => (a.taxBatch || '').localeCompare(b.taxBatch || ''));
+    return arr;
+  }, [recipes, sidebarSort]);
   // Right-pane preview selection — recipe or folder, or null. When
   // null, the right pane shows the BreweryOverviewPanel as the default
   // dashboard (no empty-state placeholder). Independent of
@@ -1297,7 +1317,7 @@ export default function Desktop() {
                     <button className="btn sm" onClick={handleNewFolder}>📁 Folder</button>
                   </div>
                 </div>
-                <div className="rb-toolbar" style={{ padding: '6px 8px' }}>
+                <div className="rb-toolbar" style={{ padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div className="segmented-control">
                     <button
                       className={`seg-btn${sidebarTab === 'overview' ? ' active' : ''}`}
@@ -1312,11 +1332,56 @@ export default function Desktop() {
                       Recipe Explorer
                     </button>
                   </div>
+                  <div style={{ marginLeft: 'auto', position: 'relative' }}>
+                    <button
+                      className="btn sm"
+                      onClick={() => setShowSortMenu(v => !v)}
+                      title="Sort recipes"
+                      style={{ fontSize: 11, padding: '2px 8px' }}
+                    >
+                      {sidebarSort === 'alpha' ? 'A→Z'
+                        : sidebarSort === 'dateOldNew' ? '↑ Date'
+                        : sidebarSort === 'dateNewOld' ? '↓ Date'
+                        : '# Tax'} ▾
+                    </button>
+                    {showSortMenu && (
+                      <>
+                        <div
+                          style={{ position: 'fixed', inset: 0, zIndex: 199 }}
+                          onClick={() => setShowSortMenu(false)}
+                        />
+                        <div style={{
+                          position: 'absolute', right: 0, top: '100%', marginTop: 2,
+                          background: 'var(--panel)', border: '1px solid var(--border2)',
+                          borderRadius: 4, zIndex: 200, minWidth: 160, overflow: 'hidden',
+                        }}>
+                          {([
+                            ['alpha',      'A → Z'],
+                            ['dateOldNew', 'Date: Old → New'],
+                            ['dateNewOld', 'Date: New → Old'],
+                            ['taxBatch',   'Tax Batch #'],
+                          ] as [SidebarSort, string][]).map(([key, label]) => (
+                            <div
+                              key={key}
+                              onClick={() => { setSidebarSort(key); setShowSortMenu(false); }}
+                              style={{
+                                padding: '7px 12px', cursor: 'pointer', fontSize: 12,
+                                background: sidebarSort === key ? 'var(--amber)' : undefined,
+                                color: sidebarSort === key ? '#000' : 'var(--text)',
+                              }}
+                            >
+                              {label}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto' }}>
                   <FolderTree
                     folders={folders}
-                    recipes={recipes}
+                    recipes={sortedRecipesForTree}
                     preview={preview}
                     popoverId={popoverRecipeId}
                     setPreview={(sel) => {

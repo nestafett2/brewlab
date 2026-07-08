@@ -911,12 +911,12 @@ function printNtaFormDetailed(register: NtaSubmission[]): void {
 
   const cell = (g: NtaSubmission | null, content: string): string =>
     g
-      ? `<td style="border:1px solid #999;padding:4px 8px;text-align:center;">${escapeHtml(content)}</td>`
-      : '<td style="border:1px solid #999;padding:4px 8px;"></td>';
+      ? `<td style="border:1px solid #555;padding:4px 8px;text-align:center;">${escapeHtml(content)}</td>`
+      : '<td style="border:1px solid #555;padding:4px 8px;"></td>';
 
   const buildRow = (label: string, vals: (string | null)[]): string =>
-    `<tr><td style="border:1px solid #999;padding:4px 8px;font-size:10px;white-space:nowrap;">${escapeHtml(label)}</td>` +
-    vals.map(v => v != null ? `<td style="border:1px solid #999;padding:4px 8px;text-align:center;">${escapeHtml(v)}</td>` : cell(null, '')).join('') +
+    `<tr><td style="border:1px solid #555;padding:4px 8px;font-size:10px;white-space:nowrap;">${escapeHtml(label)}</td>` +
+    vals.map(v => v != null ? `<td style="border:1px solid #555;padding:4px 8px;text-align:center;">${escapeHtml(v)}</td>` : cell(null, '')).join('') +
     '</tr>';
 
   const pageHtml = pages.map(group => {
@@ -1022,12 +1022,12 @@ function printNtaFormSummary(register: NtaSubmission[]): void {
   <table style="width:100%;border-collapse:collapse;font-size:8px;">
     <thead>
       <tr>
-        ${headers.map(h => `<td style="border:1px solid #999;padding:2px 4px;background:#e8e8e8;font-weight:bold;white-space:nowrap;">${escapeHtml(h)}</td>`).join('')}
+        ${headers.map(h => `<td style="border:1px solid #555;padding:2px 4px;background:#e8e8e8;font-weight:bold;white-space:nowrap;">${escapeHtml(h)}</td>`).join('')}
       </tr>
     </thead>
     <tbody>
       ${rows.map(row =>
-        `<tr>${row.map(v => `<td style="border:1px solid #999;padding:2px 4px;">${escapeHtml(v)}</td>`).join('')}</tr>`
+        `<tr>${row.map(v => `<td style="border:1px solid #555;padding:2px 4px;">${escapeHtml(v)}</td>`).join('')}</tr>`
       ).join('')}
     </tbody>
   </table>

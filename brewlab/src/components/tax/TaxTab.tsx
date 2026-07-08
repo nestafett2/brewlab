@@ -384,7 +384,7 @@ function printTaxRecordHtml(rec: TaxRecord): void {
   const cls = (rec['classification'] as Classification | undefined) || 'Beer';
   const body = `
 <h1>TAX RECORD — ${beerLabel}</h1>
-<div style="font-size:10px;color:#555;margin-bottom:12px;">
+<div style="font-size:10px;color:#000;margin-bottom:12px;">
   Tax Batch #${v('brew-num')} &nbsp;|&nbsp; Date: ${v('date')} &nbsp;|&nbsp; ${escapeHtml(cls)}
 </div>
 <table>

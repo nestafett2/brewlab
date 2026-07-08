@@ -26,21 +26,22 @@ const DEFAULT_PRINT_CSS = `
   body {
     margin: 0;
     padding: 12px;
-    font-family: 'Helvetica Neue', Arial, sans-serif;
-    color: #111;
+    font-family: 'Arial Black', 'Helvetica Neue', Arial, sans-serif;
+    color: #000;
     background: #fff;
     font-size: 11px;
+    font-weight: 600;
   }
-  h1, h2, h3 { margin: 0 0 8px 0; font-weight: 600; }
+  h1, h2, h3 { margin: 0 0 8px 0; font-weight: 700; color: #000; }
   h1 { font-size: 18px; }
   h2 { font-size: 14px; margin-top: 12px; }
-  h3 { font-size: 12px; margin-top: 8px; color: #444; }
+  h3 { font-size: 12px; margin-top: 8px; }
   table { border-collapse: collapse; width: 100%; margin-bottom: 10px; }
-  th, td { border: 1px solid #999; padding: 4px 6px; text-align: left; }
-  th { background: #eee; font-weight: 600; }
+  th, td { border: 1px solid #555; padding: 4px 6px; text-align: left; }
+  th { background: #ddd; font-weight: 700; }
   td.num, th.num { text-align: right; }
   .meta-grid { display: grid; grid-template-columns: 120px 1fr 120px 1fr; gap: 4px 12px; margin: 8px 0 12px 0; }
-  .meta-grid > .lbl { color: #666; }
+  .meta-grid > .lbl { color: #000; font-weight: 700; }
   .no-print { display: none; }
   @media print {
     .no-print { display: none !important; }

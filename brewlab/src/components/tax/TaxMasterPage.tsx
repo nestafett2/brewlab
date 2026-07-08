@@ -777,11 +777,11 @@ function printMonthlyReport(rows: DerivedRow[], dateFrom: string, dateTo: string
       h1 { font-size: 13px; letter-spacing: 2px; margin-bottom: 12px; }
       table { font-size: 8px; margin-bottom: 8px; }
       th, td { border: none; padding: 4px 6px; white-space: nowrap; }
-      th { background: transparent; border-bottom: 2px solid #333; font-size: 7px; letter-spacing: 0.5px; color: #666; font-weight: 600; }
-      td { border-bottom: 1px solid #ddd; }
+      th { background: transparent; border-bottom: 2px solid #333; font-size: 7px; letter-spacing: 0.5px; color: #000; font-weight: 600; }
+      td { border-bottom: 1px solid #888; }
       th.r, td.r { text-align: right; }
       th.l, td.l { text-align: left; }
-      td.muted { color: #888; }
+      td.muted { color: #000; }
       td.amber { color: #c07010; font-weight: 600; }
       td.happo { color: #4488aa; }
       /* Soft yellow row highlight for Happoshu rows in mixed-class blocks.
@@ -790,17 +790,17 @@ function printMonthlyReport(rows: DerivedRow[], dateFrom: string, dateTo: string
       tr.happo-row td { background: #FFF8C4; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .month-block { display: flex; gap: 16px; margin-bottom: 24px; page-break-inside: avoid; align-items: flex-start; }
       .main-table { flex: 1; overflow-x: auto; }
-      .sidebar { flex-shrink: 0; width: 180px; background: #f5f5f5; border: 1px solid #ccc; padding: 12px 14px; font-size: 9px; }
+      .sidebar { flex-shrink: 0; width: 180px; background: #f5f5f5; border: 1px solid #888; padding: 12px 14px; font-size: 9px; }
       .month-label { font-size: 13px; letter-spacing: 2px; color: #c07010; margin-bottom: 8px; font-weight: 700; }
       .sidebar-month { font-size: 9px; font-weight: 700; letter-spacing: 1.5px; color: #c07010; margin-bottom: 10px; }
-      .sidebar-section { font-size: 8px; color: #666; letter-spacing: 1px; margin-bottom: 4px; }
+      .sidebar-section { font-size: 8px; color: #000; letter-spacing: 1px; margin-bottom: 4px; }
       .sidebar-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
       .sidebar-row.gap { margin-bottom: 8px; }
-      .sidebar-row .muted { color: #888; }
-      .sidebar-total { border-top: 1px solid #ccc; padding-top: 8px; margin-top: 4px; }
-      .sidebar-grand { display: flex; justify-content: space-between; font-weight: 700; color: #c07010; border-top: 1px solid #ccc; margin-top: 4px; padding-top: 4px; }
+      .sidebar-row .muted { color: #000; }
+      .sidebar-total { border-top: 1px solid #888; padding-top: 8px; margin-top: 4px; }
+      .sidebar-grand { display: flex; justify-content: space-between; font-weight: 700; color: #c07010; border-top: 1px solid #888; margin-top: 4px; padding-top: 4px; }
       .unscheduled-label { font-size: 11px; letter-spacing: 2px; color: #c07010; opacity: 0.5; margin-bottom: 8px; font-weight: 700; }
-      .empty { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #888; text-align: center; padding: 40px; }
+      .empty { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #000; text-align: center; padding: 40px; }
       @media print { .month-block { page-break-inside: avoid; } }
     `,
   });

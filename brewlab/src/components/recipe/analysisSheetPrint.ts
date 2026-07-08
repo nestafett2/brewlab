@@ -348,42 +348,42 @@ function buildFreeNotes(title: string, text: string): string {
 
 const EXTRA_STYLES = `
   @page { size: A4 portrait; margin: 10mm; }
-  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 12px; color: #111; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 12px; color: #000; }
 
   .as-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 8px; border-bottom: 1px solid #333; }
   .as-beer-name { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
-  .as-beer-sub { font-size: 11px; color: #666; }
+  .as-beer-sub { font-size: 11px; color: #000; }
   .as-meta-grid { display: flex; gap: 18px; }
   .as-meta-cell { font-size: 11px; text-align: right; }
-  .as-meta-cell label { display: block; color: #888; font-size: 9px; letter-spacing: 0.6px; text-transform: uppercase; margin-bottom: 2px; }
+  .as-meta-cell label { display: block; color: #000; font-size: 9px; letter-spacing: 0.6px; text-transform: uppercase; margin-bottom: 2px; }
 
-  .as-stats-row { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0 6px; border-bottom: 1px solid #ddd; font-size: 11px; flex-wrap: wrap; }
+  .as-stats-row { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0 6px; border-bottom: 1px solid #888; font-size: 11px; flex-wrap: wrap; }
   .as-stats-group { display: flex; flex-wrap: wrap; gap: 12px; }
-  .as-stat label { color: #888; font-size: 10px; letter-spacing: 0.4px; margin-right: 4px; text-transform: uppercase; }
+  .as-stat label { color: #000; font-size: 10px; letter-spacing: 0.4px; margin-right: 4px; text-transform: uppercase; }
 
   .as-section { border-bottom: 1px solid #eee; padding: 8px 0; page-break-inside: avoid; }
   .as-section:last-of-type { border-bottom: none; }
-  .as-section-title { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; color: #444; margin-bottom: 4px; }
+  .as-section-title { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; color: #000; margin-bottom: 4px; }
 
   .as-two-col { display: flex; gap: 16px; }
 
   .as-row { font-size: 11px; padding: 3px 0; }
-  .as-row label { color: #888; font-size: 10px; letter-spacing: 0.4px; margin-right: 4px; }
+  .as-row label { color: #000; font-size: 10px; letter-spacing: 0.4px; margin-right: 4px; }
 
   .as-table { width: 100%; border-collapse: collapse; font-size: 11px; margin: 4px 0; }
-  .as-table th { border: none; border-bottom: 1px solid #999; padding: 4px 6px; text-align: left; font-weight: 500; font-size: 10px; color: #444; }
+  .as-table th { border: none; border-bottom: 1px solid #555; padding: 4px 6px; text-align: left; font-weight: 600; font-size: 10px; color: #000; }
   .as-table td { border: none; border-bottom: 1px solid #eee; padding: 3px 6px; }
   .as-table th.r, .as-table td.r { text-align: right; font-variant-numeric: tabular-nums; }
-  .as-table td.muted, .muted { color: #888; font-style: italic; }
+  .as-table td.muted, .muted { color: #000; font-style: italic; }
 
   .as-cost-total { font-size: 14px; font-weight: 700; }
 
   .as-notes-row { display: grid; grid-template-columns: 120px 1fr; border-bottom: 1px solid #eee; }
-  .as-notes-source { font-size: 9px; color: #888; padding: 5px 8px; font-variant: small-caps; }
+  .as-notes-source { font-size: 9px; color: #000; padding: 5px 8px; font-variant: small-caps; }
   .as-notes-text { font-size: 11px; padding: 5px 8px; white-space: pre-wrap; }
 
   .as-notes-box {
-    border: 1px solid #999;
+    border: 1px solid #555;
     height: 80px;
     background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 21px, #eee 21px, #eee 22px);
     -webkit-print-color-adjust: exact;

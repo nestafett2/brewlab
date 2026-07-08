@@ -97,9 +97,9 @@ export function printTastingSheet(beerName: string, brewDate: string, breweryNam
     .desc-tbl .sc { font-family: 'Courier New', monospace; font-size: 10pt; letter-spacing: 1px; text-align: right; white-space: nowrap; }
 
     .note-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .note-box { border: 1px solid #ccc; padding: 8px; min-height: 60px; }
+    .note-box { border: 1px solid #888; padding: 8px; min-height: 60px; }
     .note-label { font-size: 9pt; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; }
-    .rule { border-bottom: 1px solid #ddd; margin: 8px 0; height: 20px; }
+    .rule { border-bottom: 1px solid #888; margin: 8px 0; height: 20px; }
     .overall { display: flex; gap: 48px; margin-top: 6px; font-size: 11pt; }
     .ov-label { font-weight: bold; }
     .circles { font-size: 11pt; line-height: 14px; letter-spacing: 4px; }

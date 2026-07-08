@@ -24,10 +24,10 @@ const SECTION_LABEL: Record<LibSection, string> = {
 const PRINT_STYLE = `
   body { font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: #000; background: #fff; margin: 20px; }
   h1 { font-size: 14px; letter-spacing: 1px; margin-bottom: 4px; }
-  .subtitle { font-size: 10px; color: #555; margin-bottom: 14px; }
+  .subtitle { font-size: 10px; color: #000; margin-bottom: 14px; }
   h2 { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #c07010; margin: 16px 0 6px; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 8px; table-layout: fixed; }
-  th, td { border: 1px solid #999; padding: 3px 6px; text-align: left; }
+  th, td { border: 1px solid #555; padding: 3px 6px; text-align: left; }
   th { background: #eee; font-weight: 600; font-size: 8px; }
   td.r, th.r { text-align: right; }
   td.c, th.c { text-align: center; }

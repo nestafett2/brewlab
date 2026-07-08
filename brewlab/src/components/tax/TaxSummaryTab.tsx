@@ -267,7 +267,7 @@ function printSummary(rec: TaxRecord, recipe: Recipe, s: SummaryRows): void {
 
   const body = `
 <h1>TAX SUMMARY — ${escapeHtml(beerLabel)}</h1>
-<div style="font-size:10px;color:#666;margin-bottom:12px;">
+<div style="font-size:10px;color:#000;margin-bottom:12px;">
   Tax Batch #${escapeHtml(rec['brew-num'] ?? '—')} &nbsp;|&nbsp; ${escapeHtml(rec['date'] ?? '—')} &nbsp;|&nbsp; ${escapeHtml(rec['classification'] ?? 'Beer')}
 </div>
 

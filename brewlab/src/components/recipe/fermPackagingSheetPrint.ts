@@ -249,26 +249,26 @@ function buildNotes(): string {
 
 const EXTRA_STYLES = `
   @page { size: A4 portrait; margin: 10mm; }
-  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 12px; color: #111; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 12px; color: #000; }
 
   /* Header */
   .bds-header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 8px; border-bottom: 1px solid #333; }
-  .bds-beer-name { font-size: 18px; font-weight: 500; margin-bottom: 2px; }
-  .bds-beer-sub { font-size: 12px; color: #666; }
+  .bds-beer-name { font-size: 18px; font-weight: 600; margin-bottom: 2px; }
+  .bds-beer-sub { font-size: 12px; color: #000; }
   .bds-header-right { text-align: right; }
-  .bds-brew-label { font-size: 11px; color: #666; letter-spacing: 1px; }
-  .bds-brew-num   { font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
-  .bds-stats-row { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0 6px; border-bottom: 1px solid #ddd; font-size: 12px; }
+  .bds-brew-label { font-size: 11px; color: #000; letter-spacing: 1px; }
+  .bds-brew-num   { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bds-stats-row { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0 6px; border-bottom: 1px solid #888; font-size: 12px; }
   .bds-stats-group { display: flex; flex-wrap: wrap; gap: 14px; }
-  .bds-stat label { color: #888; font-size: 11px; letter-spacing: 0.5px; margin-right: 4px; text-transform: uppercase; }
+  .bds-stat label { color: #000; font-size: 11px; letter-spacing: 0.5px; margin-right: 4px; text-transform: uppercase; }
 
   /* Sections */
   .bds-section { padding: 8px 0 4px; page-break-inside: avoid; border-bottom: 1px solid #eee; }
   .bds-section:last-of-type { border-bottom: none; }
   .bds-section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 4px; flex-wrap: wrap; }
-  .bds-section-title { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; color: #444; }
-  .bds-section-meta  { font-size: 11px; color: #444; }
-  .bds-subhead { font-size: 11px; font-weight: 500; color: #555; margin: 4px 0 2px; letter-spacing: 0.6px; }
+  .bds-section-title { font-size: 11px; font-weight: 600; letter-spacing: 1.2px; color: #000; }
+  .bds-section-meta  { font-size: 11px; color: #000; }
+  .bds-subhead { font-size: 11px; font-weight: 600; color: #000; margin: 4px 0 2px; letter-spacing: 0.6px; }
 
   /* Target chip — pre-printed value the brewer reads. */
   .bds-target {
@@ -277,7 +277,7 @@ const EXTRA_STYLES = `
     border: 1px solid #E8D89E;
     border-radius: 3px;
     padding: 1px 6px;
-    font-weight: 500;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
@@ -286,7 +286,7 @@ const EXTRA_STYLES = `
   /* Inline handwriting blank — underline the brewer writes on. */
   .bds-blank {
     display: inline-block;
-    border-bottom: 1px solid #999;
+    border-bottom: 1px solid #555;
     min-width: 90px;
     height: 14px;
     vertical-align: bottom;
@@ -294,26 +294,26 @@ const EXTRA_STYLES = `
 
   /* Tables */
   .bds-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 6px; }
-  .bds-table th { border: none; border-bottom: 1px solid #999; padding: 4px 6px; text-align: left; font-weight: 500; font-size: 11px; color: #444; }
+  .bds-table th { border: none; border-bottom: 1px solid #555; padding: 4px 6px; text-align: left; font-weight: 600; font-size: 11px; color: #000; }
   .bds-table td { border: none; border-bottom: 1px solid #eee; padding: 3px; }
   .bds-table th.r, .bds-table td.r { text-align: right; font-variant-numeric: tabular-nums; }
 
   /* Measurement grid — handwriting cells, header row style */
   .bds-meas-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; margin-bottom: 6px; }
-  .bds-meas-table th { border: 1px solid #ccc; background: #f7f7f7; font-size: 10px; color: #666; font-weight: 500; padding: 4px; text-align: center;
+  .bds-meas-table th { border: 1px solid #888; background: #f7f7f7; font-size: 10px; color: #000; font-weight: 600; padding: 4px; text-align: center;
     -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
   /* Row-cell layout — label + value pairs */
   .bds-row { display: flex; flex-wrap: wrap; gap: 18px; padding: 2px 0; }
   .bds-row-cell { display: flex; align-items: baseline; gap: 6px; font-size: 12px; white-space: nowrap; }
-  .bds-row-cell label { color: #888; font-size: 11px; letter-spacing: 0.4px; }
+  .bds-row-cell label { color: #000; font-size: 11px; letter-spacing: 0.4px; }
 
   /* Inline non-row blank */
-  .bds-inline { padding: 4px 0; font-size: 12px; color: #444; }
+  .bds-inline { padding: 4px 0; font-size: 12px; color: #000; }
 
   /* Notes box — lined handwriting surface. */
   .bds-notes-box {
-    border: 1px solid #999;
+    border: 1px solid #555;
     background-image: repeating-linear-gradient(
       to bottom,
       transparent 0,
@@ -328,24 +328,24 @@ const EXTRA_STYLES = `
   /* Fermentation Log — taller handwriting cells (24px) than the Brew Day
      Sheet's mash measurement grid (20px), since Plato/pH/Temp readings
      take a bit more room to write clearly across 15 rows. */
-  .fps-ferm-table td.fps-blank-cell { border: 1px solid #ccc; height: 24px; }
+  .fps-ferm-table td.fps-blank-cell { border: 1px solid #888; height: 24px; }
 
   /* Shared blank-cell style for Harvest's single-row table too. */
-  .fps-blank-cell { border: 1px solid #ccc; height: 24px; }
+  .fps-blank-cell { border: 1px solid #888; height: 24px; }
 
   /* Packaging — two-column layout: label/blank fields left, volumes grid right. */
   .fps-two-col { display: flex; gap: 16px; }
   .fps-col-left { flex: 0 0 55%; }
   .fps-col-right { flex: 0 0 43%; }
   .fps-field { display: flex; align-items: baseline; gap: 6px; font-size: 12px; padding: 3px 0; }
-  .fps-field label { color: #888; font-size: 11px; letter-spacing: 0.4px; min-width: 130px; }
+  .fps-field label { color: #000; font-size: 11px; letter-spacing: 0.4px; min-width: 130px; }
 
   .fps-pkg-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11px; margin-bottom: 8px; }
-  .fps-pkg-table th { border: 1px solid #ccc; background: #f7f7f7; font-size: 10px; color: #666; font-weight: 500; padding: 4px; text-align: left;
+  .fps-pkg-table th { border: 1px solid #888; background: #f7f7f7; font-size: 10px; color: #000; font-weight: 600; padding: 4px; text-align: left;
     -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .fps-pkg-table th.r { text-align: right; }
   .fps-pkg-table td { border: none; padding: 3px 6px; font-size: 11px; }
-  .fps-pkg-cell { border: 1px solid #ccc; height: 20px; }
+  .fps-pkg-cell { border: 1px solid #888; height: 20px; }
   .fps-pkg-total-label { font-weight: 600; }
 
   .fps-vol-summary { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
