@@ -1336,13 +1336,10 @@ export default function Desktop() {
                     <button
                       className="btn sm"
                       onClick={() => setShowSortMenu(v => !v)}
-                      title="Sort recipes"
-                      style={{ fontSize: 11, padding: '2px 8px' }}
+                      title={`Sort: ${sidebarSort === 'alpha' ? 'A→Z' : sidebarSort === 'dateOldNew' ? 'Date old→new' : sidebarSort === 'dateNewOld' ? 'Date new→old' : 'Tax Batch #'}`}
+                      style={{ width: 22, height: 22, borderRadius: '50%', padding: 0, fontSize: 13, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                     >
-                      {sidebarSort === 'alpha' ? 'A→Z'
-                        : sidebarSort === 'dateOldNew' ? '↑ Date'
-                        : sidebarSort === 'dateNewOld' ? '↓ Date'
-                        : '# Tax'} ▾
+                      ⇅
                     </button>
                     {showSortMenu && (
                       <>
