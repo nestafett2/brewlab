@@ -148,15 +148,28 @@ export default function BrewDayTab({ recipeId }: Props) {
     settings.grainAbsorb, settings.defaultGrainTemp, settings.coolingShrinkage,
   ]);
 
+  // ── FV mm → litres via tank calibration of the selected FV ───────────────
+  // Declared early so measBhEff can use actual FV volume instead of recipe target.
+  const fvVolL = useMemo(() => {
+    const mm = parseFloat(bd.fvCm ?? '');
+    if (!isFinite(mm) || mm <= 0) return null;
+    const fvId = recipe?.bdFv;
+    const calib = fvId ? tankCalib[fvId] : null;
+    if (!calib) return null;
+    return fvVolume(mm, calib);
+  }, [bd.fvCm, recipe?.bdFv, tankCalib]);
+
   // ── Measured efficiencies (from user inputs) ─────────────────────────────
   const measBhEff = useMemo(() => {
     if (!recipe || !targets) return null;
+    // Prefer actual FV volume (from mm reading) over recipe target batch size.
+    const actualVol = fvVolL ?? recipe.batchL ?? 0;
     return calcBhEfficiencyFromMeasOG(
       parseFloat(bd.measOg ?? ''),
-      recipe.batchL || 0,
+      actualVol,
       targets.totalGrainKg,
     );
-  }, [bd.measOg, recipe, targets]);
+  }, [bd.measOg, recipe, targets, fvVolL]);
 
   const measMashEff = useMemo(() => {
     if (!recipe) return null;
@@ -188,16 +201,6 @@ export default function BrewDayTab({ recipeId }: Props) {
     const w = post - batch;
     return w >= 0 ? w : null;
   }, [bd.postboilL, recipe?.batchL]);
-
-  // ── FV mm → litres via tank calibration of the selected FV ───────────────
-  const fvVolL = useMemo(() => {
-    const mm = parseFloat(bd.fvCm ?? '');
-    if (!isFinite(mm) || mm <= 0) return null;
-    const fvId = recipe?.bdFv;
-    const calib = fvId ? tankCalib[fvId] : null;
-    if (!calib) return null;
-    return fvVolume(mm, calib);
-  }, [bd.fvCm, recipe?.bdFv, tankCalib]);
 
   // ── Predicted DH pH rise (info only, near Target Pitch pH) ───────────────
   // Brew Day happens before fermentation, so dh-temp-c will almost always
