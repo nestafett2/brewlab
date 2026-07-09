@@ -167,7 +167,7 @@ export default function BrewDayTab({ recipeId }: Props) {
     return calcBhEfficiencyFromMeasOG(
       parseFloat(bd.measOg ?? ''),
       actualVol,
-      targets.totalGrainKg,
+      targets.theoreticalGrainPts,
     );
   }, [bd.measOg, recipe, targets, fvVolL]);
 

@@ -584,6 +584,11 @@ export interface BrewDayTargets {
   trubLossL: number | null;
   hopAbsorptionL: number;
   totalGrainKg: number;
+  /** Yield-weighted theoretical extract (pts·L at 100% efficiency).
+   *  Use this as the denominator for measured BH efficiency so the number
+   *  matches BeerSmith / industry convention (efficiency vs grain yield
+   *  potential, not vs absolute dry-matter max). */
+  theoreticalGrainPts: number;
   ogSg: number;
   ogPlato: number;
   estMashEffPct: number | null;
@@ -632,6 +637,17 @@ export function calcBrewDayTargets(input: BrewDayTargetsInput): BrewDayTargets {
     (s, g) => s + (g.unit === 'g' ? g.amt * 0.001 : g.amt),
     0,
   );
+
+  // ── Yield-weighted theoretical max extract ──
+  // Sum kg × yieldFrac × METRIC_CONSTANT for each grain row (same logic as
+  // calcOG but at 100% efficiency). Falls back to 75% yield when a grain
+  // isn't found in the library — matches the calcOG fallback.
+  const theoreticalGrainPts = grains.reduce((sum, g) => {
+    const kg = g.unit === 'g' ? g.amt * 0.001 : g.amt;
+    const lib = maltLib.find(m => m.id === g.libId || m.name === g.name);
+    const yieldFrac = asNum(lib?.yield_pct, 75) / 100;
+    return sum + kg * yieldFrac * METRIC_CONSTANT;
+  }, 0);
 
   // ── OG ──
   const ogSg = calcOG(grains, maltLib, batchL, bhEffPct);
@@ -741,6 +757,7 @@ export function calcBrewDayTargets(input: BrewDayTargetsInput): BrewDayTargets {
     trubLossL: batchL > 0 ? trubLossL : null,
     hopAbsorptionL,
     totalGrainKg,
+    theoreticalGrainPts,
     ogSg, ogPlato,
     estMashEffPct,
     targetPitchTempC,
@@ -755,15 +772,13 @@ export function calcBrewDayTargets(input: BrewDayTargetsInput): BrewDayTargets {
 export function calcBhEfficiencyFromMeasOG(
   measOgPlato: number,
   batchL: number,
-  totalGrainKg: number,
+  theoreticalGrainPts: number,
 ): number | null {
   if (!isFinite(measOgPlato) || measOgPlato <= 0) return null;
-  if (batchL <= 0 || totalGrainKg <= 0) return null;
+  if (batchL <= 0 || theoreticalGrainPts <= 0) return null;
   const sg = platoToSg(measOgPlato);
   const gravPts = (sg - 1) * 1000;
-  const theoreticalPts = totalGrainKg * METRIC_CONSTANT;
-  if (theoreticalPts <= 0) return null;
-  return Math.min((gravPts * batchL) / theoreticalPts * 100, 100);
+  return Math.min((gravPts * batchL) / theoreticalGrainPts * 100, 100);
 }
 
 /**
