@@ -167,17 +167,18 @@ export default function BrewDayTab({ recipeId }: Props) {
     );
   }, [bd.mashReadings?.gravity?.pt, recipe, ingredients, activeEquip, mashProfile, settings.grainAbsorb]);
 
-  // ── Liquor back = water to add when measured OG is too high ─────────────
-  // Formula: V_water = V_wort × (measOg − targetOg) / targetOg  (Plato dilution)
-  // Only meaningful when measOg > targetOg and a post-boil volume is known.
+  // ── Liquor back panel state ───────────────────────────────────────────────
+  const [showLiquorBack, setShowLiquorBack] = useState(false);
+  const [lbMeasOg, setLbMeasOg]   = useState('');
+  const [lbVolL,   setLbVolL]     = useState('');
   const liquorBackL = useMemo(() => {
-    const measOg  = parseFloat(bd.measOg ?? '');
+    const measOg   = parseFloat(lbMeasOg);
     const targetOg = targets?.ogPlato;
-    const postVol  = parseFloat(bd.postboilL ?? '') || targets?.postBoilVolL;
-    if (!isFinite(measOg) || !targetOg || !postVol) return null;
+    const vol      = parseFloat(lbVolL) || targets?.postBoilVolL;
+    if (!isFinite(measOg) || !targetOg || !vol) return null;
     if (measOg <= targetOg) return null;
-    return postVol * (measOg - targetOg) / targetOg;
-  }, [bd.measOg, bd.postboilL, targets?.ogPlato, targets?.postBoilVolL]);
+    return vol * (measOg - targetOg) / targetOg;
+  }, [lbMeasOg, lbVolL, targets?.ogPlato, targets?.postBoilVolL]);
 
   // ── Kettle waste = measured post-boil L − batch L ────────────────────────
   const kettleWasteL = useMemo(() => {
@@ -513,13 +514,6 @@ export default function BrewDayTab({ recipeId }: Props) {
               <div className="bd-field"><label>Est OG (P)</label><div className="bd-calc">{r2(targets?.ogPlato)}</div></div>
               <div className="bd-field"><label>Meas OG (P)</label><input className="bd-input" placeholder="—" value={bd.measOg ?? ''} onChange={e => update({ measOg: e.target.value })} /></div>
 
-              {liquorBackL != null && (
-                <div className="bd-field" title="Water to add to dilute measured OG down to target OG">
-                  <label style={{ color: 'var(--amber)' }}>Liquor Back (L)</label>
-                  <div className="bd-calc" style={{ color: 'var(--amber)' }}>{r1(liquorBackL)}</div>
-                </div>
-              )}
-
               <div className="bd-field">
                 <label>Est Trub Loss (L)</label>
                 <div className="bd-calc">
@@ -540,6 +534,41 @@ export default function BrewDayTab({ recipeId }: Props) {
               <div className="bd-field"><label>Est Mash Eff %</label><div className="bd-calc">{r1(targets?.estMashEffPct, ' %')}</div></div>
               <div className="bd-field"><label>Meas Mash Eff %</label><div className="bd-calc">{r1(measMashEff, ' %')}</div></div>
               <div className="bd-field"><label>Meas BH Eff %</label><div className="bd-calc">{r1(measBhEff, ' %')}</div></div>
+
+              {/* Liquor Back */}
+              <div style={{ marginTop: 10 }}>
+                <button
+                  className="btn sm"
+                  style={{ width: '100%', textAlign: 'left' }}
+                  onClick={() => setShowLiquorBack(v => !v)}
+                >
+                  {showLiquorBack ? '▾' : '▸'} Liquor Back
+                </button>
+                {showLiquorBack && (
+                  <div style={{ marginTop: 8, padding: '10px 12px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6 }}>
+                    <div className="bd-field">
+                      <label>Meas OG (P)</label>
+                      <input className="bd-input" placeholder="e.g. 12.5" style={{ width: 70 }}
+                        value={lbMeasOg} onChange={e => setLbMeasOg(e.target.value)} />
+                    </div>
+                    <div className="bd-field">
+                      <label>Wort Vol (L)</label>
+                      <input className="bd-input" placeholder={targets?.postBoilVolL != null ? String(Math.round(targets.postBoilVolL)) : '—'} style={{ width: 70 }}
+                        value={lbVolL} onChange={e => setLbVolL(e.target.value)} />
+                    </div>
+                    <div className="bd-field">
+                      <label>Target OG (P)</label>
+                      <div className="bd-calc">{r2(targets?.ogPlato)}</div>
+                    </div>
+                    <div className="bd-field" style={{ marginTop: 6, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+                      <label style={{ color: 'var(--amber)' }}>Water to Add (L)</label>
+                      <div className="bd-calc" style={{ color: liquorBackL != null ? 'var(--amber)' : 'var(--text-muted)', fontSize: 16 }}>
+                        {liquorBackL != null ? r1(liquorBackL) : (lbMeasOg && parseFloat(lbMeasOg) <= (targets?.ogPlato ?? 0) ? 'OG on target' : '—')}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
