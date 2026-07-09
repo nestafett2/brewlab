@@ -196,9 +196,9 @@ export function parseRecipeXML(xmlText: string): ParsedRecipe[] {
       const useRaw = getText(n, 'USE') || 'Boil';
       // HTML 17270–17274 use mapping. React stores lowercase.
       let useStr = 'boil';
-      if (/dry/i.test(useRaw))         useStr = 'dry hop';
-      else if (/whirl|flame/i.test(useRaw)) useStr = 'whirlpool';
-      else if (/first/i.test(useRaw))  useStr = 'first wort';
+      if (/dry/i.test(useRaw))                    useStr = 'dry hop';
+      else if (/whirl|flame|aroma/i.test(useRaw)) useStr = 'whirlpool'; // BeerSmith 'Aroma' = late/whirlpool addition
+      else if (/first/i.test(useRaw))             useStr = 'first wort';
       // Tinseth-ish IBU for boil hops (HTML 17276–17279).
       let ibu: number | null = null;
       if (useStr === 'boil' && time > 0 && amtG > 0 && batchL > 0) {
