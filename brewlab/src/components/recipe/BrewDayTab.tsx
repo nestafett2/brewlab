@@ -167,6 +167,18 @@ export default function BrewDayTab({ recipeId }: Props) {
     );
   }, [bd.mashReadings?.gravity?.pt, recipe, ingredients, activeEquip, mashProfile, settings.grainAbsorb]);
 
+  // ── Liquor back = water to add when measured OG is too high ─────────────
+  // Formula: V_water = V_wort × (measOg − targetOg) / targetOg  (Plato dilution)
+  // Only meaningful when measOg > targetOg and a post-boil volume is known.
+  const liquorBackL = useMemo(() => {
+    const measOg  = parseFloat(bd.measOg ?? '');
+    const targetOg = targets?.ogPlato;
+    const postVol  = parseFloat(bd.postboilL ?? '') || targets?.postBoilVolL;
+    if (!isFinite(measOg) || !targetOg || !postVol) return null;
+    if (measOg <= targetOg) return null;
+    return postVol * (measOg - targetOg) / targetOg;
+  }, [bd.measOg, bd.postboilL, targets?.ogPlato, targets?.postBoilVolL]);
+
   // ── Kettle waste = measured post-boil L − batch L ────────────────────────
   const kettleWasteL = useMemo(() => {
     const post = parseFloat(bd.postboilL ?? '');
@@ -500,6 +512,13 @@ export default function BrewDayTab({ recipeId }: Props) {
 
               <div className="bd-field"><label>Est OG (P)</label><div className="bd-calc">{r2(targets?.ogPlato)}</div></div>
               <div className="bd-field"><label>Meas OG (P)</label><input className="bd-input" placeholder="—" value={bd.measOg ?? ''} onChange={e => update({ measOg: e.target.value })} /></div>
+
+              {liquorBackL != null && (
+                <div className="bd-field" title="Water to add to dilute measured OG down to target OG">
+                  <label style={{ color: 'var(--amber)' }}>Liquor Back (L)</label>
+                  <div className="bd-calc" style={{ color: 'var(--amber)' }}>{r1(liquorBackL)}</div>
+                </div>
+              )}
 
               <div className="bd-field">
                 <label>Est Trub Loss (L)</label>
