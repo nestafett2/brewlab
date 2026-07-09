@@ -99,6 +99,7 @@ function parseMashProfile(recipe: Element): MashProfile | null {
   const stepNodes = recipe.querySelectorAll('MASH MASH_STEPS MASH_STEP');
   if (!stepNodes.length) return null;
   const steps: MashStep[] = [];
+  let ratio: number | undefined;
   stepNodes.forEach(n => {
     const temp = parseFloat(getText(n, 'STEP_TEMP'));
     const time = parseInt(getText(n, 'STEP_TIME'));
@@ -108,13 +109,16 @@ function parseMashProfile(recipe: Element): MashProfile | null {
       temp,
       time,
     });
+    // WATER_GRAIN_RATIO is a BeerSmith extension (e.g. "4.000 l/kg").
+    // parseFloat stops at the first non-numeric character, so "4.000 l/kg" → 4.
+    // Take the value from the first step that has it.
+    if (ratio === undefined) {
+      const r = parseFloat(getText(n, 'WATER_GRAIN_RATIO'));
+      if (isFinite(r) && r > 0) ratio = r;
+    }
   });
   if (!steps.length) return null;
-  // Per-recipe blob convention (MashProfileModal.tsx:127–129): id and
-  // name are empty strings; ratio defaults to undefined so the brew-day
-  // calc falls back to the equipment ratio. Notes left blank — BeerXML's
-  // MASH/NOTES isn't standard.
-  return { id: '', name: '', steps };
+  return { id: '', name: '', steps, ...(ratio !== undefined ? { ratio } : {}) };
 }
 
 /**
@@ -248,14 +252,19 @@ export function parseRecipeXML(xmlText: string): ParsedRecipe[] {
     miscNodes.forEach(n => {
       const ingName = getText(n, 'NAME');
       if (!ingName) return;
-      const amtKg = parseFloat(getText(n, 'AMOUNT')) || 0;
+      const amtRaw = parseFloat(getText(n, 'AMOUNT')) || 0;
+      // AMOUNT_IS_WEIGHT=FALSE means the amount is a volume (litres), not kg.
+      // Both conversions use ×1000 (kg→g or L→ml), only the unit label differs.
+      const amtIsWeight = getText(n, 'AMOUNT_IS_WEIGHT').toUpperCase() !== 'FALSE';
+      const amt = amtRaw * 1000;
+      const unit = amtIsWeight ? 'g' : 'ml';
       const useRaw = getText(n, 'USE') || 'Boil';
       const time = parseInt(getText(n, 'TIME')) || null;
       ingredients.push({
         type: 'misc',
         name: ingName,
-        amt: amtKg * 1000,           // kg → g (matches HTML 17295)
-        unit: 'g',
+        amt,
+        unit,
         use: useRaw.toLowerCase(),
         time,
         extra: '',

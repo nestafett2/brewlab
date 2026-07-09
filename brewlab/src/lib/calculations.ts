@@ -491,7 +491,7 @@ export const DEFAULT_MASH_PROFILE: MashProfile = {
 };
 const TRUB_LOSS_DEFAULT_L = 40;
 const BOIL_OFF_RATE_DEFAULT_LH = 45;
-const GRAIN_ABSORB_DEFAULT_LKG = 0.75;
+const GRAIN_ABSORB_DEFAULT_LKG = 1.05;
 const PALMER_GRAIN_SHC = 0.41; // cal/g·°C
 
 /**

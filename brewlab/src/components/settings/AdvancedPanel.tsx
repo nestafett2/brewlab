@@ -73,9 +73,9 @@ export default function AdvancedPanel() {
                 type="number"
                 min={0.1} max={2.0} step={0.05}
                 style={{ width: 60 }}
-                value={settings.grainAbsorb ?? 0.75}
+                value={settings.grainAbsorb ?? 1.05}
                 onChange={e => setSettings({ grainAbsorb: numOrZero(e.target.value) })}
-                title="Liters of water absorbed per kg of grain. Typical range: 0.5–1.1 L/kg"
+                title="Liters of water absorbed per kg of grain. Typical range: 0.5–1.5 L/kg"
               />
               <span style={{ fontFamily: 'var(--mono)', fontSize: 10, color: 'var(--text-dim)' }}>L/kg</span>
               <span style={{ fontFamily: 'var(--mono)', fontSize: 8, color: 'var(--text-muted)', marginLeft: 4 }}>
@@ -121,6 +121,25 @@ export default function AdvancedPanel() {
               </span>
             </div>
           </div>
+        </div>
+
+        {/* Defaults reference */}
+        <div style={{
+          marginTop: 16,
+          padding: '10px 14px',
+          background: 'var(--bg-card)',
+          border: '1px solid var(--border)',
+          borderRadius: 6,
+          fontFamily: 'var(--mono)',
+          fontSize: 9,
+          color: 'var(--text-muted)',
+          lineHeight: 1.8,
+        }}>
+          <div style={{ color: 'var(--text-dim)', marginBottom: 4, letterSpacing: '0.08em' }}>DEFAULTS</div>
+          <div>Grain Absorption — 1.05 L/kg (Nomodachi system)</div>
+          <div>Default Grain Temp — 20 °C</div>
+          <div>Cooling Shrinkage — 4 %</div>
+          <div>Beer Buffer Capacity — 0.04 pH/(mEq/L)</div>
         </div>
       </div>
     </>
